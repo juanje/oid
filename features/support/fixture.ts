@@ -28,11 +28,17 @@ export async function createGreetProject(): Promise<string> {
 }
 
 /** The greet project with FR-GREET-01 built and committed, then another FR's approved contract committed. */
-export async function createGreetProjectWith(fr: "greet-02" | "greet-03"): Promise<string> {
+export async function createGreetProjectWith(fr: "greet-02" | "greet-03", options: { greet02Built?: boolean } = {}): Promise<string> {
   const dir = await createGreetProject();
   for (const attempt of ["steps", "test", "code"]) await cp(attemptDir(attempt), dir, { recursive: true });
   git(dir, "add", "--all");
   git(dir, "commit", "-q", "-m", "feat(FR-GREET-01): greet a person by name");
+  if (options.greet02Built === true) {
+    await cp(join(GREET, "greet-02", "contract"), dir, { recursive: true });
+    for (const attempt of ["s2-steps", "s1-test", "s2-test", "s2-code"]) await cp(greet02AttemptDir(attempt), dir, { recursive: true });
+    git(dir, "add", "--all");
+    git(dir, "commit", "-q", "-m", "feat(FR-GREET-02): greet a group of people");
+  }
   await cp(join(GREET, fr, "contract"), dir, { recursive: true });
   git(dir, "add", "--all");
   git(dir, "commit", "-q", "-m", `spec: ${fr}`);
