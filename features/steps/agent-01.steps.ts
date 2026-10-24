@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Given, Then } from "@cucumber/cucumber";
+import { Given, Then, When } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
-import { GREET_01_SCENARIO, attemptDir, git } from "../support/fixture.ts";
-import { assertOutputNames, attemptsIn, runLog, scriptedModel } from "../support/run.ts";
+import { GREET_01_SCENARIO, attemptDir, branches, git } from "../support/fixture.ts";
+import { assertOutputNames, attemptsIn, runLog, runOid, scriptedModel } from "../support/run.ts";
 import { type ModelAttempt, ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -149,4 +149,51 @@ Then("the run's log gives each attempt the real model's id, its turns, and token
     assert.ok(attempt.turns > 0, `${which} gives no turns`);
     assert.ok((attempt.tokens ?? 0) > 0, `${which} gives no tokens`);
   }
+});
+
+/** Writes `model` into the project's .oid.json, keeping the rest, or leaves the key out; committed, as the person would. */
+async function configModel(world: RunWorld, model: string | undefined): Promise<void> {
+  const path = join(world.projectDir, ".oid.json");
+  const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
+  if (model === undefined) delete config.model;
+  else config.model = model;
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
+  git(world.projectDir, "add", ".oid.json");
+  git(world.projectDir, "commit", "-q", "--allow-empty", "-m", "chore: the model oid runs on");
+}
+
+Given("the project's .oid.json names the scripted model", async function (this: RunWorld) {
+  await configModel(this, scriptedModel(this).id);
+});
+
+Given("the project's .oid.json names no model", async function (this: RunWorld) {
+  await configModel(this, undefined);
+});
+
+Given("the project's .oid.json names the model {}", async function (this: RunWorld, model: string) {
+  await configModel(this, model);
+});
+
+When("I run {string} with the executor oid makes from its config", async function (this: RunWorld, command: string) {
+  const [program, ...args] = command.split(" ");
+  assert.equal(program, "oid");
+  this.startHead = git(this.projectDir, "rev-parse", "HEAD");
+  this.branchesBefore = branches(this.projectDir);
+  const model = scriptedModel(this);
+  // oid's own path from config to executor, with the scripted model's registry in place of Pi's.
+  const { executorFromConfig } = await import("../../src/pi-model.ts");
+  Object.assign(this, await runOid(this.projectDir, args, () => executorFromConfig(this.projectDir, model.runtime)));
+});
+
+Then("the output names the model key of .oid.json", function (this: RunWorld) {
+  assertOutputNames(this, ".oid.json");
+  assertOutputNames(this, '"model"');
+});
+
+Then(/^the output names (nowhere\/no-such-model)$/, function (this: RunWorld, model: string) {
+  assertOutputNames(this, model);
+});
+
+Then("the scripted model was asked nothing", function (this: RunWorld) {
+  assert.equal(scriptedModel(this).attempts.length, 0, "The scripted model was asked for an attempt");
 });

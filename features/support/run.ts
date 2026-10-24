@@ -42,7 +42,10 @@ export interface OidRun {
 }
 
 /** Runs oid's command line in-process on `projectDir` with `executor`, as the person would run `oid <args>`. */
-export async function runOid(projectDir: string, args: string[], executor: Executor): Promise<OidRun> {
+/** As the CLI takes it: an executor, or how to make one once the command is valid. */
+type CliExecutor = Executor | (() => Promise<Executor>);
+
+export async function runOid(projectDir: string, args: string[], executor: CliExecutor): Promise<OidRun> {
   // A dynamic import, so that a missing CLI fails the step and not the whole load.
   const { runCli } = await import("../../src/cli.ts");
   const result: OidRun = { exitCode: undefined, output: "", crash: undefined };
