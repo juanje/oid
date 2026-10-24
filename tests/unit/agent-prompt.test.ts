@@ -49,6 +49,20 @@ describe("taskFor", () => {
     expect(task).toContain(SCENARIO);
   });
 
+  test("gives the scenario's failure, with where its step is defined and that definition's source", () => {
+    const failure = {
+      step: 'When I greet "Ada"',
+      message: "Error: Cannot find module '/work/src/greet.ts'",
+      definition: { file: "features/steps/greet.steps.ts", line: 3, source: 'When("I greet {string}", async function () {})' },
+    };
+
+    const task = taskFor({ kind: "code", fr: "FR-GREET-01", scenario: SCENARIO, context: { ...CONTEXT, failure } });
+
+    expect(task).toContain(failure.message);
+    expect(task).toContain("features/steps/greet.steps.ts:3");
+    expect(task).toContain(failure.definition.source);
+  });
+
   test("gives a retry the refusal of the attempt before it", () => {
     const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
 
