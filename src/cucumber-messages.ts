@@ -55,7 +55,7 @@ function parse(ndjson: string): Messages {
       messages.started.set(message.testCaseStarted.id, message.testCaseStarted.testCaseId);
     } else if (message.testStepFinished) {
       const { testCaseStartedId, testStepId, testStepResult } = message.testStepFinished;
-      const step = { testStepId, status: testStepResult.status, message: testStepResult.exception?.message ?? testStepResult.message ?? "" };
+      const step = { testStepId, status: testStepResult.status, message: stepMessage(testStepResult) };
       messages.finished.set(testCaseStartedId, [...(messages.finished.get(testCaseStartedId) ?? []), step]);
     }
   }
@@ -91,4 +91,11 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
     results.push({ ...scenario, status: "failed", failure });
   }
   return results;
+}
+
+/** The step's message with its error type: `exception.message` drops the type that `message` starts with. */
+function stepMessage(result: { message?: string; exception?: { type: string; message?: string } }): string {
+  if (result.message !== undefined) return result.message;
+  if (result.exception !== undefined) return `${result.exception.type}: ${result.exception.message ?? ""}`;
+  return "";
 }
