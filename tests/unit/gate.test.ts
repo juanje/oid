@@ -81,6 +81,24 @@ describe("runGate", () => {
   });
 });
 
+describe("runGate, what the loop sends back", () => {
+  test("a type error gives the files it is in, each once", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const output = [TYPE_ERROR, "src/a.ts(2,1): error TS2304: Cannot find name 'x'.", "tests/a.test.ts(3,9): error TS2322: Type 'string' is not assignable to type 'number'.", "  Some detail line."].join("\n");
+    const run = runnersAnswering(dir, { tsc: { exitCode: 2, output }, vitest: { report: PASSING_UNIT }, cucumber: { report: CUCUMBER_PASSED } });
+
+    expect((await runGate(dir, run))[0]).toMatchObject({ name: "types", passed: false, failedFiles: ["src/a.ts", "tests/a.test.ts"] });
+  });
+
+  test("the unit check counts the tests it ran, passing or failing", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const run = runnersAnswering(dir, { tsc: { exitCode: 0, output: "" }, vitest: { report: recorded("vitest-greet-02-assert.json") }, cucumber: { report: CUCUMBER_PASSED } });
+    const report = JSON.parse(recorded("vitest-greet-02-assert.json")) as { testResults: { assertionResults: unknown[] }[] };
+
+    expect((await runGate(dir, run))[1]!.tests).toBe(report.testResults.flatMap((file) => file.assertionResults).length);
+  });
+});
+
 describe("runGate, a check that ran nothing", () => {
   test("fails the unit and scenario checks that ran no test, whatever their runners' exit codes", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
