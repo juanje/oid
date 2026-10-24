@@ -178,6 +178,7 @@ With `--reporter=json --outputFile=<file>`:
 - **Worktrees share the project's hooks.** A `pre-commit` hook can refuse a checkpoint. Commit checkpoints with `-c core.hooksPath=/dev/null --no-verify`.
 - **Worktrees do not share `node_modules`.** A symlinked `node_modules` is a file to git, so `node_modules/` (with the slash) does not ignore it.
 - **`info/exclude` is shared by every worktree of a repository.** Writing to it changes the person's `git status`. Keep a symlinked `node_modules` out of oid's own git commands with a pathspec (`':(exclude)node_modules'`), and touch neither `info/exclude` nor `.gitignore`.
+- **`git add` exits 1 when a pathspec names a path `.gitignore` ignores,** even an exclude pathspec, and it still stages the rest. List the changes with the exclude pathspec (`diff --name-only`, `ls-files --others`), then `git add` exactly those files.
 - **A test fixture's git inherits the global config and hooks.** Isolate it.
 
 ### Node child processes
