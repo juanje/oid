@@ -1,4 +1,5 @@
-import { cp } from "node:fs/promises";
+import { cp, readdir } from "node:fs/promises";
+import { join, relative } from "node:path";
 import type { Attempt, AttemptKind, Executor, TryResult, TryTarget } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
@@ -19,10 +20,18 @@ export interface Tried {
   result: TryResult;
 }
 
+/** One request the executor answered: what it came with, and the files the worktree held when it came. */
+export interface Request {
+  kind: AttemptKind;
+  refusal: Attempt["refusal"];
+  files: string[];
+}
+
 /** An executor that answers each request with the next prepared attempt, the way an agent's diff would land. */
 export class ScriptedExecutor implements Executor {
   asked = 0;
   readonly tried: Tried[] = [];
+  readonly requests: Request[] = [];
   readonly #projectDir: string;
   readonly #script: PreparedAttempt[];
 
@@ -46,10 +55,21 @@ export class ScriptedExecutor implements Executor {
       throw new Error(`Expected the ${next.kind} attempt for "${next.scenario}", got ${asked}`);
     }
     this.asked += 1;
+    this.requests.push({ kind: attempt.kind, refusal: attempt.refusal, files: await filesIn(attempt.worktree) });
     await cp(next.dir, attempt.worktree, { recursive: true });
     for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
     if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`);
   }
+}
+
+/** The project's files in a worktree, relative to it, without git's or the shared node_modules. */
+async function filesIn(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => relative(dir, join(entry.parentPath, entry.name)))
+    .filter((file) => !file.startsWith("node_modules") && !file.startsWith(".git"))
+    .sort();
 }
 
 /** Puts `dir` in place of the prepared attempt of `kind` for `scenario`, and drops every attempt after it: with no retries, the run asks for nothing after a refusal. */

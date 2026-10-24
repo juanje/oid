@@ -16,10 +16,19 @@ Given("a scripted executor whose steps, test and code attempts build FR-GREET-01
   this.script = (["steps", "test", "code"] as const).map((kind) => ({ kind, scenario: GREET_01_SCENARIO, dir: attemptDir(kind) }));
 });
 
+/** The project's oid config, committed as the person's repository would have it. */
+async function allowRetries(world: RunWorld, retries: number): Promise<void> {
+  await writeFile(join(world.projectDir, ".oid.json"), `${JSON.stringify({ limits: { retries } }, null, 2)}\n`);
+  git(world.projectDir, "add", ".oid.json");
+  git(world.projectDir, "commit", "-q", "-m", "chore: oid config");
+}
+
 Given("the run allows no retries", async function (this: RunWorld) {
-  await writeFile(join(this.projectDir, ".oid.json"), `${JSON.stringify({ limits: { retries: 0 } }, null, 2)}\n`);
-  git(this.projectDir, "add", ".oid.json");
-  git(this.projectDir, "commit", "-q", "-m", "chore: oid config");
+  await allowRetries(this, 0);
+});
+
+Given("the run allows {int} retry", async function (this: RunWorld, retries: number) {
+  await allowRetries(this, retries);
 });
 
 When("I run {string}", async function (this: RunWorld, command: string) {
