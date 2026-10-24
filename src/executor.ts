@@ -26,6 +26,8 @@ export interface AttemptOutcome {
   tokens?: number;
   cost?: number;
   deniedToolCalls?: number;
+  /** The agent stopped on an error no attempt can fix, such as a provider error its executor's own retries did not clear. */
+  error?: string;
 }
 
 /** One test file, or the attempt's own scenario. */
