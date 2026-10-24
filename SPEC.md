@@ -1,6 +1,6 @@
 # oid v2 — Specification
 
-**Status:** first draft, 2026-10-24, written from the v2 design seed (`user/shared/oid-v2-design-seed.md` in Juanje's my-ab). The FRs that rest on parts of the design not yet confirmed by runs are listed at the end.
+**Status:** first draft, 2026-10-24. The FRs that rest on parts of the design not yet confirmed by runs are listed at the end.
 
 `oid` (Outside-In Development) is a command-line tool that has coding agents build software from a verifiable contract. The person approves the requirements and the acceptance scenarios. oid runs agents that write step definitions, unit tests and code, and accepts their work only on evidence: a test counts when oid has seen it fail without the code and pass with it, and an FR is done when the gate passes.
 
@@ -49,7 +49,7 @@ Each FR below says which of the two it belongs to.
 ## Stack and tools
 
 - **oid itself:** TypeScript on Node.js ≥ 22.19. Agents run on the Pi SDK, pinned to one exact version, which is checked when the repository starts. Tests use vitest (unit) and cucumber-js (BDD); types are checked with `tsc --noEmit`.
-- **Target projects:** TypeScript with vitest and cucumber-js. Detectors are bundled with oid (v1 used `knip`, `jscpd` and analyses on the TypeScript compiler API).
+- **Target projects:** TypeScript with vitest and cucumber-js. Detectors are bundled with oid; the candidates are `knip`, `jscpd` and analyses on the TypeScript compiler API.
 
 ## Functional requirements
 
@@ -65,7 +65,7 @@ Each FR below says which of the two it belongs to.
 **Skeleton.** While the scenario fails, a test attempt writes one or more unit tests. It is accepted only when every new test fails with a valid Red against the previous checkpoint. A code attempt then writes code until those tests pass. After each code attempt oid runs the current scenario, the scenarios of the feature already green, and the full unit suite; a test or scenario that was green and turns red rejects the attempt. The whole project is checked at the gate. How many tests and how small they are is guidance in the prompts, not a check. *Why:* tests written before their code shape the design; the size of each step is the agent's judgment.
 
 #### FR-RUN-04: The agent may ask for another kind of attempt
-**MVP.** By default the inner loop alternates test and code. An agent may end its attempt asking for another kind next, with its reason: a step that asserts the wrong thing, another test, more code. oid accepts any kind at any time, and the evidence and the write boundary of that kind judge the result. *Why:* in v1 this choice belonged to a state machine, and every case it did not foresee became a dead end. The agent sees the work; the evidence keeps it honest.
+**MVP.** By default the inner loop alternates test and code. An agent may end its attempt asking for another kind next, with its reason: a step that asserts the wrong thing, another test, more code. oid accepts any kind at any time, and the evidence and the write boundary of that kind judge the result. *Why:* a fixed sequence turns every case it does not foresee into a dead end. The agent sees the work; the evidence keeps it honest.
 
 #### FR-RUN-05: Several FRs in one run
 **MVP.** `oid run <FR…>` builds the FRs in the order given, one commit each, on the same branch. *Why:* real work is several FRs; one run per FR multiplies setup and review.
@@ -124,7 +124,7 @@ Each FR below says which of the two it belongs to.
 No agent writes feature files, `SPEC.md`, the gate's configuration or oid's state. The gate's configuration is the runner configs, `tsconfig`, the lint and format configs, `package.json` and the lockfiles. A diff outside the boundary rejects the attempt, and the refusal names the files. So do these patterns in added lines: `.only`, `.skip`, and branches on a test environment such as `process.env.VITEST`. *Why:* the order and the evidence keep tests honest only if tests and code change in separate attempts. An agent that can edit the gate can pass it by weakening it.
 
 #### FR-AGENT-05: No shell; read everything except secrets and noise
-**Skeleton.** Agents have read, edit and write tools, plus `try` and `report`, and no shell. They may read the whole repository except secrets and noise; noise is `.git` and oid's own state. **MVP:** secret containment is enforced before oid runs on any project other than the shortener. That means secret-shaped paths, the user's home and credentials; nothing secret reaches a provider. *Why:* in v1 the shell was the way around every write boundary, and containing it was expensive. Blindness to the rest of the repository was not what kept tests honest.
+**Skeleton.** Agents have read, edit and write tools, plus `try` and `report`, and no shell. They may read the whole repository except secrets and noise; noise is `.git` and oid's own state. **MVP:** secret containment is enforced before oid runs on any project other than the shortener. That means secret-shaped paths, the user's home and credentials; nothing secret reaches a provider. *Why:* a shell is a way around every write boundary, and containing it is expensive. What keeps tests honest is the order and the evidence, not blindness to the rest of the repository.
 
 #### FR-AGENT-06: The `try` tool
 **Skeleton.** `try` runs one test or one scenario, then the type check and the linter on the files the attempt changed. It answers with a structured result, and a failure has the same shape as a refusal. It records nothing. *Why:* agents need a fast way to check their work; oid's own judgment comes after, and does not trust it.
@@ -205,13 +205,13 @@ Every refusal has three parts, and none may be empty: from the gate, the evidenc
 A check that did not run, ran no test, or got an option it does not know is a failure or an error, never a pass. Output is read only after checking that the thing asked for exists and ran. *Why:* the whole system rests on evidence; one check that can pass by accident breaks it.
 
 ### NFR-03: One judgment, one place
-Each judgment is one function, used by every entry point that needs it: Red classification, evidence, the gate, write boundaries. *Why:* in v1, judgments written twice drifted apart.
+Each judgment is one function, used by every entry point that needs it: Red classification, evidence, the gate, write boundaries. *Why:* a judgment written twice drifts apart.
 
 ### NFR-04: Boundaries are stated as they are applied
 What an agent is told it may read, write and call is generated from the same data that enforces it. *Why:* a limit the agent does not know about costs a turn; a limit it is told about but that is not enforced is advice.
 
 ### NFR-05: Prompts are environment, judged by runs
-Tests check the mechanism around prompts, not their wording: that each agent's limits are generated from its boundary, that the conventions arrive, and that the common facts come from one source. A prompt change is a change to the environment, measured by runs. *Why:* in v1, tests pinned wording, and every prompt change cost a full cycle.
+Tests check the mechanism around prompts, not their wording: that each agent's limits are generated from its boundary, that the conventions arrive, and that the common facts come from one source. A prompt change is a change to the environment, measured by runs. *Why:* tests that pin wording make every prompt change cost a full cycle.
 
 ### NFR-06: The person's copy and secrets are safe
 A run never writes outside its worktree, and `oid gate` writes nothing. Nothing secret reaches a provider (FR-AGENT-05). *Why:* these are invariants; one breach is enough to stop trusting the tool.
@@ -224,7 +224,7 @@ A run never writes outside its worktree, and `oid gate` writes nothing. Nothing 
   - FR-GATE-02: coverage;
   - FR-GATE-05: format as a check only in `oid gate`;
   - the order in which the rest of the MVP is built.
-- **Choices this draft makes that the seed does not:**
+- **Choices for the person to confirm:**
   - scenarios run in file order (FR-RUN-02);
   - an FR with a shelved scenario is committed with what was accepted and stays in progress, and the gate leaves shelved scenarios out (FR-RUN-06, FR-GATE-01);
   - the FR's commit is the squash of its checkpoints (FR-STATE-01).
