@@ -79,3 +79,32 @@ Given("the scripted code attempt for the second scenario breaks the first scenar
 Then("the output names the scenario that turned red", function (this: RunWorld) {
   assertOutputNames(this, FIRST);
 });
+
+const FIRST_TEST_FILE = join(greet02AttemptDir("s1-test"), "tests/greet-all.test.ts");
+
+Given("the scripted test attempt for the second scenario adds its test to the first scenario's test file", function (this: RunWorld) {
+  this.script = this.script.map((attempt) =>
+    attempt.kind === "test" && attempt.scenario === SECOND ? { ...attempt, dir: greet02AttemptDir("s2-test-same-file") } : attempt,
+  );
+});
+
+Given(
+  "the scripted test attempt for the second scenario adds a test that passes without its code to the first scenario's test file",
+  function (this: RunWorld) {
+    this.script = lastAttempt(this.script, "test", SECOND, greet02AttemptDir("s2-test-same-file-passes"));
+  },
+);
+
+Then("the output names the new test that passed without its code", function (this: RunWorld) {
+  const added = testNames(join(greet02AttemptDir("s2-test-same-file-passes"), "tests/greet-all.test.ts")).filter(
+    (name) => !testNames(FIRST_TEST_FILE).includes(name),
+  );
+  assert.equal(added.length, 1, "The prepared attempt should add exactly one test");
+  assertOutputNames(this, added[0]);
+});
+
+Then("the output does not name the tests that were already in the file", function (this: RunWorld) {
+  for (const name of testNames(FIRST_TEST_FILE)) {
+    assert.ok(!this.output.includes(name), `The output names "${name}", which was already in the file:\n${this.output}`);
+  }
+});
