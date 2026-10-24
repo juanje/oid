@@ -64,7 +64,8 @@ The decisions in force, with their reasons and the options they rule out. Read t
 - Claude Code in the MVP.
 
 **Follows.**
-- In the MVP, oid runs Pi from its own agent dir: its model registry, credentials, and rg and fd. It never reads `~/.pi/agent`, so using Pi by hand and using oid cannot affect each other. `oid setup` may copy credentials from Pi once, never link them.
+- The model is personal: it lives in `<config dir>/config.json` (NFR-08), never in a project.
+- In the MVP, oid runs Pi from its own agent dir, `<config dir>/agent`: its model registry, credentials, and rg and fd. It never reads `~/.pi/agent`, so using Pi by hand and using oid cannot affect each other. `oid setup` may copy credentials from Pi once, never link them.
 - With an external executor, secrets rely on its deny rules plus an audit of the session's reads. That invariant is weaker in that mode, and the person must be told.
 
 ## D-05: No shell; read everything except secrets and noise; the gate's configuration is unwritable

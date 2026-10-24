@@ -153,7 +153,8 @@ A change that needs both passes (a rename the tests import) takes three items: t
 ## 7. State and record
 
 - **Worktree and branch per run.** The worktree lives outside the repository, in `../.oid-worktrees/<repository>/<run id>`. Tools that skip paths containing `.git` must still see it, and the person's checkout must not hold it. Checkpoints are commits made without the project's hooks. The FR's commit is the squash of its checkpoints.
-- **oid's agent dir for Pi** (MVP, D-04): its own model registry, credentials, and rg and fd, apart from `~/.pi/agent`, which oid never reads. `oid setup` writes it; `oid doctor` checks it. The skeleton still uses Pi's own store.
+- **Configuration** (NFR-08). Personal: `<config dir>/config.json` (`$OID_CONFIG_DIR`, else `$XDG_CONFIG_HOME/oid`, else `~/.config/oid`), with the model. Project: `.oid.json`, committed and read from the run's `HEAD`, with paths and limits. A model in `.oid.json` is an error that points to the personal config.
+- **oid's agent dir for Pi** (MVP, D-04): `<config dir>/agent`, its own model registry, credentials, and rg and fd, apart from `~/.pi/agent`, which oid never reads. `oid setup` writes it; `oid doctor` checks it. The skeleton still uses Pi's own store.
 - **`progress.json`** (D-08), written only by oid and validated against its schema. It holds the status of each FR and, for each scenario and test, its evidence and whether it is shelved, with the proposal.
 - **The run log.** Append-only. It holds attempts, verdicts, refusals, questions, and the measures of `SPEC.md` FR-STATE-02, computed by oid.
 - **`oid status`** reads both: what is done with its evidence, what is shelved and why, and where the last run stopped.

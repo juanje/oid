@@ -39,7 +39,7 @@ Each FR below says which of the two it belongs to.
 6. FR-RUN-07, FR-RUN-09: retries and the turn limit
 7. FR-STATE-01, FR-STATE-02, FR-CLI-01: checkpoints, the run log, the end-of-run summary
 8. FR-AGENT-01, FR-AGENT-02, FR-AGENT-03, FR-AGENT-05: the real Pi executor, its prompts, its context, no shell
-9. Before the first real run: `bin/oid` (FR-RUN-01) and the `model` key of `.oid.json` (FR-AGENT-01)
+9. Before the first real run: `bin/oid` (FR-RUN-01) and the model in the personal config (FR-AGENT-01)
 
 The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with the real Pi executor.
 
@@ -120,7 +120,7 @@ The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with t
 ### Agents
 
 #### FR-AGENT-01: One attempt, one agent process
-**Skeleton.** Each attempt starts a fresh Pi agent in the run's worktree with four inputs: its system prompt, the task, its write boundary, and its tools. It ends with a diff and a report. oid judges the result the same way whichever agent produced it. The agent never advances the run. Two executors sit behind that seam: Pi, and a scripted executor that returns prepared diffs and reports. oid's own scenarios use the scripted one. Pi runs the model that the `model` key of the project's `.oid.json` names, as `<provider>/<model>`, resolved through Pi's own registry and credentials, which oid never reads. **MVP:** oid is fully isolated from the person's Pi configuration, so that using Pi as a coding assistant and using oid cannot affect each other. oid has its own agent dir for Pi, with its model registry, its credentials, and the rg and fd binaries Pi looks for there; it never reads `~/.pi/agent`. In the skeleton, Pi's own store may still be used. *Why:* a fresh agent per attempt keeps context small, and a tool the person also uses by hand must not change oid's runs, nor oid theirs. A judgment that ignores who wrote the diff lets another executor come in later as an adapter.
+**Skeleton.** Each attempt starts a fresh Pi agent in the run's worktree with four inputs: its system prompt, the task, its write boundary, and its tools. It ends with a diff and a report. oid judges the result the same way whichever agent produced it. The agent never advances the run. Two executors sit behind that seam: Pi, and a scripted executor that returns prepared diffs and reports. oid's own scenarios use the scripted one. Pi runs the model the person's own config names (`model` in `<config dir>/config.json`, NFR-08), as `<provider>/<model>`, resolved through Pi's own registry and credentials, which oid never reads. A project's `.oid.json` that names a model is an error (exit 2) that says the model belongs in the personal config, and where it is. **MVP:** oid is fully isolated from the person's Pi configuration, so that using Pi as a coding assistant and using oid cannot affect each other. oid has its own agent dir for Pi, `<config dir>/agent`, with its model registry, its credentials, and the rg and fd binaries Pi looks for there; it never reads `~/.pi/agent`. In the skeleton, Pi's own store may still be used. *Why:* a fresh agent per attempt keeps context small, and a tool the person also uses by hand must not change oid's runs, nor oid theirs. A judgment that ignores who wrote the diff lets another executor come in later as an adapter.
 
 #### FR-AGENT-02: A prompt per agent, in two layers
 **Skeleton.** Each kind of agent has its own system prompt, in two layers (D-09). The first is its identity: what it is, does and is not, with a few traits stated as values with their why. Its limits are generated from its write boundary and tools, so the text and the enforcement cannot differ. The second is its procedure: Step 0 (the input), numbered steps with the reason for any non-obvious order, the success criterion in plain words, negative constraints at the step they apply to, and a short checklist. The task holds only the inputs of one attempt (FR-AGENT-03). Facts every agent needs (what oid is, the goal of the whole system, what oid checks) come from one source. *Why:* each agent has its own objective, focus and limits; values carry to cases a rule does not foresee.
@@ -214,13 +214,16 @@ The log starts by naming the version of oid that made it, so that runs can be co
 *Why:* the person always knows what is built, whether it works and what is left.
 
 #### FR-CLI-02: `oid init`
-**MVP.** `oid init` writes the project's config: runner commands, paths (spec, feature files, steps, tests, source, and an optional domain file), limits. It detects what it can and asks for the rest. In the skeleton the config is written by hand. *Why:* a new project should not need to know the config format to start.
+**MVP.** `oid init` writes the project's config, `.oid.json`, committed: runner commands, paths (spec, feature files, steps, tests, source, and an optional domain file), limits; never a model or anything personal (NFR-08). It detects what it can and asks for the rest. In the skeleton the config is written by hand. oid reads it from one place, the run's `HEAD`, never half from the working copy. *Why:* a new project should not need to know the config format to start.
 
 #### FR-CLI-03: `oid doctor` and `oid setup`
-**MVP.** `oid setup` configures the person's provider, credentials and the model per agent, in oid's own agent dir for Pi (FR-AGENT-01), and installs rg and fd there. It may offer to copy credentials from Pi once, as a copy and never a link. `oid doctor` checks, without changing anything, the project's runners, oid's agent dir with rg and fd, a credential per provider and each agent's model. *Why:* most failed first runs are environment problems, and they should be found before a run spends money.
+**MVP.** `oid setup` configures the person's provider, credentials and the model per agent: the models in the personal config, the credentials in oid's own agent dir for Pi, `<config dir>/agent` (FR-AGENT-01), where it also installs rg and fd. It may offer to copy credentials from Pi once, as a copy and never a link. `oid doctor` checks, without changing anything, the project's runners, oid's agent dir with rg and fd, a credential per provider and each agent's model. *Why:* most failed first runs are environment problems, and they should be found before a run spends money.
 
 #### FR-CLI-04: Help and version
 **MVP.** `oid` with no arguments, `oid --help` and `oid help` list the commands and how to use each. `oid <command> --help` gives that command's usage and runs nothing. `oid --version` prints oid's version. The help is generated from the same command table the argument parser uses, so the two cannot disagree. An unknown command or option is still an error (NFR-02). *Why:* the person learns oid from oid itself, and a help written apart from the parser drifts from it.
+
+#### FR-CLI-05: The run shows its progress
+**Skeleton.** As it goes, the run prints a line when each stage starts (preparing the agent, the worktree, listing the scenarios, the baseline unit run) and when each attempt starts, with its kind and scenario, and ends, with its verdict. Each Red it prints says whether it is the scenario's or a unit test's, with its class. The lines come from the run log's events, as the summary does (NFR-03). *Why:* a run that is silent for a long time looks stuck, and a Red that does not say what it belongs to cannot be read.
 
 ## Non-functional requirements
 
@@ -240,10 +243,13 @@ What an agent is told it may read, write and call is generated from the same dat
 Tests check the mechanism around prompts, not their wording: that each agent's limits are generated from its boundary, that the conventions arrive, and that the common facts come from one source. A prompt change is a change to the environment, measured by runs. *Why:* tests that pin wording make every prompt change cost a full cycle.
 
 ### NFR-06: The person's copy and secrets are safe
-A run never writes outside its worktree, and `oid gate` writes nothing. Nothing secret reaches a provider (FR-AGENT-05). *Why:* these are invariants; one breach is enough to stop trusting the tool.
+A run never writes outside its worktree, and `oid gate` writes nothing. Nothing secret reaches a provider (FR-AGENT-05). No credential or personal preference lives in the project. *Why:* these are invariants; one breach is enough to stop trusting the tool.
 
 ### NFR-07: The command line loads lazily
 `oid`, `oid --help`, `oid help`, `oid <command> --help`, `oid --version` and an unknown command load only the argument parser and the help. Pi, the TypeScript compiler API and the run's modules load only when a command needs them. Tests check which modules load, not how long it takes. *Why:* the help and the version should answer at once; loading Pi for them took about half a second and 1,557 modules.
+
+### NFR-08: Personal and project configuration are apart
+The person's own configuration lives in `<config dir>/config.json`, where the config dir is `$OID_CONFIG_DIR`, else `$XDG_CONFIG_HOME/oid`, else `~/.config/oid`. It holds the model, and later the effort and the notifications. The project's configuration is its committed `.oid.json`, read from the run's `HEAD`: paths and limits, and later the stack and the commands. Nothing personal (model, credentials, preferences) is read from the project, and oid never reads `~/.pi`; until oid's own agent dir (FR-CLI-03), the Pi it runs reads its own store there. *Why:* a project is shared by its collaborators, who each choose their own model and keep their own credentials; and a config read half from the working copy makes a run depend on changes nobody committed.
 
 ## Draft notes
 

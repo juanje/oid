@@ -101,6 +101,15 @@ Feature: Shorten a URL
 
 One file per FR, with the tag on `Feature`. Scenarios describe observable behaviour: no internal function names, and no file layouts the user does not see.
 
+### Configuration
+
+| File | Whose | Holds | Read from |
+|:--|:--|:--|:--|
+| `<config dir>/config.json` | The person's | `model`, as `<provider>/<model>` (later the effort and the notifications) | `$OID_CONFIG_DIR`, else `$XDG_CONFIG_HOME/oid`, else `~/.config/oid` |
+| `.oid.json` | The project's, committed | `limits` (`retries`, `turns`) and `paths` (`domain`, `conventions`); later the stack and the commands | The run's `HEAD`, never the working copy |
+
+A `model` in `.oid.json` is an error: the model is personal (NFR-08).
+
 ### What a task reads from the project
 
 - **Domain:** the file `paths.domain` names in `.oid.json`, else `DOMAIN.md`, else the `## Domain` section of `SPEC.md`. Optional.
