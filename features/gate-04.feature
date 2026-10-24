@@ -11,6 +11,7 @@ Feature: A failing gate is a refusal
     When I run "oid run FR-GREET-03"
     Then the run succeeds
     And the retried code attempt was given the gate's failure, naming the scenario of FR-GREET-02 it broke
+    And the run's log counts the gate's refusal as a rejection of the code attempt
     And every scenario of FR-GREET-02 passes on the run's branch
 
   Scenario: When the code attempts after the gate run out, the run stops with the gate's refusal
@@ -26,6 +27,7 @@ Feature: A failing gate is a refusal
     When I run "oid run FR-GREET-03"
     Then the run succeeds
     And the <kind> attempt after the gate was given the type error, naming its file
+    And the run's log counts the gate's refusal as a rejection of the <kind> attempt
     And the executor was asked for every prepared attempt, in order
     And the type check passes on the run's branch
 
