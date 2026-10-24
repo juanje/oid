@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import v8ToIstanbul from "v8-to-istanbul";
@@ -6,11 +7,17 @@ import v8ToIstanbul from "v8-to-istanbul";
 // Coverage of the FR's new branches (FR-GATE-02): what the unit tests and the scenarios took, joined by place in the
 // source, and what of the rest the FR's diff added.
 
-interface Place {
-  start: { line: number; column: number };
+interface Position {
+  line: number;
+  column: number;
 }
 
-/** One file's coverage as istanbul gives it: where each branch and function starts, and how often each ran. */
+interface Place {
+  start: Position;
+  end: Position;
+}
+
+/** One file's coverage as istanbul gives it: where each branch and function starts and ends, and how often each ran. */
 export interface FileCoverage {
   path: string;
   branchMap: Record<string, { loc: Place; locations?: Place[] }>;
@@ -46,38 +53,71 @@ export function addedLines(diff: string): Map<string, Set<number>> {
   return added;
 }
 
+/** A range of the source with how often it ran: a branch, or a function's body. */
+interface Ran extends Place {
+  count: number;
+  what: string;
+  /** A function a transform adds, which is not in the source (such as `__name`). */
+  synthetic: boolean;
+}
+
 /**
- * What no report took, joined by place: a branch or function counts as run when any report ran it. Functions a
- * transform adds, which are not in the source (such as `__name`), are left out.
+ * What no report took, joined by place. V8 lists only the ranges that ran a different number of times than the range
+ * around them, so a side a report took is not in it: what one report leaves untaken counts as taken when, in another
+ * report, the smallest range around it ran. Functions a transform adds, which are not in the source, are left out.
  */
 export function untaken(reports: CoverageReport[], root: string): Untaken[] {
-  const runs = new Map<string, { untaken: Untaken; count: number }>();
-  const tally = (key: string, untaken: Untaken, count: number) => {
-    const known = runs.get(key);
-    runs.set(key, { untaken, count: (known?.count ?? 0) + count });
-  };
-  for (const report of reports) {
-    for (const data of Object.values(report)) {
-      const file = relative(real(root), real(data.path));
-      for (const [id, branch] of Object.entries(data.branchMap)) {
-        (data.b[id] ?? []).forEach((count, index) => {
-          const { line, column } = (branch.locations?.[index] ?? branch.loc).start;
-          tally(`${file} ${line}:${column} branch`, { file, line, column, what: "a branch no test takes" }, count);
-        });
-      }
-      for (const [id, fn] of Object.entries(data.fnMap)) {
-        if (fn.name.startsWith("__")) continue;
-        const { line, column } = fn.loc.start;
-        tally(`${file} ${line}:${column} function`, { file, line, column, what: `the function ${fn.name}, which no test calls` }, data.f[id] ?? 0);
+  const ranges = reports.map((report) => rangesOf(report, root));
+  const left = new Map<string, Untaken>();
+  ranges.forEach((files, index) => {
+    for (const [file, ran] of files) {
+      for (const range of ran.filter((candidate) => candidate.count === 0 && !candidate.synthetic)) {
+        const takenElsewhere = ranges.some((other, at) => at !== index && (innermost(other.get(file) ?? [], range)?.count ?? 0) > 0);
+        if (takenElsewhere) continue;
+        const { line, column } = range.start;
+        const key = `${file} ${line}:${column} ${range.what}`;
+        if (!left.has(key)) left.set(key, { file, line, column, what: range.what });
       }
     }
-  }
-  const left = [...runs.values()].filter((run) => run.count === 0).map((run) => run.untaken);
+  });
   // A function no test calls is also one block no test takes, at the same place: say it once, as the function.
-  const functions = new Set(left.filter((item) => item.what.startsWith("the function")).map((item) => `${item.file} ${item.line}:${item.column}`));
-  return left
+  const items = [...left.values()];
+  const functions = new Set(items.filter((item) => item.what.startsWith("the function")).map((item) => `${item.file} ${item.line}:${item.column}`));
+  return items
     .filter((item) => item.what.startsWith("the function") || !functions.has(`${item.file} ${item.line}:${item.column}`))
     .sort((one, other) => one.file.localeCompare(other.file) || one.line - other.line || one.column - other.column);
+}
+
+/** Every branch and function of a report as a range of its file, by the file's path from `root`. */
+function rangesOf(report: CoverageReport, root: string): Map<string, Ran[]> {
+  const files = new Map<string, Ran[]>();
+  for (const data of Object.values(report)) {
+    const file = relative(real(root), real(data.path));
+    const ran: Ran[] = [];
+    for (const [id, branch] of Object.entries(data.branchMap)) {
+      (data.b[id] ?? []).forEach((count, index) => ran.push({ ...(branch.locations?.[index] ?? branch.loc), count, what: "a branch no test takes", synthetic: false }));
+    }
+    for (const [id, fn] of Object.entries(data.fnMap)) {
+      ran.push({ ...fn.loc, count: data.f[id] ?? 0, what: `the function ${fn.name}, which no test calls`, synthetic: fn.name.startsWith("__") });
+    }
+    files.set(file, [...(files.get(file) ?? []), ...ran]);
+  }
+  return files;
+}
+
+/** The smallest of `ranges` that holds `place`: the range whose count is the place's. */
+function innermost(ranges: Ran[], place: Place): Ran | undefined {
+  const holding = ranges.filter((range) => !after(range.start, place.start) && !after(place.end, range.end));
+  return holding.sort((one, other) => span(one) - span(other))[0];
+}
+
+function after(one: Position, other: Position): boolean {
+  return one.line > other.line || (one.line === other.line && one.column > other.column);
+}
+
+/** A range's size, in lines first and then columns: enough to tell nested ranges apart. */
+function span({ start, end }: Place): number {
+  return (end.line - start.line) * 1_000_000 + (end.column - start.column);
 }
 
 /** What no test runs, on the lines the FR added: earlier work is not the FR's to cover. */
@@ -122,4 +162,23 @@ export async function scenarioCoverage(dir: string, root: string): Promise<Cover
 
 function real(path: string): string {
   return existsSync(path) ? realpathSync(path) : path;
+}
+
+/**
+ * Why the project in `dir` cannot measure its unit tests' coverage, if it cannot: vitest's coverage provider is not
+ * where vitest would load it from. Found before any attempt, so that no run spends its attempts on a gate that cannot
+ * pass (FR-GATE-02).
+ */
+export function missingCoverageProvider(dir: string): string | undefined {
+  const project = createRequire(join(dir, "package.json"));
+  try {
+    project.resolve("@vitest/coverage-v8");
+    return undefined;
+  } catch {
+    let version = "<your vitest's version>";
+    try {
+      version = (JSON.parse(readFileSync(project.resolve("vitest/package.json"), "utf8")) as { version: string }).version;
+    } catch {}
+    return `The gate measures the unit tests' coverage with vitest's provider, @vitest/coverage-v8, which the project does not have: npm install --save-dev --save-exact @vitest/coverage-v8@${version}`;
+  }
 }
