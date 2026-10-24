@@ -21,6 +21,8 @@ export class RunWorld extends World {
   /** When set, the run's attempts go to the Pi executor it makes, on `model`, instead of the scripted executor. */
   piExecutor: (() => Promise<Executor>) | undefined;
   model: ScriptedModel | undefined;
+  /** The real model of the smoke scenario, as <provider>/<model>. */
+  smokeModel: string | undefined;
 }
 
 setWorldConstructor(RunWorld);

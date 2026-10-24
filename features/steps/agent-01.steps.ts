@@ -125,3 +125,30 @@ Given("the project has a .pi\\/settings.json that would change the agent's tools
   git(this.projectDir, "add", ".pi/settings.json");
   git(this.projectDir, "commit", "-q", "-m", "chore: the project's Pi settings");
 });
+
+Given("the Pi executor runs on the real model named in OID_SMOKE_MODEL, instead of the scripted one", function (this: RunWorld) {
+  const name = process.env.OID_SMOKE_MODEL;
+  assert.ok(name !== undefined && name !== "", 'Name the real model: OID_SMOKE_MODEL=<provider>/<model> NODE_OPTIONS="--import tsx" npx cucumber-js -p smoke');
+  this.smokeModel = name;
+  this.piExecutor = async () => {
+    const { piExecutor } = await import("../../src/pi-executor.ts");
+    const { piModel } = await import("../../src/pi-model.ts");
+    return piExecutor(await piModel(name));
+  };
+});
+
+Then("the run ends without an error or a crash", function (this: RunWorld) {
+  assert.equal(this.crash, undefined, `The run crashed:\n${String(this.crash)}`);
+  assert.ok([0, 1, 3].includes(this.exitCode ?? -1), `The run stopped with exit code ${this.exitCode}. Output:\n${this.output}`);
+});
+
+Then("the run's log gives each attempt the real model's id, its turns, and tokens above zero", async function (this: RunWorld) {
+  const attempts = attemptsIn(await runLog(this));
+  assert.ok(attempts.length > 0, "The run's log has no attempt");
+  for (const attempt of attempts) {
+    const which = `The log's ${attempt.kind} attempt`;
+    assert.equal(attempt.model, this.smokeModel, `${which} does not give the real model's id`);
+    assert.ok(attempt.turns > 0, `${which} gives no turns`);
+    assert.ok((attempt.tokens ?? 0) > 0, `${which} gives no tokens`);
+  }
+});

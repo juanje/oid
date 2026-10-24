@@ -11,8 +11,9 @@ const RUNNER = join(RECORDINGS, "runner.ts");
 const TOOLS = ["tsc", "vitest", "cucumber-js"];
 
 // One real runner per kind of check (DOMAIN.md, Testing oid itself): this scenario runs real tsc, vitest and
-// cucumber-js; every other scenario replays what they answered when it was recorded.
-const REAL_RUNNERS = new Set(["The FR is built in one commit on the run's branch"]);
+// cucumber-js; every other scenario replays what they answered when it was recorded. A real model writes something
+// new each time, so the smoke scenario runs the real tools too.
+const REAL_RUNNERS = new Set(["The FR is built in one commit on the run's branch", "On a real model, each attempt runs and its use reaches the run log"]);
 
 /**
  * Gives a fixture project oid's packages and, in place of its tsc, vitest and cucumber-js, the recorded runner.
