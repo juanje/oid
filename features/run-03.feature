@@ -33,3 +33,12 @@ Feature: The inner loop
     Then the run stops with a refusal, not a crash
     And the output names the scenario that turned red
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A test file that defines no vitest test goes back to a test attempt, not to the code
+    Given the run allows 1 retry
+    And the scripted test attempt for the first scenario writes its test with node:test, and its retry with vitest
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the executor was asked for every prepared attempt, in order
+    And the retried test attempt was told its test file defines no vitest test, naming the file
+    And no code attempt was asked to fix that test file
