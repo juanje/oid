@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { forbiddenLines, outsideBoundary } from "../../src/boundaries.ts";
+import { forbiddenLines, judgeBoundary, outsideBoundary } from "../../src/boundaries.ts";
 
 describe("outsideBoundary", () => {
   test("a test attempt may write unit tests only", () => {
@@ -32,5 +32,25 @@ describe("forbiddenLines", () => {
       { file: "tests/greet.test.ts", pattern: ".skip", text: 'describe.skip("greeting", () => {' },
       { file: "src/greet.ts", pattern: "process.env.VITEST", text: "  if (process.env.VITEST) return `Hello, ${name}!`;" },
     ]);
+  });
+});
+
+describe("judgeBoundary", () => {
+  test("accepts a diff inside the attempt's boundary with no forbidden line", () => {
+    expect(judgeBoundary("test", { files: ["tests/greet.test.ts"], added: [{ file: "tests/greet.test.ts", text: 'test("greets", () => {' }] })).toBeUndefined();
+  });
+
+  test("refuses a diff that writes outside the boundary, naming the files", () => {
+    const refusal = judgeBoundary("code", { files: ["src/greet.ts", "package.json"], added: [] });
+
+    expect(refusal?.evidence).toContain("package.json");
+    expect(refusal?.evidence).not.toContain("src/greet.ts");
+  });
+
+  test("refuses a diff that adds a forbidden line, naming the pattern and its file", () => {
+    const refusal = judgeBoundary("test", { files: ["tests/greet.test.ts"], added: [{ file: "tests/greet.test.ts", text: 'test.only("greets", () => {' }] });
+
+    expect(refusal?.evidence).toContain("tests/greet.test.ts");
+    expect(refusal?.evidence).toContain(".only");
   });
 });
