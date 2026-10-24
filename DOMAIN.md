@@ -183,8 +183,10 @@ With `--reporter=json --outputFile=<file>`:
 | The test imports a module that does not exist | File, `message`, no tests listed | `Cannot find module '../../src/redirect' imported from '<test file>'` |
 | A syntax error in a test file | File, `message`, no tests listed | `Transform failed with 1 error: …` |
 | A failing expectation | Test, `failureMessages` | `AssertionError: expected 2 to be 4 // Object.is equality` |
+| A file that loads and registers no vitest test, such as one written with `node:test` | File, `message`, no tests listed, exit 1 | `No test suite found in file <path>` |
 
 - **A missing export does not fail the file load:** it arrives as `undefined`.
+- **A test file that registers no vitest test is `test_bug`** (checked on 3.2.7). Before its code exists, its import fails and it looks like `missing_implementation`; once the code exists, it fails with `No test suite found`. That is the test attempt's to fix, never the code's: tests come from `vitest`'s `describe`, `it` and `test`.
 - **vitest does not type-check.** `tsc --noEmit` does.
 - **Pass the test name as one argument: `--testNamePattern=<escaped name>`.** As two arguments, a name that starts with `-` is read as an option.
 - **`passWithNoTests` makes a run where nothing ran pass.** Check that the test asked for ran.
