@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { classifyFailure, classifyScenario } from "../../src/red-class.ts";
+import { nothingExists } from "./support/symbols.ts";
 
 // Messages as vitest 3.2.7 and cucumber-js 13.3.0 gave them on the greet fixtures.
-const nothingExists = (): boolean => false;
 const greetExists = (name: string): boolean => name === "greet";
 
 describe("classifyFailure", () => {

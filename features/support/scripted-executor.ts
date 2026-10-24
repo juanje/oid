@@ -45,3 +45,8 @@ export function lastAttempt(script: PreparedAttempt[], kind: AttemptKind, scenar
   if (index === -1) throw new Error(`No prepared ${kind} attempt for "${scenario}"`);
   return [...script.slice(0, index), { kind, scenario, dir }];
 }
+
+/** Puts `dir` in place of the prepared attempt of `kind` for `scenario`, keeping every attempt after it. */
+export function replacedAttempt(script: PreparedAttempt[], kind: AttemptKind, scenario: string, dir: string): PreparedAttempt[] {
+  return script.map((attempt) => (attempt.kind === kind && attempt.scenario === scenario ? { kind, scenario, dir } : attempt));
+}

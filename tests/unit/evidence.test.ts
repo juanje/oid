@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { judgeCode, judgeNewTests, judgeSteps } from "../../src/evidence.ts";
+import { nothingExists } from "./support/symbols.ts";
 import { recorded, recordedVitest } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
 
 const SCENARIO = { uri: "features/greet-03.feature", line: 4, name: "A person is greeted with the chosen salutation" };
-const nothingExists = (): boolean => false;
 
 describe("judgeSteps", () => {
   test("accepts step definitions whose scenario fails with a valid Red, giving its class", () => {

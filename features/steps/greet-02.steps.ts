@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir, createGreetProjectWith, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
 import { assertOutputNames } from "../support/run.ts";
-import { lastAttempt, type PreparedAttempt } from "../support/scripted-executor.ts";
+import { lastAttempt, type PreparedAttempt, replacedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
 const [FIRST, SECOND] = scenarioNames("greet-02/contract/features/greet-02.feature") as [string, string];
@@ -83,9 +83,7 @@ Then("the output names the scenario that turned red", function (this: RunWorld) 
 const FIRST_TEST_FILE = join(greet02AttemptDir("s1-test"), "tests/greet-all.test.ts");
 
 Given("the scripted test attempt for the second scenario adds its test to the first scenario's test file", function (this: RunWorld) {
-  this.script = this.script.map((attempt) =>
-    attempt.kind === "test" && attempt.scenario === SECOND ? { ...attempt, dir: greet02AttemptDir("s2-test-same-file") } : attempt,
-  );
+  this.script = replacedAttempt(this.script, "test", SECOND, greet02AttemptDir("s2-test-same-file"));
 });
 
 Given(
