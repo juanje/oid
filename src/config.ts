@@ -30,7 +30,15 @@ export async function readPaths(dir: string): Promise<Paths> {
   return { ...(paths?.domain === undefined ? {} : { domain: paths.domain }), ...(paths?.conventions === undefined ? {} : { conventions: paths.conventions }) };
 }
 
-async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; paths?: Paths }> {
+/** A configuration oid cannot run with: an error no attempt can fix (exit 2), which names what to change. */
+export class ConfigError extends Error {}
+
+/** The model the project's agents run on, as `<provider>/<model>`, when .oid.json names one (FR-AGENT-01). */
+export async function readModel(dir: string): Promise<string | undefined> {
+  return (await readConfig(dir)).model;
+}
+
+async function readConfig(dir: string): Promise<{ model?: string; limits?: Partial<Limits>; paths?: Paths }> {
   const path = join(dir, CONFIG_FILE);
   return existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
 }
