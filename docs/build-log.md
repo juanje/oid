@@ -14,4 +14,5 @@ One line per FR (AGENTS.md, "Commits and the build log").
 | FR-AGENT-07 | 2026-10-24 | contract 0, stuck 0, other 1 | 47 s | Attempts end through the report tool; one with no report, or an empty result, is refused. |
 | FR-GATE-01 | 2026-10-24 | contract 1, stuck 0, other 0 | 48 s | A check that ran nothing fails; an FR with no scenario, or a runner that does not know an option, stops the run with exit 2. |
 | FR-RUN-07 | 2026-10-24 | contract 1, stuck 0, other 1 | 58 s | A refused attempt goes back to the work accepted before it and is retried with its refusal, up to limits.retries (2 by default); an error is never retried. |
-| FR-GATE-04 | 2026-10-24 | contract 0, stuck 0, other 1 | 61 s | Failing tests and scenarios at the gate go back to a code attempt whose refusal puts them in focus, up to the retry limit; type errors and gate errors do not. |
+| FR-GATE-04 | 2026-10-24 | contract 1, stuck 0, other 1 | 61 s | Failing tests and scenarios at the gate go back to a code attempt whose refusal puts them in focus, up to the retry limit; type errors and gate errors do not. |
+| FR-RUN-09 | 2026-10-24 | contract 0, stuck 0, other 1 | 21 s | The executor counts its agent's turns and ends it at limits.turns (40 by default); a reached limit ends the run with exit 3, not retried. |
