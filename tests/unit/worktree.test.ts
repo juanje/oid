@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { commitRun, createRunWorktree, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
+import { acceptedWork, commitRun, createRunWorktree, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
@@ -83,6 +83,28 @@ describe("takeAttemptDiff", () => {
         { file: "tests/greet.test.ts", text: "test.only('x', () => {});" },
       ],
     });
+  });
+});
+
+describe("acceptedWork", () => {
+  test("goes back to the work accepted before an attempt: its new files gone, its changes undone, earlier work kept", async () => {
+    const repo = await tempRepo({ "src/greet.ts": "first\n" });
+    await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
+    const worktree = await createRunWorktree(repo, "r1");
+    await writeFiles(worktree.dir, { "tests/greet.test.ts": "accepted earlier\n" });
+    await takeAttemptDiff(worktree.dir);
+    const accepted = await acceptedWork(worktree.dir);
+    await writeFiles(worktree.dir, { "src/greet.ts": "refused\n", "src/leftover.ts": "refused\n" });
+    await takeAttemptDiff(worktree.dir);
+
+    await accepted.restore();
+
+    expect({
+      greet: await readFile(join(worktree.dir, "src/greet.ts"), "utf8"),
+      leftover: existsSync(join(worktree.dir, "src/leftover.ts")),
+      earlier: existsSync(join(worktree.dir, "tests/greet.test.ts")),
+      nodeModules: existsSync(join(worktree.dir, "node_modules/dep/index.js")),
+    }).toEqual({ greet: "first\n", leftover: false, earlier: true, nodeModules: true });
   });
 });
 
