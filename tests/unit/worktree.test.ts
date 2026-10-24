@@ -19,6 +19,8 @@ describe("createRunWorktree", () => {
   test("leaves the working copy's files, branch and status as they were", async () => {
     const repo = await tempRepo({ "a.txt": "committed\n" });
     await writeFile(join(repo, "a.txt"), "uncommitted\n");
+    // A project that does not ignore node_modules sees it in its status, and must go on seeing it.
+    await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
     const before = { status: git(repo, "status", "--porcelain"), branch: git(repo, "branch", "--show-current") };
 
     await createRunWorktree(repo, "r1");
@@ -27,7 +29,7 @@ describe("createRunWorktree", () => {
     expect(await readFile(join(repo, "a.txt"), "utf8")).toBe("uncommitted\n");
   });
 
-  test("shares the project's node_modules, which git does not see in the worktree", async () => {
+  test("shares the project's node_modules", async () => {
     const repo = await tempRepo({ "a.txt": "committed\n" });
     await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
 
@@ -36,13 +38,13 @@ describe("createRunWorktree", () => {
     const shared = join(worktree.dir, "node_modules/dep/index.js");
     expect(existsSync(shared), "node_modules is not in the worktree").toBe(true);
     expect(await readFile(shared, "utf8")).toBe("export {};\n");
-    expect(git(worktree.dir, "status", "--porcelain")).toBe("");
   });
 });
 
 describe("takeAttemptChanges", () => {
-  test("returns only the files changed since the previous attempt", async () => {
+  test("returns only the files changed since the previous attempt, never the shared node_modules", async () => {
     const repo = await tempRepo({ "a.txt": "first\n" });
+    await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
     const worktree = await createRunWorktree(repo, "r1");
     await writeFiles(worktree.dir, { "features/steps/a.steps.ts": "export {};\n", "a.txt": "changed\n" });
     const first = await takeAttemptChanges(worktree.dir);
@@ -55,8 +57,9 @@ describe("takeAttemptChanges", () => {
 });
 
 describe("commitRun", () => {
-  test("commits every change in the worktree as one commit on top of the starting HEAD", async () => {
+  test("commits every change in the worktree but the shared node_modules, as one commit on top of the starting HEAD", async () => {
     const repo = await tempRepo({ "a.txt": "first\n" });
+    await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
     const start = git(repo, "rev-parse", "HEAD");
     const worktree = await createRunWorktree(repo, "r1");
     await writeFiles(worktree.dir, { "a.txt": "changed\n", "src/new.ts": "export {};\n" });
