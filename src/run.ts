@@ -186,26 +186,33 @@ function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous:
 }
 
 /** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
-async function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
-  const accepted = await acceptedWork(run.worktree.dir);
-  const attempt = await attemptFor(run, "code", scenario, previous);
-  const refusal = attempt.refusal ?? (await judgeCodeAttempt(run));
-  await run.record(attemptEvent({ kind: "code", scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome }));
-  if (refusal === undefined) await checkpoint(run.worktree, `code attempt for "${scenario.name}"`);
-  return { refusal, rollback: accepted.restore };
+function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
+  return checkpointedAttempt(run, "code", scenario, previous, () => judgeCodeAttempt(run));
 }
 
 /**
  * An attempt the gate sent back. A code attempt is judged as any code attempt. A test or steps attempt is judged by
  * its boundary and its report only, with no new Red: its tests have theirs, and the gate runs again after it.
  */
-async function attemptAfterGate(run: FrRun, kind: AttemptKind, scenario: Scenario, refusal: Refusal): Promise<Tried> {
+function attemptAfterGate(run: FrRun, kind: AttemptKind, scenario: Scenario, refusal: Refusal): Promise<Tried> {
   if (kind === "code") return codeAttempt(run, scenario, refusal);
+  return checkpointedAttempt(run, kind, scenario, refusal, async () => undefined);
+}
+
+/** One attempt judged by what holds for every kind, then by `judge`; logged, and checkpointed when accepted. */
+async function checkpointedAttempt(
+  run: FrRun,
+  kind: AttemptKind,
+  scenario: Scenario,
+  previous: Refusal | undefined,
+  judge: () => Promise<Refusal | undefined>,
+): Promise<Tried> {
   const accepted = await acceptedWork(run.worktree.dir);
-  const attempt = await attemptFor(run, kind, scenario, refusal);
-  await run.record(attemptEvent({ kind, scenario: scenario.name, refusal: attempt.refusal, retry: true, outcome: attempt.outcome }));
-  if (attempt.refusal === undefined) await checkpoint(run.worktree, `${kind} attempt after the gate for "${scenario.name}"`);
-  return { refusal: attempt.refusal, rollback: accepted.restore };
+  const attempt = await attemptFor(run, kind, scenario, previous);
+  const refusal = attempt.refusal ?? (await judge());
+  await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome }));
+  if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
+  return { refusal, rollback: accepted.restore };
 }
 
 /** A code attempt's judgment: the whole unit suite, and the scenarios built so far. */
