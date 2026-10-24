@@ -19,7 +19,7 @@ Read a file when its trigger matches, not before.
 ## Procedure: build one FR
 
 0. **Input.** Take the FR id the person gives. With none, take the next FR in the skeleton build order (`SPEC.md`, MVP) that has no line in `docs/build-log.md`.
-1. **Feature file.** Write `features/<area>-<nn>.feature`, with `@<FR>` on `Feature`. Keep scenarios few, each asserting an outcome the user sees. **Stop and ask the person to approve it.** Go on only after approval, or after the person delegates the approval in chat for this FR.
+1. **Feature file.** Write `features/<area>-<nn>.feature`, with `@<FR>` on `Feature`. Keep scenarios few, each asserting an outcome the user sees. **Stop and ask the person to approve it.** Go on only after approval, or after the person delegates the approval in chat for this FR. Then commit the feature file alone: `spec(<FR>): …`. The committed file is the contract that the Reds are checked against.
 2. **Steps, Red.** Write the step definitions with real assertions, then run the scenario. Go on only on a valid Red (`DOMAIN.md`, Red classes). An undefined step or a load error is not one.
 3. **Unit test, Red.** Write the test for the next piece of logic and run it. Go on only on a valid Red. Commit the test alone: `test(<FR>): …`. The commit is the proof that the test failed before its code existed.
 4. **Code, Green.** Write the code, then run the test, the current scenario, the FR's scenarios already green and the full unit suite. All must pass. Commit: `feat(<FR>): …`.
@@ -41,7 +41,7 @@ Read a file when its trigger matches, not before.
 Never stash, move or revert code to get a Red.
 
 Before reporting an FR:
-- [ ] Feature file approved, or approval delegated
+- [ ] Feature file approved (or approval delegated) and committed as `spec(<FR>)`
 - [ ] Every scenario and test seen failing with a valid Red, or proved by a mutant
 - [ ] Each test committed before its code
 - [ ] `npm run gate` passes
@@ -78,5 +78,5 @@ The first Skeleton FR creates the script. An FR that adds a check adds it to the
 
 ## Commits and build log
 
-- Commit types: `test(<FR>)`, `feat(<FR>)`, `fix(<FR>)`, `refactor(<FR>)`, `docs`, `chore`. One logical change per commit.
+- Commit types: `spec(<FR>)`, `test(<FR>)`, `feat(<FR>)`, `fix(<FR>)`, `refactor(<FR>)`, `docs`, `chore`. One logical change per commit.
 - `docs/build-log.md` gets one line per FR, in its table's columns. Count interventions by kind (contract, stuck, other). The note is one sentence.
