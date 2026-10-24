@@ -30,9 +30,19 @@ describe("systemPromptFor", () => {
   });
 });
 
+const CONTEXT = { fr: "#### FR-GREET-01: Greet a person by name\n`greet(name)` returns a greeting.", steps: ['When I greet "Ada"', 'Then I get "Hello, Ada!"'] };
+
 describe("taskFor", () => {
+  test("gives the FR's text and the steps of its scenario", () => {
+    const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, context: CONTEXT });
+
+    expect(task).toContain(CONTEXT.fr);
+    for (const step of CONTEXT.steps) expect(task).toContain(step);
+  });
+
+
   test("names the attempt's kind, its FR and its scenario", () => {
-    const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO });
+    const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, context: CONTEXT });
 
     expect(task).toMatch(/\btest\b/);
     expect(task).toContain("FR-GREET-01");
@@ -40,7 +50,7 @@ describe("taskFor", () => {
   });
 
   test("gives a retry the refusal of the attempt before it", () => {
-    const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL });
+    const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
 
     expect(task).toContain(REFUSAL.failed);
     expect(task).toContain(REFUSAL.evidence);
