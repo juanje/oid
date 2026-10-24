@@ -12,8 +12,9 @@ export interface StepFailure {
   kind: "Context" | "Action" | "Outcome" | "Unknown";
   status: string;
   message: string;
-  /** The file that defines the step, when one does. */
+  /** The file that defines the step, when one does, and the line of its definition. */
   definedIn?: string;
+  definedAt?: number;
 }
 
 export interface ScenarioResult extends Scenario {
@@ -40,8 +41,8 @@ interface Messages {
   testCases: Map<string, string>;
   /** test step id → its pickle step id (hooks have none) and the ids of its step definitions. */
   testSteps: Map<string, { pickleStepId: string | undefined; definitionIds: string[] }>;
-  /** step definition id → the file that defines it. */
-  definitions: Map<string, string>;
+  /** step definition id → where it is defined. */
+  definitions: Map<string, { uri: string; line: number | undefined }>;
   /** testCaseStarted id → testCase id. */
   started: Map<string, string>;
   /** testCaseStarted id → its steps as they finished. */
@@ -54,7 +55,8 @@ function parse(ndjson: string): Messages {
     if (line.trim() === "") continue;
     const message = JSON.parse(line);
     if (message.stepDefinition) {
-      messages.definitions.set(message.stepDefinition.id, message.stepDefinition.sourceReference?.uri);
+      const { uri, location } = message.stepDefinition.sourceReference ?? {};
+      messages.definitions.set(message.stepDefinition.id, { uri, line: location?.line });
     } else if (message.pickle) {
       const { id, uri, location, name, steps } = message.pickle;
       messages.pickles.set(id, { uri, line: location.line, name });
@@ -112,13 +114,14 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
     const testStep = messages.testSteps.get(notPassed?.testStepId ?? "");
     const pickleStep = messages.pickleSteps.get(testStep?.pickleStepId ?? "");
     // An undefined step has no definition; an ambiguous one has several, and none of them decides.
-    const definedIn = testStep?.definitionIds.length === 1 ? messages.definitions.get(testStep.definitionIds[0]!) : undefined;
+    const definition = testStep?.definitionIds.length === 1 ? messages.definitions.get(testStep.definitionIds[0]!) : undefined;
     const failure: StepFailure = {
       step: pickleStep?.text ?? "a hook",
       kind: pickleStep?.kind ?? "Unknown",
       status: notPassed?.status ?? "NOT RUN",
       message: notPassed?.message ?? "",
-      ...(definedIn === undefined ? {} : { definedIn }),
+      ...(definition?.uri === undefined ? {} : { definedIn: definition.uri }),
+      ...(definition?.line === undefined ? {} : { definedAt: definition.line }),
     };
     results.push({ ...scenario, status: "failed", failure });
   }
