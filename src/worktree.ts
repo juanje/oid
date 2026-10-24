@@ -1,4 +1,6 @@
-import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { appendFile, mkdir, readFile, symlink } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { git } from "./git.ts";
 
 export interface RunWorktree {
@@ -12,8 +14,23 @@ export async function createRunWorktree(projectDir: string, runId: string): Prom
   const dir = join(gitDir, "oid", "worktrees", runId);
   const branch = `oid/${runId}`;
   await git(projectDir, "worktree", "add", "-q", "-b", branch, dir, "HEAD");
+  await shareNodeModules(projectDir, dir);
   return { dir, branch };
 }
+
+/** Worktrees do not share node_modules, so the worktree gets a link to the project's, hidden from git. */
+async function shareNodeModules(projectDir: string, worktreeDir: string): Promise<void> {
+  await symlink(join(projectDir, "node_modules"), join(worktreeDir, "node_modules"));
+  // A symlink is a file to git, so `node_modules/` in the project's .gitignore does not hide it; the shared exclude file does.
+  const exclude = resolve(worktreeDir, await git(worktreeDir, "rev-parse", "--git-path", "info/exclude"));
+  const current = existsSync(exclude) ? await readFile(exclude, "utf8") : "";
+  if (!current.split("\n").includes(NODE_MODULES_PATTERN)) {
+    await mkdir(dirname(exclude), { recursive: true });
+    await appendFile(exclude, `${current === "" || current.endsWith("\n") ? "" : "\n"}${NODE_MODULES_PATTERN}\n`);
+  }
+}
+
+const NODE_MODULES_PATTERN = "/node_modules";
 
 /** Commits every change in the worktree as one commit on the run's branch. */
 export async function commitRun(worktreeDir: string, message: string): Promise<void> {
