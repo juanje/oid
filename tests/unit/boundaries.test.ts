@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { forbiddenLines, judgeBoundary, outsideBoundary } from "../../src/boundaries.ts";
+import { forbiddenLines, judgeBoundary, outsideBoundary, ownerOf } from "../../src/boundaries.ts";
 
 describe("outsideBoundary", () => {
   test("a test attempt may write unit tests only", () => {
@@ -52,5 +52,15 @@ describe("judgeBoundary", () => {
 
     expect(refusal?.evidence).toContain("tests/greet.test.ts");
     expect(refusal?.evidence).toContain(".only");
+  });
+});
+
+describe("ownerOf", () => {
+  test("the attempt kind that writes a file owns it", () => {
+    expect(["features/steps/greet.steps.ts", "features/support/world.ts", "tests/greet.test.ts", "src/greet.ts"].map(ownerOf)).toEqual(["steps", "steps", "test", "code"]);
+  });
+
+  test("a file no kind writes goes to a code attempt: the cause of its error is almost always in the source", () => {
+    expect(["scripts/build.ts", "vitest.config.ts", "features/greet-01.feature"].map(ownerOf)).toEqual(["code", "code", "code"]);
   });
 });
