@@ -1,5 +1,5 @@
 import { cp } from "node:fs/promises";
-import type { Attempt, AttemptKind, Executor, Report, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, AttemptKind, Executor, TryResult, TryTarget } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
 export interface PreparedAttempt {
@@ -8,6 +8,8 @@ export interface PreparedAttempt {
   dir: string;
   /** What the attempt checks with try once its files are in place, as an agent would before it ends. */
   tries?: TryTarget[];
+  /** The result it ends with through report; null ends it without one. A short default when left out. */
+  report?: string | null;
 }
 
 /** One call to try, with what it answered. */
@@ -33,7 +35,7 @@ export class ScriptedExecutor implements Executor {
     return this.#script.length;
   }
 
-  async run(attempt: Attempt): Promise<Report> {
+  async run(attempt: Attempt): Promise<void> {
     // The reply checks the request it answers: an attempt works in the run's worktree, never in the person's copy,
     // and asks for the kind and scenario prepared next.
     if (attempt.worktree === this.#projectDir) throw new Error(`The ${attempt.kind} attempt was sent to the person's working copy`);
@@ -46,7 +48,7 @@ export class ScriptedExecutor implements Executor {
     this.asked += 1;
     await cp(next.dir, attempt.worktree, { recursive: true });
     for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
-    return { result: `scripted ${attempt.kind} attempt` };
+    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`);
   }
 }
 
