@@ -32,6 +32,15 @@ async function shareNodeModules(projectDir: string, worktreeDir: string): Promis
 
 const NODE_MODULES_PATTERN = "/node_modules";
 
+/** The files the last attempt changed, sorted. The index holds what earlier attempts changed, so this stages the new changes too. */
+export async function takeAttemptChanges(worktreeDir: string): Promise<string[]> {
+  const modified = await git(worktreeDir, "diff", "--name-only");
+  const added = await git(worktreeDir, "ls-files", "--others", "--exclude-standard");
+  await git(worktreeDir, "add", "--all");
+  const files = [...modified.split("\n"), ...added.split("\n")].filter((file) => file !== "");
+  return [...new Set(files)].sort();
+}
+
 /** Commits every change in the worktree as one commit on the run's branch. */
 export async function commitRun(worktreeDir: string, message: string): Promise<void> {
   await git(worktreeDir, "add", "--all");
