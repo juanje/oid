@@ -41,3 +41,20 @@ Then("their system prompts share a part, word for word", function (this: RunWorl
   const shared = (first ?? []).filter((part) => rest.every((parts) => parts.includes(part)));
   assert.ok(shared.length > 0, "The system prompts share no part");
 });
+
+/** oid's part of the system prompt of the attempt of `kind`. */
+function promptOf(world: RunWorld, kind: string): string {
+  const found = promptsOf(world).find((attempt) => attempt.kind === kind);
+  assert.ok(found !== undefined, `No ${kind} attempt`);
+  return found.prompt;
+}
+
+Then("the test attempt's system prompt names vitest and what a unit test imports from it", function (this: RunWorld) {
+  const prompt = promptOf(this, "test");
+  for (const name of ["vitest", "describe", "test", "expect"]) assert.match(prompt, new RegExp(`\\b${name}\\b`), `The test attempt's system prompt does not name ${name}`);
+});
+
+Then("the steps attempt's system prompt names cucumber-js and what a step definition imports from it", function (this: RunWorld) {
+  const prompt = promptOf(this, "steps");
+  for (const name of ["cucumber-js", "@cucumber/cucumber", "Given", "When", "Then"]) assert.ok(prompt.includes(name), `The steps attempt's system prompt does not name ${name}`);
+});

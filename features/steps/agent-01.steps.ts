@@ -214,3 +214,13 @@ Then("a copy of the run's log is kept outside the temporary directory, and its p
   if (existsSync(transcripts)) await cp(transcripts, kept.replace(/\.jsonl$/, ""), { recursive: true });
   process.stdout.write(`The run's log is kept in ${kept}, and its transcripts in ${kept.replace(/\.jsonl$/, "")}/\n`);
 });
+
+Given("the run uses oid's default limits, as a real run does", async function (this: RunWorld) {
+  // The Background allows no retries; a real run's .oid.json usually sets no limits.
+  const path = join(this.projectDir, ".oid.json");
+  const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
+  delete config.limits;
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
+  git(this.projectDir, "add", ".oid.json");
+  git(this.projectDir, "commit", "-q", "--allow-empty", "-m", "chore: oid's default limits");
+});
