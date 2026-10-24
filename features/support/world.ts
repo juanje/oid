@@ -1,8 +1,10 @@
 import { rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { After, BeforeAll, World, setWorldConstructor } from "@cucumber/cucumber";
+import type { Executor } from "../../src/executor.ts";
 import type { OidRun } from "./run.ts";
 import type { PreparedAttempt, ScriptedExecutor } from "./scripted-executor.ts";
+import type { ScriptedModel } from "./scripted-model.ts";
 
 export class RunWorld extends World {
   projectDir = "";
@@ -16,6 +18,9 @@ export class RunWorld extends World {
   workingCopyBefore: Record<string, string> = {};
   /** Each run, when a scenario runs oid more than once. */
   runs: OidRun[] = [];
+  /** When set, the run's attempts go to the Pi executor it makes, on `model`, instead of the scripted executor. */
+  piExecutor: (() => Promise<Executor>) | undefined;
+  model: ScriptedModel | undefined;
 }
 
 setWorldConstructor(RunWorld);

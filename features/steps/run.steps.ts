@@ -45,7 +45,7 @@ When("I run {string}", async function (this: RunWorld, command: string) {
   this.startHead = git(this.projectDir, "rev-parse", "HEAD");
   this.branchesBefore = branches(this.projectDir);
   this.executor = new ScriptedExecutor(this.projectDir, this.script);
-  Object.assign(this, await runOid(this.projectDir, args, this.executor));
+  Object.assign(this, await runOid(this.projectDir, args, this.piExecutor === undefined ? this.executor : await this.piExecutor()));
 });
 
 Then("the run succeeds", function (this: RunWorld) {
