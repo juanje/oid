@@ -115,3 +115,25 @@ Then("the run's commit does not contain my uncommitted change", function (this: 
   const files = git(this.projectDir, "ls-tree", "-r", "--name-only", branch).split("\n");
   assert.ok(!files.includes(MY_CHANGES.untracked), `The run's commit holds my untracked ${MY_CHANGES.untracked}`);
 });
+
+Given("the scripted test attempt writes a test that passes without its code", function (this: RunWorld) {
+  this.attempts.test = attemptDir("test-passes-without-code");
+});
+
+Then("the run stops with a refusal, not a crash", function (this: RunWorld) {
+  // In-process, a crash is a thrown error; a refusal is a returned exit code of 1.
+  assert.equal(this.crash, undefined, `The run crashed:\n${String(this.crash)}`);
+  assert.equal(this.exitCode, 1, `The run did not stop with a refusal. Output:\n${this.output}`);
+});
+
+Then("the output names the test that passed without its code", async function (this: RunWorld) {
+  const source = await readFile(join(this.attempts.test!, "tests/greet.test.ts"), "utf8");
+  const name = /test\("([^"]+)"/.exec(source)?.[1];
+  assert.ok(name !== undefined, "The scripted test attempt has no test name");
+  assert.ok(this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
+});
+
+Then("the run's branch has no commit on top of the starting HEAD", function (this: RunWorld) {
+  const branch = runBranch(this);
+  assert.equal(git(this.projectDir, "rev-parse", branch), this.startHead, `The run committed on ${branch}`);
+});
