@@ -160,7 +160,8 @@ describe("finishRun", () => {
     await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
     const start = git(repo, "rev-parse", "HEAD");
     const worktree = await createRunWorktree(repo, "r1");
-    for (const files of [{ "features/steps/a.steps.ts": "export {};\n" }, { "a.txt": "changed\n", "src/new.ts": "export {};\n" }]) {
+    const attempts: Record<string, string>[] = [{ "features/steps/a.steps.ts": "export {};\n" }, { "a.txt": "changed\n", "src/new.ts": "export {};\n" }];
+    for (const files of attempts) {
       await writeFiles(worktree.dir, files);
       await takeAttemptDiff(worktree.dir);
       await checkpoint(worktree, "an accepted attempt");
