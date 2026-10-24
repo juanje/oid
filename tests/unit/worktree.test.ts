@@ -1,8 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { createRunWorktree } from "../../src/worktree.ts";
-import { git, tempRepo } from "./support/repo.ts";
+import { commitRun, createRunWorktree } from "../../src/worktree.ts";
+import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
   test("checks out a new branch from HEAD, without the working copy's uncommitted changes", async () => {
@@ -24,5 +24,19 @@ describe("createRunWorktree", () => {
 
     expect({ status: git(repo, "status", "--porcelain"), branch: git(repo, "branch", "--show-current") }).toEqual(before);
     expect(await readFile(join(repo, "a.txt"), "utf8")).toBe("uncommitted\n");
+  });
+});
+
+describe("commitRun", () => {
+  test("commits every change in the worktree as one commit on top of the starting HEAD", async () => {
+    const repo = await tempRepo({ "a.txt": "first\n" });
+    const start = git(repo, "rev-parse", "HEAD");
+    const worktree = await createRunWorktree(repo, "r1");
+    await writeFiles(worktree.dir, { "a.txt": "changed\n", "src/new.ts": "export {};\n" });
+
+    await commitRun(worktree.dir, "feat(FR-X-01): built");
+
+    expect(git(repo, "rev-parse", `${worktree.branch}^`)).toBe(start);
+    expect(git(repo, "diff", "--name-only", start, worktree.branch).split("\n")).toEqual(["a.txt", "src/new.ts"]);
   });
 });
