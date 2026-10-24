@@ -1,11 +1,12 @@
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { judgeNewTests, judgeSteps } from "./evidence.ts";
+import { judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { gateRefusal, runGate } from "./gate.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
+import { runUnitTests } from "./unit-tests.ts";
 import { commitRun, createRunWorktree, takeAttemptChanges } from "./worktree.ts";
 
 export interface RunOptions {
@@ -56,7 +57,7 @@ async function buildScenario(executor: Executor, fr: string, scenario: Scenario,
       const testRefusal = await judgeNewTests(worktreeDir, await attempt("test"));
       if (testRefusal !== undefined) return testRefusal;
       await attempt("code");
-      return undefined;
+      return judgeCode(await runUnitTests(worktreeDir, [], runCommand), []);
     },
     async () => (await runScenario()).status === "passed",
   );
