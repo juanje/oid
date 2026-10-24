@@ -106,6 +106,7 @@ async function main(): Promise<void> {
     process.exit(exitCode);
   }
 
+  if (!existsSync(recording)) refuse(`no recording for this scenario (${recording})`);
   const replies: RecordedReply[] = JSON.parse(readFileSync(recording, "utf8"));
   const index = Number(readFileSync(state, "utf8"));
   const reply = replies[index];

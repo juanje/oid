@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -41,6 +42,10 @@ Before(async function ({ pickle }) {
   const state = join(await mkdtemp(join(tmpdir(), "oid-runner-")), "next");
   await writeFile(state, "0");
   if (mode === "record") await writeFile(recording, "[]\n");
+  // A scenario without a recording must never pass unchecked, for instance after it was renamed.
+  if (mode === "replay" && !existsSync(recording)) {
+    throw new Error(`No recording for "${pickle.name}" (${recording}). Record it with: OID_RECORD_RUNNERS=1 NODE_OPTIONS="--import tsx" npx cucumber-js`);
+  }
   Object.assign(process.env, { OID_RUNNERS: mode, OID_RUNNER_RECORDING: recording, OID_RUNNER_STATE: state });
 });
 
