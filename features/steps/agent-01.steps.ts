@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
@@ -204,11 +204,13 @@ Then("the run's summary is shown: what it built or not, where it stopped, its at
 
 Then("a copy of the run's log is kept outside the temporary directory, and its path is shown", async function (this: RunWorld) {
   const runs = join(this.projectDir, ".git/oid/runs");
-  const [log] = await readdir(runs);
+  const log = (await readdir(runs)).find((name) => name.endsWith(".jsonl"));
   assert.ok(log !== undefined, `The run left no log in ${runs}`);
-  // In oid's own .git: never committed, and not deleted with the fixture.
+  // In oid's own .git: never committed, and not deleted with the fixture. The transcripts beside the log go with it.
   const kept = join(OID_ROOT, ".git/oid-smoke", log);
   await mkdir(dirname(kept), { recursive: true });
   await copyFile(join(runs, log), kept);
-  process.stdout.write(`The run's log is kept in ${kept}\n`);
+  const transcripts = join(runs, log.replace(/\.jsonl$/, ""));
+  if (existsSync(transcripts)) await cp(transcripts, kept.replace(/\.jsonl$/, ""), { recursive: true });
+  process.stdout.write(`The run's log is kept in ${kept}, and its transcripts in ${kept.replace(/\.jsonl$/, "")}/\n`);
 });
