@@ -2,7 +2,8 @@ import { existsSync } from "node:fs";
 import { chmod, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { acceptedWork, checkpoint, createRunWorktree, finishRun, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
+import { startRunLog } from "../../src/run-log.ts";
+import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
@@ -112,12 +113,27 @@ describe("two runs of one id", () => {
   test("each get a branch, a worktree and checkpoints of their own", async () => {
     const repo = await tempRepo({ "a.txt": "a\n" });
 
-    const first = await createRunWorktree(repo, "FR-X-01-20261024T120000");
-    const second = await createRunWorktree(repo, "FR-X-01-20261024T120000");
+    const first = await createRunWorktree(repo, await freeRunId(repo, "FR-X-01-20261024T120000"));
+    const second = await createRunWorktree(repo, await freeRunId(repo, "FR-X-01-20261024T120000"));
 
     expect(new Set([first.branch, second.branch]).size).toBe(2);
     expect(new Set([first.dir, second.dir]).size).toBe(2);
     expect(new Set([first.checkpoints, second.checkpoints]).size).toBe(2);
+  });
+});
+
+describe("one run", () => {
+  test("names its log, its worktree, its branch and its checkpoints with the one id it chose", async () => {
+    const repo = await tempRepo({ "a.txt": "a\n" });
+    const id = await freeRunId(repo, "FR-X-01-20261024T120000");
+
+    // The run starts its log, and records its first stage, before its worktree (FR-CLI-05).
+    const log = await startRunLog(repo, id);
+    await log.record({ event: "stage", stage: "agent" });
+    const worktree = await createRunWorktree(repo, id);
+
+    expect(basename(log.path)).toBe(`${id}.jsonl`);
+    expect({ id: worktree.id, branch: worktree.branch, checkpoints: worktree.checkpoints }).toEqual({ id, branch: `oid/${id}`, checkpoints: `refs/oid/checkpoints/${id}` });
   });
 });
 
