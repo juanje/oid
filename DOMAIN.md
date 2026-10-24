@@ -36,7 +36,7 @@ Each term has one meaning. The last column names what it must not be confused wi
 | **Intervention** | Any input from the person during or after a run that changes its course or output. Counted by kind: contract, stuck, other. | — |
 | **Finding / item** | A finding is one result of a detector: category, location, detail. An item is a group of findings fixed and checkpointed together. | — |
 | **Wiring** | Code that connects parts that already exist. It is the missing piece when every unit test of a scenario is green and the scenario is still red. It is legal once the scenario has at least one unit test. | — |
-| **Executor** | What runs an attempt's agent: Pi, or the scripted executor that returns prepared diffs and reports for oid's own tests. | A fake Pi SDK. Tests replace the executor, not Pi. |
+| **Executor** | What runs an attempt's agent: Pi, or the scripted executor that returns prepared diffs and reports for oid's own tests. | A fake Pi SDK. Tests replace the executor, or Pi's model with the faux provider; never Pi. |
 | **D-NN** | A decision in `DECISIONS.md`. | — |
 
 ### Reading `~/git/outside-in-dev`
@@ -144,6 +144,8 @@ Observed on 1.1.0; the 1.4.0 code was compared and is the same unless a line say
 - **`tool_execution_end` carries no `args`.** Pair it with `tool_execution_start` by `toolCallId`.
 - **Pi reads two settings files:** `<agentDir>/settings.json`, and `<cwd>/.pi/settings.json` of the project, which is trusted by default. An explicit `agentDir` does not stop the second. Give sessions `SettingsManager.inMemory(...)` so they read neither *(source)*.
 - **Run oid's sessions with `PI_OFFLINE=1` and `PI_TELEMETRY=0`.** Without them, `grep` and `find` download `rg` and `fd` from GitHub when they are missing, and requests to some providers (OpenRouter, NVIDIA, OpenCode) carry attribution headers *(source)*.
+- **With `PI_OFFLINE=1`, `rg` and `fd` must already be installed.** Pi looks for them in `<agent dir>/bin` first (`$PI_CODING_AGENT_DIR`, else `~/.pi/agent`; a session's `agentDir` option does not change it), then on the `PATH` (`fd` or `fdfind`, and `rg`). When one is missing, `find` or `grep` fails with "fd is not available and could not be downloaded" or its ripgrep equivalent *(source, 1.4.0)*.
+- **Pi's faux provider drives a real Pi session on scripted model replies.** `fauxProvider()` in `pi-ai` returns a `Provider`; register it on the session's `ModelRuntime` with `registerNativeProvider`. Its replies are `fauxAssistantMessage(...)`, with `fauxToolCall` and `fauxText`, or a function that gets each request's context (system prompt, messages, tools) *(source, 1.4.0)*.
 - **`SessionManager.create(cwd, dir)` writes the transcript only from the first message.** It creates the directory itself.
 - **Usage** is on each assistant `message_end`: `message.usage.totalTokens` and `message.usage.cost.total`.
 - **A failed `grep` returns ripgrep's stderr as an error result** (`find` uses `fd`). A filter that withholds lines it cannot attribute to a file must let error results through.
@@ -220,7 +222,7 @@ With `--reporter=json --outputFile=<file>`:
 
 ## Testing oid itself
 
-- **Scenarios and unit tests drive attempts with the scripted executor.** Each attempt is given a prepared diff and report. Real Pi runs only in one smoke scenario and in real runs.
+- **Scenarios and unit tests drive attempts with the scripted executor.** Each attempt is given a prepared diff and report. The Pi executor's own scenarios (FR-AGENT-01) run real Pi on the faux provider. A real model runs only in the `@smoke` scenario, which is outside the gate and run by hand, and in real runs.
 
 - **Scenarios assert milestones.** Never where a run ends, or a message word for word.
 - **A recorded runner reply checks the request it answers,** not only its position in the call order.

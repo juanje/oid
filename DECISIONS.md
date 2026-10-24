@@ -67,7 +67,7 @@ The decisions in force, with their reasons and the options they rule out. Read t
 
 ## D-05: No shell; read everything except secrets and noise; the gate's configuration is unwritable
 
-**Decision.** Agents have read, edit and write tools, plus `try` and `report`; they have no shell. They read the whole repository except secrets and noise (`.git`, oid's state). No agent writes:
+**Decision.** Agents have read, ls, find, grep, edit and write tools, plus `try` and `report`; they have no shell. They read the whole repository except secrets and noise (`.git`, oid's state); ls, find and grep only read, under the same limits as read. No agent writes:
 - feature files or `SPEC.md`;
 - the gate's configuration: runner configs, `tsconfig`, lint and format configs, `package.json`, lockfiles;
 - oid's state.
