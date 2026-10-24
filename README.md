@@ -21,19 +21,21 @@ oid runs its agents with [Pi](https://github.com/earendil-works/pi). Pi must alr
 
 ## Run
 
-In the project, commit a `.oid.json` that names the model the agents run on, as Pi lists it (`pi --list-models`):
+Name the model the agents run on, as Pi lists it (`pi --list-models`), in your own config, `~/.config/oid/config.json` (or `$XDG_CONFIG_HOME/oid/config.json`, or `$OID_CONFIG_DIR/config.json`):
 
 ```json
 { "model": "<provider>/<model>" }
 ```
 
-It may also set `limits` (`retries`, `turns`) and the `paths` of the project's domain and conventions. Then, with the FR's feature files approved and committed:
+The model is yours, not the project's: a project's `.oid.json` that names one is an error.
+
+The project may commit a `.oid.json` with its `limits` (`retries`, `turns`) and the `paths` of its domain and conventions. oid reads it from the commit the run starts from, never from your uncommitted changes, and says so when you have some. Then, with the FR's feature files approved and committed:
 
 ```bash
 oid run FR-AREA-01
 ```
 
-The run works in its own worktree, beside the repository, and never touches your copy. It ends with a summary: what it built, where it stopped, its attempts, tokens and cost. Then:
+The run works in its own worktree, beside the repository, and never touches your copy. As it goes, it prints a line as each stage starts (preparing the agent, the worktree, listing the scenarios, the unit tests as they are, the gate, the commit) and as each attempt starts and ends, with its verdict and its Reds. It ends with a summary: what it built, where it stopped, its attempts, tokens and cost. Then:
 
 - **the branch** `oid/<FR>-<time>` holds one commit with the FR, when it was built;
 - **the run's log** is in `.git/oid/runs/<run id>.jsonl`, and **each attempt's transcript** in `.git/oid/runs/<run id>/`;
