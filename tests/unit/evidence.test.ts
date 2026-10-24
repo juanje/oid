@@ -63,13 +63,26 @@ describe("judgeCode", () => {
   });
 });
 
+const NONE_KNOWN = new Set<string>();
+
 describe("judgeNewTests", () => {
+  test("judges only the tests that were not there before the attempt, in files that also hold older ones", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const files = ["tests/greet.test.ts", "tests/greet-all.test.ts"];
+    // In the recording, tests/greet.test.ts passes and tests/greet-all.test.ts fails on an assertion.
+    const run = recordedVitest(dir, files, recorded("vitest-greet-02-assert.json"));
+
+    const judgment = await judgeNewTests(dir, files, run, nothingExists, new Set(["tests/greet.test.ts > greets a person by name"]));
+
+    expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: business_assertion"] });
+  });
+
   test("refuses new tests that pass before their code, naming them", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     // In the recording, tests/greet.test.ts passes: here it stands for a new test that passes without its code.
     const run = recordedVitest(dir, ["tests/greet.test.ts"], recorded("vitest-greet-02-load.json"));
 
-    const { refusal } = await judgeNewTests(dir, ["tests/greet.test.ts"], run, nothingExists);
+    const { refusal } = await judgeNewTests(dir, ["tests/greet.test.ts"], run, nothingExists, NONE_KNOWN);
 
     expect(refusal?.evidence).toContain("tests/greet.test.ts > greets a person by name");
   });
@@ -78,7 +91,7 @@ describe("judgeNewTests", () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     const run = recordedVitest(dir, ["tests/greet-all.test.ts"], recorded("vitest-greet-02-assert.json"));
 
-    const judgment = await judgeNewTests(dir, ["tests/greet-all.test.ts"], run, nothingExists);
+    const judgment = await judgeNewTests(dir, ["tests/greet-all.test.ts"], run, nothingExists, NONE_KNOWN);
 
     expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: business_assertion"] });
   });
@@ -88,7 +101,7 @@ describe("judgeNewTests", () => {
     // The recording covers other files only: vitest did not collect this one.
     const run = recordedVitest(dir, ["tests/greet-with.ts"], recorded("vitest-greet-02-load.json"));
 
-    const { refusal } = await judgeNewTests(dir, ["tests/greet-with.ts"], run, nothingExists);
+    const { refusal } = await judgeNewTests(dir, ["tests/greet-with.ts"], run, nothingExists, NONE_KNOWN);
 
     expect(refusal?.failed).toContain("not_run");
     expect(refusal?.evidence).toContain("tests/greet-with.ts");
@@ -97,8 +110,8 @@ describe("judgeNewTests", () => {
   test("refuses new tests that did not run, never reading an earlier report", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     const files = ["tests/greet-all.test.ts"];
-    await judgeNewTests(dir, files, recordedVitest(dir, files, recorded("vitest-greet-02-assert.json")), nothingExists);
+    await judgeNewTests(dir, files, recordedVitest(dir, files, recorded("vitest-greet-02-assert.json")), nothingExists, NONE_KNOWN);
 
-    expect((await judgeNewTests(dir, files, recordedVitest(dir, files, undefined), nothingExists)).refusal).toBeDefined();
+    expect((await judgeNewTests(dir, files, recordedVitest(dir, files, undefined), nothingExists, NONE_KNOWN)).refusal).toBeDefined();
   });
 });
