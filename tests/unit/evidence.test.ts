@@ -52,6 +52,14 @@ describe("judgeCode", () => {
     expect(refusal?.evidence).toContain("tests/greet-all.test.ts > greets two people together");
   });
 
+  test("gives each failing test's message as the evidence, so that a retry sees why it fails", () => {
+    const failing = { test: "tests/greet.test.ts > greets a person by name", message: "AssertionError: expected 'Hi, Ada!' to be 'Hello, Ada!'" };
+
+    const refusal = judgeCode({ ran: true, passed: [], failed: [failing.test], failures: [failing], output: "" }, []);
+
+    expect(refusal?.evidence).toContain(`${failing.test}: ${failing.message}`);
+  });
+
   test("refuses code that turns a green scenario red, naming the scenario", () => {
     const refusal = judgeCode(unit([]), [{ ...GREEN, status: "failed" }]);
 
