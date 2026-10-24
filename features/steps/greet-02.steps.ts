@@ -35,3 +35,16 @@ Given("the scripted steps attempt for the first scenario writes step definitions
 Then("the output names the scenario that passed without its code", function (this: RunWorld) {
   assert.ok(this.output.includes(FIRST), `The output does not name "${FIRST}":\n${this.output}`);
 });
+
+Given("the first scenario of FR-GREET-02 still fails after its first test and code attempts", function (this: RunWorld) {
+  // The first round builds a helper only; the second builds what the scenario calls.
+  const twoRounds = attempts(
+    FIRST,
+    ["steps", "s1-steps"],
+    ["test", "s1-test-names"],
+    ["code", "s1-code-names"],
+    ["test", "s1-test"],
+    ["code", "s1-code-uses-names"],
+  );
+  this.script = [...twoRounds, ...BUILD_SECOND];
+});
