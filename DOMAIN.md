@@ -101,6 +101,12 @@ Feature: Shorten a URL
 
 One file per FR, with the tag on `Feature`. Scenarios describe observable behaviour: no internal function names, and no file layouts the user does not see.
 
+### What a task reads from the project
+
+- **Domain:** `DOMAIN.md`, else the `## Domain` section of `SPEC.md`, else the file `paths.domain` names in `.oid.json`. Optional.
+- **Conventions:** `CONVENTIONS.md`, else the `## Conventions` section of `SPEC.md`, else the file `paths.conventions` names. Optional.
+- **Never `AGENTS.md` or `CLAUDE.md`.** They hold process instructions for other agents (how to commit, when to stop, which tools to use), which contradict oid's procedure.
+
 ### Refusal
 
 ```json

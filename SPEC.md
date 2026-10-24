@@ -124,7 +124,13 @@ The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with t
 **Skeleton.** Each kind of agent has its own system prompt, in two layers (D-09). The first is its identity: what it is, does and is not, with a few traits stated as values with their why. Its limits are generated from its write boundary and tools, so the text and the enforcement cannot differ. The second is its procedure: Step 0 (the input), numbered steps with the reason for any non-obvious order, the success criterion in plain words, negative constraints at the step they apply to, and a short checklist. The task holds only the inputs of one attempt (FR-AGENT-03). Facts every agent needs (what oid is, the goal of the whole system, what oid checks) come from one source. *Why:* each agent has its own objective, focus and limits; values carry to cases a rule does not foresee.
 
 #### FR-AGENT-03: What each agent sees
-**Skeleton.** The task gives the FR's what and why, the scenario, and the failure or refusal that led to this attempt. It also gives the relevant step definitions, tests and source chosen by relevance, the project's domain (`DOMAIN.md` when the project has one, or the Domain section of its spec; the path is configurable and optional), and the project's conventions with their reasons. *Why:* focus of attention decides which part of the solution space the agent explores; the refusal is the most useful part of it.
+**Skeleton.** The task gives the FR's what and why, the scenario with its steps, and the failure or refusal that led to this attempt, with the step definition the failure points to; after the gate, its focus: the broken scenarios, of whichever FR, with their steps and failures. It also gives:
+- the relevant code, chosen by imports: the step definitions the scenario uses, the source modules they import, and the unit tests that import those modules, within 40,000 characters, naming what was cut;
+- to a steps attempt, the patterns of the step definitions the project already has, so that it reuses them instead of writing duplicates that cucumber-js reports as ambiguous;
+- the project's domain: `DOMAIN.md`, the Domain section of `SPEC.md`, or the file `paths.domain` names in `.oid.json`; optional;
+- the project's conventions with their reasons: `CONVENTIONS.md`, the Conventions section of `SPEC.md`, or the file `paths.conventions` names; optional.
+
+Never the project's `AGENTS.md` or `CLAUDE.md`: they hold process instructions for other agents, which would contradict oid's procedure. *Why:* focus of attention decides which part of the solution space the agent explores; the refusal is the most useful part of it.
 
 #### FR-AGENT-04: Write boundaries, checked on the diff
 **Skeleton.** Each attempt kind may write only its own paths:
