@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { judgeCode, judgeSteps } from "../../src/evidence.ts";
+import { judgeCode, judgeNewTests, judgeSteps } from "../../src/evidence.ts";
+import { recorded, recordedVitest } from "./support/recorded.ts";
+import { tempRepo } from "./support/repo.ts";
 
 const SCENARIO = { uri: "features/greet-02.feature", line: 4, name: "Two people are greeted together" };
 
@@ -43,5 +45,29 @@ describe("judgeCode", () => {
 
   test("refuses code when the unit suite did not run", () => {
     expect(judgeCode({ ran: false, passed: [], failed: [], output: "Error: Cannot find vitest" }, [])?.evidence).toContain("Cannot find vitest");
+  });
+});
+
+describe("judgeNewTests", () => {
+  test("refuses new tests that pass before their code, naming them", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    // In the recording, tests/greet.test.ts passes: here it stands for a new test that passes without its code.
+    const run = recordedVitest(dir, ["tests/greet.test.ts"], recorded("vitest-greet-02-load.json"));
+
+    expect((await judgeNewTests(dir, ["tests/greet.test.ts"], run))?.evidence).toContain("tests/greet.test.ts > greets a person by name");
+  });
+
+  test("accepts new tests that all fail, whatever other files of the report did", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const run = recordedVitest(dir, ["tests/greet-all.test.ts"], recorded("vitest-greet-02-assert.json"));
+
+    expect(await judgeNewTests(dir, ["tests/greet-all.test.ts"], run)).toBeUndefined();
+  });
+
+  test("refuses new tests that did not run, never reading an earlier report", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    await judgeNewTests(dir, ["tests/greet-all.test.ts"], recordedVitest(dir, ["tests/greet-all.test.ts"], recorded("vitest-greet-02-assert.json")));
+
+    expect(await judgeNewTests(dir, ["tests/greet-all.test.ts"], recordedVitest(dir, ["tests/greet-all.test.ts"], undefined))).toBeDefined();
   });
 });
