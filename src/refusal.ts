@@ -1,4 +1,5 @@
 import type { Scenario, StepFailure } from "./cucumber-messages.ts";
+import type { AttemptKind } from "./executor.ts";
 
 /** A scenario the gate found failing, with its steps and where it fails, when the gate has them. */
 export interface FocusScenario extends Scenario {
@@ -16,6 +17,8 @@ export interface Refusal {
    * tests the gate found failing (FR-GATE-04). The task puts them in focus (FR-AGENT-03).
    */
   focus?: { scenarios: FocusScenario[]; tests: string[] };
+  /** The kind of attempt that can act on it, when it is not the kind refused: a test file the code cannot fix goes to a test attempt. */
+  sendTo?: AttemptKind;
 }
 
 export function formatRefusal(refusal: Refusal): string {

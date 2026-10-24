@@ -154,9 +154,10 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
 async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
   const { out, known, retries } = run;
   const worktreeDir = run.worktree.dir;
-  // An attempt and the judgment of its kind, retried from the work accepted before it while refused (FR-RUN-07).
-  const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) =>
-    withRetries(retries, async (previous) => {
+  // One attempt and the judgment of its kind, from the work accepted before it.
+  const once =
+    (kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) =>
+    async (previous: Refusal | undefined): Promise<Tried> => {
       const accepted = await acceptedWork(worktreeDir);
       const attempt = await attemptFor(run, kind, scenario, previous);
       const judgment = attempt.refusal === undefined ? await judge(attempt.files) : { refusal: attempt.refusal, reds: [] };
@@ -164,7 +165,9 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
       await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, reds: judgment.reds }));
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
       return { refusal, rollback: accepted.restore };
-    });
+    };
+  // Retried while refused, up to the run's retries (FR-RUN-07).
+  const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) => withRetries(retries, once(kind, judge));
   const runScenario = async (): Promise<ScenarioRun> => {
     const result = (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
     run.latest.set(locationOf(scenario), result);
@@ -184,13 +187,20 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
     return accept(judgeSteps(result, (name) => exists(name, stepFile ?? "")));
   });
   if (stepsRefusal !== undefined) return stepsRefusal;
+  const testOnce = once("test", async (files) => {
+    const testFiles = files.filter(isTestFile);
+    return accept(await judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known));
+  });
+  // A code attempt's retry; a refusal the code cannot act on goes back to a test attempt first, and the pair counts as
+  // one retry (FR-RUN-03). A refused test attempt there sends the next retry to a test attempt again.
+  const codeRetry = async (previous: Refusal | undefined): Promise<Tried> => {
+    if (previous?.sendTo !== "test") return codeAttempt(run, scenario, previous);
+    const test = await testOnce(previous);
+    if (test.refusal !== undefined) return { ...test, refusal: { ...test.refusal, sendTo: "test" } };
+    return codeAttempt(run, scenario, undefined);
+  };
   return innerLoop(
-    async () =>
-      (await judged("test", async (files) => {
-        const testFiles = files.filter(isTestFile);
-        return accept(await judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known));
-      })) ??
-      (await withRetries(retries, (previous) => codeAttempt(run, scenario, previous))),
+    async () => (await withRetries(retries, testOnce)) ?? (await withRetries(retries, codeRetry)),
     async () => (await runScenario()).status === "passed",
   );
 }
