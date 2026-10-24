@@ -191,6 +191,7 @@ Observed on 1.1.0; the 1.4.0 code was compared and is the same unless a line say
 - **Select a scenario by location:** `features/x.feature:12`.
 - **In a Cucumber expression, `/` separates alternatives.** Escape a literal slash: `"a .pi\\/settings.json"` in a TypeScript string.
 - **TypeScript steps need `NODE_OPTIONS="--import tsx"`.**
+- **Under `NODE_V8_COVERAGE`, a cucumber-js run under tsx writes its scripts' coverage with their source maps** (`source-map-cache`, with `lineLengths` in place of the executed source). `v8-to-istanbul` converts it to the TypeScript, as c8 does (checked on 13.3.0 with tsx 4.23.15); tsx adds a synthetic `__name` function, which is not in the source.
 - **A regex step pattern inside a TypeScript string loses its backslashes unless they are doubled.** Use Cucumber expressions or regex literals.
 
 ### vitest
@@ -211,6 +212,7 @@ With `--reporter=json --outputFile=<file>`:
 - **Pass the test name as one argument: `--testNamePattern=<escaped name>`.** As two arguments, a name that starts with `-` is read as an option.
 - **`passWithNoTests` makes a run where nothing ran pass.** Check that the test asked for ran.
 - **`--exclude` on the command line is added to the configured excludes.** Use it to keep oid's own files out of a project's run.
+- **Coverage of the unit tests needs vitest's provider, `@vitest/coverage-v8` at vitest's version** (checked on 3.2.7). Node's own coverage (`NODE_V8_COVERAGE`) does not give it: with the `forks` pool, the default, the workers end without writing it; with `threads` or `vmThreads` it is there, without a source map, because vite-node transforms the code in memory.
 - **On macOS the JSON report gives real paths** (`/private/var/…` for `/var/…`). Resolve both sides with `realpath` before you compute relative paths.
 
 ### git
@@ -221,6 +223,12 @@ With `--reporter=json --outputFile=<file>`:
 - **`info/exclude` is shared by every worktree of a repository.** Writing to it changes the person's `git status`. Keep a symlinked `node_modules` out of oid's own git commands with a pathspec (`':(exclude)node_modules'`), and touch neither `info/exclude` nor `.gitignore`.
 - **`git add` exits 1 when a pathspec names a path `.gitignore` ignores,** even an exclude pathspec, and it still stages the rest. List the changes with the exclude pathspec (`diff --name-only`, `ls-files --others`), then `git add` exactly those files.
 - **A test fixture's git inherits the global config and hooks.** Isolate it.
+
+### V8 coverage
+
+- **V8 lists only the ranges that ran a different number of times than the range around them.** A side of a branch a run took is not listed at all: its count is the enclosing range's. To join two reports, a range one leaves untaken is taken when, in the other, the smallest range around it ran (FR-GATE-02).
+- **Mapped through a source map, a range starts at the token before it** (a ternary's side starts at the token before it). Both vitest's provider and `v8-to-istanbul` over tsx's maps shift it the same way, so one range left untaken by both reports comes out at the same place in both.
+- **A function no run calls is one range**, its branches inside it unlisted: say it as the function.
 
 ### Node child processes
 

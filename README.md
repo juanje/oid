@@ -17,6 +17,8 @@ npm link
 
 `npm link` puts the `oid` command on your `PATH`. Building oid as a JavaScript package comes later.
 
+A project oid runs on needs vitest's coverage provider, `@vitest/coverage-v8`, at its vitest's version: the gate refuses a branch the FR added that no test runs.
+
 oid runs its agents with [Pi](https://github.com/earendil-works/pi). Pi must already have credentials for the provider you use, and its `rg` and `fd` binaries, in `~/.pi/agent/bin` or on your `PATH`: oid runs Pi offline, so Pi will not download them.
 
 ## Run
