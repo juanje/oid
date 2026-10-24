@@ -4,7 +4,7 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import { GREET_01_SCENARIO, attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, testNames } from "../support/fixture.ts";
-import { assertOutputNames, attemptOf, runBranch } from "../support/run.ts";
+import { assertOutputNames, attemptOf, runBranch, runOid } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -44,22 +44,8 @@ When("I run {string}", async function (this: RunWorld, command: string) {
   assert.equal(program, "oid");
   this.startHead = git(this.projectDir, "rev-parse", "HEAD");
   this.branchesBefore = branches(this.projectDir);
-  // A dynamic import, so that a missing CLI fails this step and not the whole load.
-  const { runCli } = await import("../../src/cli.ts");
   this.executor = new ScriptedExecutor(this.projectDir, this.script);
-  const write = (text: string): void => {
-    this.output += text;
-  };
-  try {
-    this.exitCode = await runCli(args, {
-      cwd: this.projectDir,
-      executor: this.executor,
-      stdout: write,
-      stderr: write,
-    });
-  } catch (error) {
-    this.crash = error;
-  }
+  Object.assign(this, await runOid(this.projectDir, args, this.executor));
 });
 
 Then("the run succeeds", function (this: RunWorld) {

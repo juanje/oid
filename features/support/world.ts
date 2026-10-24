@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { After, BeforeAll, World, setWorldConstructor } from "@cucumber/cucumber";
+import type { OidRun } from "./run.ts";
 import type { PreparedAttempt, ScriptedExecutor } from "./scripted-executor.ts";
 
 export class RunWorld extends World {
@@ -13,6 +14,8 @@ export class RunWorld extends World {
   exitCode: number | undefined;
   crash: unknown;
   workingCopyBefore: Record<string, string> = {};
+  /** Each run, when a scenario runs oid more than once. */
+  runs: OidRun[] = [];
 }
 
 setWorldConstructor(RunWorld);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { branches } from "./fixture.ts";
+import type { Executor } from "../../src/executor.ts";
 import type { PreparedAttempt, Request } from "./scripted-executor.ts";
 import type { RunWorld } from "./world.ts";
 
@@ -28,4 +29,26 @@ export function requestsOf(world: RunWorld, kind: PreparedAttempt["kind"], count
   const requests = world.executor?.requests.filter((request) => request.kind === kind) ?? [];
   assert.equal(requests.length, count, `Expected ${count} ${kind} attempts, got ${requests.length}`);
   return requests;
+}
+
+export interface OidRun {
+  exitCode: number | undefined;
+  output: string;
+  crash: unknown;
+}
+
+/** Runs oid's command line in-process on `projectDir` with `executor`, as the person would run `oid <args>`. */
+export async function runOid(projectDir: string, args: string[], executor: Executor): Promise<OidRun> {
+  // A dynamic import, so that a missing CLI fails the step and not the whole load.
+  const { runCli } = await import("../../src/cli.ts");
+  const result: OidRun = { exitCode: undefined, output: "", crash: undefined };
+  const write = (text: string): void => {
+    result.output += text;
+  };
+  try {
+    result.exitCode = await runCli(args, { cwd: projectDir, executor, stdout: write, stderr: write });
+  } catch (error) {
+    result.crash = error;
+  }
+  return result;
 }
