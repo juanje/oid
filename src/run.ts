@@ -15,7 +15,7 @@ import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
-import { frText as specFrText } from "./project-texts.ts";
+import { projectTexts, frText as specFrText } from "./project-texts.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
@@ -52,6 +52,8 @@ interface FrRun {
   record: (event: LogEvent) => Promise<void>;
   /** The FR's text from the spec, for every task (FR-AGENT-03). */
   frText: string | undefined;
+  /** The project's domain and conventions, for every task. */
+  texts: { domain?: string; conventions?: string };
   /** Each scenario's steps, by `<uri>:<line>`. */
   steps: Map<string, string[]>;
   /** Each scenario's latest run, by `<uri>:<line>`: where it fails now. */
@@ -115,7 +117,8 @@ async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree,
   const { retries, turns } = await readLimits(worktree.dir);
   const frText = existsSync(join(worktree.dir, "SPEC.md")) ? specFrText(await readFile(join(worktree.dir, "SPEC.md"), "utf8"), fr) : undefined;
   const { scenarios, steps } = await frScenarios(worktree.dir, fr, runCommand);
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, frText, steps, latest: new Map() };
+  const texts = await projectTexts(worktree.dir);
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, frText, texts, steps, latest: new Map() };
   await record({ event: "start", fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
@@ -213,6 +216,7 @@ async function contextFor(run: FrRun, kind: AttemptKind, scenario: Scenario): Pr
   const stepFiles = latest?.stepFiles ?? [];
   return {
     ...(run.frText === undefined ? {} : { fr: run.frText }),
+    ...run.texts,
     steps: run.steps.get(locationOf(scenario)) ?? [],
     ...(failure === undefined ? {} : { failure: await failureContext(run.worktree.dir, failure) }),
     ...(stepFiles.length === 0 ? {} : { code: await relevantCode(run.worktree.dir, stepFiles, CODE_BUDGET) }),

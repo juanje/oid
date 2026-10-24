@@ -30,6 +30,9 @@ export interface TaskContext {
   code?: { files: { path: string; content: string }[]; cut: string[] };
   /** For a steps attempt, the patterns of the step definitions the project has, as `<file>: <pattern>`. */
   patterns?: string[];
+  /** The project's domain and its conventions, when it keeps them. */
+  domain?: string;
+  conventions?: string;
 }
 
 /** What the executor reports of an attempt: its agent's turns, which the executor counts, never the model. */

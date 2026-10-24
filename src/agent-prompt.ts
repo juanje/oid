@@ -105,6 +105,8 @@ function failureText({ step, message, definition }: NonNullable<TaskContext["fai
 export function taskFor({ kind, fr, scenario, refusal, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "context">): string {
   const parts = [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
   if (context?.fr !== undefined) parts.push(`The FR, from the spec:\n${context.fr}`);
+  if (context?.domain !== undefined) parts.push(`The project's domain:\n${context.domain}`);
+  if (context?.conventions !== undefined) parts.push(`The project's conventions:\n${context.conventions}`);
   if (context !== undefined && context.steps.length > 0) parts.push(`The scenario's steps:\n${context.steps.join("\n")}`);
   if (context?.failure !== undefined) parts.push(failureText(context.failure));
   if (context?.code !== undefined) parts.push(codeText(context.code));
