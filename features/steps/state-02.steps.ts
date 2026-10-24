@@ -15,7 +15,7 @@ async function measuresOf(world: RunWorld): Promise<Measures> {
 }
 
 /** What the executor reports for each prepared attempt, in order: distinct, so that each is told apart. */
-const usageOf = (index: number): Usage => ({ model: `model-${index}`, tokens: 100 * (index + 1), cost: 0.01 * (index + 1), deniedToolCalls: index });
+const usageOf = (index: number): Usage => ({ model: `model-${index}`, tokens: 100 * (index + 1), cacheRead: 40 * index, cost: 0.01 * (index + 1), deniedToolCalls: index });
 
 Given("the scripted code attempt is refused, and its retry fails the same way", function (this: RunWorld) {
   this.script = this.script.flatMap((attempt) =>
@@ -23,7 +23,7 @@ Given("the scripted code attempt is refused, and its retry fails the same way", 
   );
 });
 
-Given("the scripted executor reports a model, tokens, cost, turns and denied tool calls for each attempt", function (this: RunWorld) {
+Given("the scripted executor reports a model, tokens, tokens read from the cache, cost, turns and denied tool calls for each attempt", function (this: RunWorld) {
   this.script = this.script.map((attempt, index) => ({ ...attempt, turns: index + 1, usage: usageOf(index) }));
 });
 
@@ -60,16 +60,17 @@ Then("the run's log gives each attempt what the executor reported for it", async
   const attempts = attemptsIn(await runLog(this));
   assert.equal(attempts.length, this.script.length);
   for (const [index, entry] of attempts.entries()) {
-    const { model, tokens, cost, deniedToolCalls } = entry;
-    assert.deepEqual({ model, tokens, cost, deniedToolCalls, turns: entry.turns }, { ...usageOf(index), turns: index + 1 });
+    const { model, tokens, cacheRead, cost, deniedToolCalls } = entry;
+    assert.deepEqual({ model, tokens, cacheRead, cost, deniedToolCalls, turns: entry.turns }, { ...usageOf(index), turns: index + 1 });
   }
 });
 
-Then("the run's log totals the tokens, the cost and the denied tool calls of every attempt", async function (this: RunWorld) {
+Then("the run's log totals the tokens, the tokens read from the cache, the cost and the denied tool calls of every attempt", async function (this: RunWorld) {
   const measures = await measuresOf(this);
   const reported = this.script.map((_, index) => usageOf(index));
-  const sum = (part: "tokens" | "cost" | "deniedToolCalls") => reported.reduce((total, usage) => total + usage[part], 0);
+  const sum = (part: "tokens" | "cacheRead" | "cost" | "deniedToolCalls") => reported.reduce((total, usage) => total + usage[part], 0);
   assert.equal(measures.tokens, sum("tokens"));
+  assert.equal(measures.cacheRead, sum("cacheRead"), "The run's log does not total the tokens read from the cache");
   assert.ok(Math.abs(measures.cost - sum("cost")) < 1e-9, `The total cost is ${measures.cost}, not ${sum("cost")}`);
   assert.equal(measures.deniedToolCalls, sum("deniedToolCalls"));
 });

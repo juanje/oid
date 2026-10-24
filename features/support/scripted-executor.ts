@@ -21,6 +21,8 @@ export interface PreparedAttempt {
 export interface Usage {
   model: string;
   tokens: number;
+  /** Of the tokens, those read from the provider's cache. */
+  cacheRead: number;
   cost: number;
   deniedToolCalls: number;
 }
