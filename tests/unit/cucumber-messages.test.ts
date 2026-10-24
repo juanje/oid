@@ -60,6 +60,13 @@ describe("scenarioResults", () => {
     });
   });
 
+  test("gives the files that define the scenario's steps", () => {
+    // Recorded with FR-GREET-03: its steps are defined in greet-with.steps.ts.
+    const [result] = scenarioResults(recorded("cucumber-greet-03-when-fails.ndjson"));
+
+    expect(result?.stepFiles).toEqual(["features/steps/greet-with.steps.ts"]);
+  });
+
   test("leaves out a scenario that never started", () => {
     const picklesOnly = RUN.split("\n").filter((line) => line.startsWith('{"pickle"')).join("\n");
 
