@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir } from "../support/fixture.ts";
 import type { EndEvent, Measures } from "../../src/run-log.ts";
-import { attemptsIn, runLog } from "../support/run.ts";
+import { assertOutputNames, attemptsIn, runLog, scriptedModel } from "../support/run.ts";
 import type { Usage } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -80,4 +82,30 @@ Then("the run's log gives the run's time, measured by oid", async function (this
 Then("the run's log says the run stopped at the turn limit", async function (this: RunWorld) {
   const stop = (await runLog(this)).find((entry) => entry.event === "stop");
   assert.equal(stop?.limit, "turns", "The run's log does not say the run stopped at the turn limit");
+});
+
+/** The directory next to the run's log, which keeps its attempts' transcripts. */
+function transcriptsDir(world: RunWorld): string {
+  const runs = join(world.projectDir, ".git/oid/runs");
+  const logs = readdirSync(runs).filter((name) => name.endsWith(".jsonl"));
+  assert.equal(logs.length, 1, `Expected one run log in ${runs}`);
+  return join(runs, logs[0]!.replace(/\.jsonl$/, ""));
+}
+
+Then("next to the run's log is a directory with one transcript per attempt, each holding that attempt's task", function (this: RunWorld) {
+  const dir = transcriptsDir(this);
+  assert.ok(existsSync(dir), `No directory next to the run's log: ${dir}`);
+  const files = readdirSync(dir).filter((name) => name.endsWith(".jsonl")).sort();
+  const model = scriptedModel(this);
+  assert.equal(files.length, model.attempts.length, `Expected ${model.attempts.length} transcripts in ${dir}, found: ${files.join(", ")}`);
+  for (const [index, file] of files.entries()) {
+    const transcript = readFileSync(join(dir, file), "utf8");
+    const lines = transcript.split("\n").filter((line) => line !== "");
+    assert.ok(lines.every((line) => JSON.parse(line) !== undefined), `${file} is not JSONL`);
+    assert.ok(transcript.includes(JSON.stringify(model.attempts[index]![0]!.task).slice(1, -1)), `${file} does not hold attempt ${index + 1}'s task`);
+  }
+});
+
+Then("the run's summary names that directory", function (this: RunWorld) {
+  assertOutputNames(this, transcriptsDir(this));
 });

@@ -63,7 +63,8 @@ export async function runOid(projectDir: string, args: string[], executor: CliEx
 /** The run's log: the one file in the repository's .git/oid/runs. */
 export async function runLog(world: RunWorld): Promise<LogEvent[]> {
   const dir = join(world.projectDir, ".git/oid/runs");
-  const logs = await readdir(dir).catch(() => []);
+  // The logs, without the directories of transcripts beside them.
+  const logs = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".jsonl"));
   assert.equal(logs.length, 1, `Expected one run log in ${dir}, found ${logs.length}`);
   return (await readFile(join(dir, logs[0]!), "utf8"))
     .split("\n")
