@@ -47,6 +47,25 @@ describe("untaken", () => {
     expect(untaken([unit, scenarios], "/w")).toEqual([{ file: "src/greet.ts", line: 5, column: 0, what: "the function farewell, which no test calls" }]);
   });
 
+  test("takes a branch one report leaves untaken when the other ran the smallest range around it, since V8 lists only ranges that ran a different number of times", () => {
+    // One line, \`name === "Ada" ? "Hello, Ada!" : \`Hello, \${name}!\`\`: the unit test takes the second side, the scenario the first.
+    const range = (line: number, from: number, to: number, endLine = line) => ({ start: { line, column: from }, end: { line: endLine, column: to } });
+    const file = (branches: [ReturnType<typeof range>, number][]) => ({
+      "/w/src/greet.ts": {
+        path: "/w/src/greet.ts",
+        branchMap: Object.fromEntries(branches.map(([loc], id) => [id, { loc, locations: [loc] }])),
+        b: Object.fromEntries(branches.map(([, count], id) => [id, [count]])),
+        fnMap: { 0: { name: "greet", loc: range(1, 7, 1, 4) } },
+        f: { 0: 1 },
+      },
+    });
+    const unit = file([[range(1, 7, 1, 4), 1], [range(3, 18, 42), 0]]);
+    const scenarios = file([[range(1, 7, 1, 4), 1], [range(3, 26, 60), 0]]);
+
+    expect(untaken([unit, scenarios], "/w")).toEqual([]);
+    expect(untaken([unit, file([[range(1, 7, 1, 4), 1], [range(3, 18, 42), 0]])], "/w")).toEqual([{ file: "src/greet.ts", line: 3, column: 18, what: "a branch no test takes" }]);
+  });
+
   test("leaves out the functions a transform adds, which are not in the source", () => {
     expect(untaken([report("/w/src/a.ts", [], [["__name", 1, 0]])], "/w")).toEqual([]);
   });
