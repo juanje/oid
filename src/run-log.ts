@@ -28,6 +28,8 @@ export interface AttemptEvent {
 
 export interface StartEvent {
   event: "start";
+  /** The version of oid that made the run, so that runs can be compared by it; logs before 0.1.0 do not have it. */
+  oid?: string;
   fr: string;
   /** The FR's scenarios, in the order the run builds them. */
   scenarios: Scenario[];

@@ -17,6 +17,7 @@ import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
 import { summarize, transcriptsOf } from "./summary.ts";
+import { oidVersion } from "./version.ts";
 import { type FrTexts, frTexts, taskContext } from "./task-context.ts";
 import { frScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
@@ -114,7 +115,7 @@ async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree,
   const { retries, turns } = await readLimits(worktree.dir);
   const { scenarios, steps } = await frScenarios(worktree.dir, fr, runCommand);
   const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, texts: await frTexts(worktree.dir, fr), steps, latest: new Map(), transcripts, attempts: 0 };
-  await record({ event: "start", fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
+  await record({ event: "start", oid: oidVersion(), fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
   }
