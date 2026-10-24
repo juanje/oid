@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(sed -i *)",
+      "Bash(sed -i'' *)",
+      "Bash(sed -E -i *)",
+      "Bash(sed -n -i *)",
+      "Bash(perl -i *)",
+      "Bash(perl -pi *)",
+      "Bash(perl -0pi *)",
+      "Bash(perl -0777 -pi *)",
+      "Bash(perl -0777 -i *)"
+    ]
+  }
+}
