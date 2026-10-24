@@ -18,6 +18,10 @@ export interface CheckResult {
   failedTests?: string[];
   /** The scenarios that fail, with where they are: what a code attempt after the gate must look at first. */
   failedScenarios?: ScenarioResult[];
+  /** The files the type errors are in, each once: their owners fix them (FR-GATE-04). */
+  failedFiles?: string[];
+  /** How many tests the unit check ran, passing or failing: an attempt the gate sent back must not drop any. */
+  tests?: number;
 }
 
 // How the runners name an option they do not know: tsc's TS5023, and the usual "unknown option" of CLIs.
@@ -58,14 +62,21 @@ function checkResult(name: string, outcome: Outcome, failedOnes: Partial<CheckRe
 async function typesCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
   const { exitCode, output } = await run(projectBin(dir, "tsc"), ["--noEmit"], { cwd: dir });
   const ranNothing = /error TS18003: No inputs were found/.test(output);
-  return checkResult("types", { ran: true, ranNothing, output, failures: exitCode === 0 || ranNothing ? [] : [output.trim()] });
+  const failing = exitCode !== 0 && !ranNothing;
+  return checkResult("types", { ran: true, ranNothing, output, failures: failing ? [output.trim()] : [] }, { failedFiles: typeErrorFiles(output) });
+}
+
+/** The files of tsc's `<file>(<line>,<column>): error TS<code>` lines, each once, in order. */
+function typeErrorFiles(output: string): string[] {
+  return [...new Set([...output.matchAll(/^(\S[^(\n]*)\(\d+,\d+\): error TS\d+/gm)].map((match) => match[1]!))];
 }
 
 async function unitCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
   const unit = await runUnitTests(dir, [], run);
   const failures = (unit.failures ?? []).map((failure) => `${failure.test}: ${failure.message}`);
   const ranNothing = unit.ran && unit.passed.length === 0 && failures.length === 0;
-  return checkResult("unit", { ran: unit.ran, ranNothing, output: unit.output, failures }, { failedTests: (unit.failures ?? []).map((failure) => failure.test) });
+  const result = checkResult("unit", { ran: unit.ran, ranNothing, output: unit.output, failures }, { failedTests: (unit.failures ?? []).map((failure) => failure.test) });
+  return unit.ran ? { ...result, tests: unit.passed.length + failures.length } : result;
 }
 
 async function scenariosCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
