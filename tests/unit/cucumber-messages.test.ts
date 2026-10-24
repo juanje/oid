@@ -31,6 +31,13 @@ describe("scenarioResults", () => {
     expect(result?.failure?.message).toMatch(/^AssertionError \[ERR_ASSERTION\]: Expected values to be strictly equal/);
   });
 
+  test("fails a scenario with an undefined step at that step, even when an earlier step failed", () => {
+    // Recorded with FR-GREET-03: its When fails on missing code, its Then has no step definition.
+    const [result] = scenarioResults(recorded("cucumber-greet-03-undefined-then.ndjson"));
+
+    expect(result?.failure).toEqual({ step: 'the greeting is "Good morning, Ada!"', kind: "Outcome", status: "UNDEFINED", message: "" });
+  });
+
   test("leaves out a scenario that never started", () => {
     const picklesOnly = RUN.split("\n").filter((line) => line.startsWith('{"pickle"')).join("\n");
 
