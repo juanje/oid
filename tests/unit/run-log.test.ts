@@ -28,6 +28,12 @@ describe("measuresOf", () => {
     expect(measuresOf(events, 1500)).toMatchObject({ attempts: { steps: 1, code: 3 }, rejections: { code: 3 }, blindRetries: 1, timeMs: 1500 });
   });
 
+  test("totals the tokens read from the provider's cache, apart from the tokens", () => {
+    const events = [attempt("steps", "accepted", { tokens: 100, cacheRead: 30 }), attempt("test", "accepted", { tokens: 200, cacheRead: 120 }), attempt("code", "accepted")];
+
+    expect(measuresOf(events, 1)).toMatchObject({ tokens: 300, cacheRead: 150 });
+  });
+
   test("totals the tokens, cost and denied tool calls the executor reported", () => {
     const events = [
       attempt("steps", "accepted", { tokens: 100, cost: 0.01, deniedToolCalls: 0 }),

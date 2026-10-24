@@ -92,6 +92,17 @@ describe("piExecutor", () => {
     expect(outcome.error).toBeUndefined();
   });
 
+  test("reports the tokens its agent's requests read from the provider's cache", async () => {
+    // Two requests in one session: faux, like a real provider, reads the second one's prefix from its cache.
+    const model = await scripted({ dir: attemptDir("code"), tries: [{ scenario: true }] });
+
+    const outcome = await executorOn(model).run(codeAttempt().attempt);
+
+    expect(model.attempts[0]).toHaveLength(2);
+    expect(outcome.cacheRead).toBeGreaterThan(0);
+    expect(outcome.cacheRead).toBeLessThan(outcome.tokens!);
+  });
+
   test("gives try's target to oid's try, and its answer back to the model", async () => {
     const model = await scripted({ dir: attemptDir("code"), tries: [{ scenario: true }, { test: "tests/greet.test.ts" }] });
     const refused = { passed: false as const, failed: "The scenario fails", evidence: "expected greeting", next: "Fix greet" };
