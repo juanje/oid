@@ -153,6 +153,7 @@ A change that needs both passes (a rename the tests import) takes three items: t
 - **`progress.json`** (D-08), written only by oid and validated against its schema. It holds the status of each FR and, for each scenario and test, its evidence and whether it is shelved, with the proposal.
 - **The run log.** Append-only. It holds attempts, verdicts, refusals, questions, and the measures of `SPEC.md` FR-STATE-02, computed by oid.
 - **`oid status`** reads both: what is done with its evidence, what is shelved and why, and where the last run stopped.
+- **Exit codes.** 0: the FR was built. 1: the run stopped on a refusal, which an attempt could act on. 2: an error no attempt can fix, such as an unknown option, a runner that does not know an option the project's configuration gives it, or an FR for which cucumber-js finds no scenario.
 
 ## 8. Reusable pieces in `~/git/outside-in-dev`
 
