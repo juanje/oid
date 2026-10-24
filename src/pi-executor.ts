@@ -14,7 +14,7 @@ import type { Attempt, AttemptKind, AttemptOutcome, Executor } from "./executor.
 import { formatRefusal } from "./refusal.ts";
 
 /** Pi's read-only tools, its edit and write, and oid's try and report; no shell (D-05). The list also filters custom tools. */
-export const AGENT_TOOLS = ["read", "ls", "find", "grep", "edit", "write", "try", "report"];
+const AGENT_TOOLS = ["read", "ls", "find", "grep", "edit", "write", "try", "report"];
 
 export interface PiExecutorOptions {
   /** Pi's models and their credentials: Pi reads those itself, oid never does. */
@@ -51,32 +51,39 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
     // Neither the person's nor the project's Pi settings reach the agent; cache warming would send requests of its own.
     settingsManager: SettingsManager.inMemory({ cacheWarming: "off", ...(retry === undefined ? {} : { retry: { enabled: true, ...retry } }) }),
   });
-  const outcome: AttemptOutcome = { turns: 0, stoppedAtLimit: false, model: `${model.provider}/${model.id}`, tokens: 0, cost: 0 };
-  let last: AssistantMessage | undefined;
+  let turns = 0;
+  let stoppedAtLimit = false;
   // The executor counts the turns, never the model, and ends the agent between turns (DOMAIN.md, Pi SDK: chain to
   // the session's own finishTurn). A report ends the attempt: the turn it came in is its last.
   const sessionFinishTurn = session.agent.finishTurn;
   session.agent.finishTurn = async (turn, signal): Promise<AgentTurnDecision | undefined> => {
-    outcome.turns += 1;
+    turns += 1;
     if (reported) return { action: "end" };
-    if (outcome.turns >= attempt.limits.turns && callsTools(turn.message)) {
-      outcome.stoppedAtLimit = true;
+    if (turns >= attempt.limits.turns && callsTools(turn.message)) {
+      stoppedAtLimit = true;
       return { action: "end" };
     }
     return (await sessionFinishTurn?.(turn, signal)) ?? undefined;
   };
+  const responses: AssistantMessage[] = [];
   session.subscribe((event) => {
-    if (event.type !== "message_end" || event.message.role !== "assistant") return;
-    last = event.message;
-    outcome.tokens! += last.usage.totalTokens;
-    outcome.cost! += last.usage.cost.total;
+    if (event.type === "message_end" && event.message.role === "assistant") responses.push(event.message);
   });
   try {
     await session.prompt(taskFor(attempt));
   } finally {
     session.dispose();
   }
+  const sum = (of: (usage: AssistantMessage["usage"]) => number) => responses.reduce((total, response) => total + of(response.usage), 0);
+  const outcome: AttemptOutcome = {
+    turns,
+    stoppedAtLimit,
+    model: `${model.provider}/${model.id}`,
+    tokens: sum((usage) => usage.totalTokens),
+    cost: sum((usage) => usage.cost.total),
+  };
   // A provider error resolves the prompt; Pi has retried it by then.
+  const last = responses.at(-1);
   if (last?.stopReason === "error") outcome.error = last.errorMessage ?? "The provider answered with an error";
   return outcome;
 }
