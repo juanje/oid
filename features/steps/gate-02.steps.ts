@@ -50,3 +50,7 @@ Then("the code attempt after the gate was given the uncovered branch, naming its
 Then("the output names @vitest\\/coverage-v8", function (this: RunWorld) {
   assertOutputNames(this, "@vitest/coverage-v8");
 });
+
+Given("the scripted steps attempt writes a step definition with a branch no run takes", function (this: RunWorld) {
+  this.script = greet01("steps-untaken-branch", "test", "code");
+});
