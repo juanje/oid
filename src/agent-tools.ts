@@ -9,6 +9,12 @@ export const AGENT_TOOLS = [
   { name: "grep", does: "searches the contents of files" },
   { name: "edit", does: "changes part of a file" },
   { name: "write", does: "writes a whole file" },
-  { name: "try", does: "runs one unit test file, or your scenario, then the type check on the files you changed; it records nothing" },
+  { name: "try", does: "runs one unit test file (test: its path) or your scenario (scenario: true), then the type check on the files you changed; it records nothing" },
   { name: "report", does: "ends the attempt with its result in a few words" },
 ] as const;
+
+/** What `name` does, as a sentence: the description Pi gives the model with the tool. */
+export function toolDescription(name: (typeof AGENT_TOOLS)[number]["name"]): string {
+  const does = AGENT_TOOLS.find((tool) => tool.name === name)!.does;
+  return `${does[0]!.toUpperCase()}${does.slice(1)}.`;
+}

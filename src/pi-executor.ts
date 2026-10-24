@@ -10,7 +10,7 @@ import {
   defineTool,
 } from "@earendil-works/pi-coding-agent";
 import { systemPromptFor, taskFor } from "./agent-prompt.ts";
-import { AGENT_TOOLS } from "./agent-tools.ts";
+import { AGENT_TOOLS, toolDescription } from "./agent-tools.ts";
 import type { Attempt, AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
 import { formatRefusal } from "./refusal.ts";
 
@@ -99,8 +99,7 @@ function oidTools(attempt: Attempt, onReport: () => void) {
     defineTool({
       name: "try",
       label: "try",
-      description:
-        "Runs one unit test file (test: its path) or this attempt's scenario (scenario: true), then the type check on the files you changed. It records nothing.",
+      description: toolDescription("try"),
       parameters: Type.Object({ test: Type.Optional(Type.String()), scenario: Type.Optional(Type.Boolean()) }),
       execute: async (_id, { test }) => {
         const result = await attempt.tools.try(test === undefined ? { scenario: true } : { test });
@@ -110,7 +109,7 @@ function oidTools(attempt: Attempt, onReport: () => void) {
     defineTool({
       name: "report",
       label: "report",
-      description: "Ends the attempt with its result in a few words. Call it once, when you are done.",
+      description: toolDescription("report"),
       parameters: Type.Object({ result: Type.String() }),
       execute: async (_id, { result }) => {
         attempt.tools.report(result);
