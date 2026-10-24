@@ -37,6 +37,8 @@ export interface ModelAttempt {
 export interface ModelRequest {
   roles: Message["role"][];
   systemPrompt: string;
+  /** oid's own part of the system prompt: Pi puts a custom prompt in the leading system message's preamble section. */
+  oidPrompt: string;
   task: string;
   tools: string[];
   /** What the tools answered, as the model read it. */
@@ -152,16 +154,19 @@ function withCost<TOptions extends SimpleStreamOptions>(stream: StreamFunction<s
 function requestOf(messages: Message[]): ModelRequest {
   const tools = new Set<string>();
   let systemPrompt = "";
+  let oidPrompt = "";
   for (const message of messages) {
     if (message.role !== "system") continue;
     for (const tool of message.toolsAdded ?? []) tools.add(tool.name);
     for (const tool of message.toolsRemoved ?? []) tools.delete(tool.name);
     systemPrompt ||= [textOf(message.content), ...Object.values(message.sections ?? {})].join("\n");
+    oidPrompt ||= message.sections?.preamble ?? "";
   }
   const user = messages.find((message) => message.role === "user");
   return {
     roles: messages.map((message) => message.role),
     systemPrompt,
+    oidPrompt,
     task: user === undefined ? "" : textOf(user.content),
     tools: [...tools].sort(),
     toolResults: messages.flatMap((message) => (message.role === "toolResult" ? [textOf(message.content)] : [])),
