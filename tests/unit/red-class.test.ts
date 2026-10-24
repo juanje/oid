@@ -27,6 +27,10 @@ describe("classifyFailure", () => {
     expect(classifyFailure("Transform failed with 1 error:", nothingExists)).toBe("test_bug");
   });
 
+  test("a package that is not installed is environment", () => {
+    expect(classifyFailure("Cannot find package 'left-pad' imported from '/work/tests/greet-with.test.ts'", nothingExists)).toBe("environment");
+  });
+
   test("anything it cannot tell is undecided", () => {
     expect(classifyFailure("Error: something unexpected", nothingExists)).toBe("undecided");
   });
