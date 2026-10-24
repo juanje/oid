@@ -1,7 +1,11 @@
+import { rm } from "node:fs/promises";
+import { WRITABLE } from "./boundaries.ts";
 import { type CommandRunner, projectBin } from "./command.ts";
+import { addedLines, scenarioCoverage, uncoveredNew, unitCoverage, untaken } from "./coverage.ts";
 import type { ScenarioResult } from "./cucumber-messages.ts";
 import type { AttemptKind } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
+import { git, reportPath } from "./git.ts";
 import { runAllScenarios } from "./scenarios.ts";
 import { runUnitTests } from "./unit-tests.ts";
 
@@ -33,9 +37,28 @@ function unknownOptionIn(output: string): { unknownOption?: string } {
   return option === undefined ? {} : { unknownOption: option };
 }
 
-/** Runs every check of the gate over the whole project in `dir`, with the project's own runners. */
-export async function runGate(dir: string, run: CommandRunner): Promise<CheckResult[]> {
-  return [await typesCheck(dir, run), await unitCheck(dir, run), await scenariosCheck(dir, run)];
+/**
+ * Runs every check of the gate over the whole project in `dir`, with the project's own runners. Given the commit a run
+ * started from, it also checks the coverage of the branches the run added (FR-GATE-02).
+ */
+export async function runGate(dir: string, run: CommandRunner, since?: { start: string }): Promise<CheckResult[]> {
+  if (since === undefined) return [await typesCheck(dir, run), await unitCheck(dir, run), await scenariosCheck(dir, run)];
+  const unitDir = await reportPath(dir, "oid-coverage-unit");
+  const v8Dir = await reportPath(dir, "oid-coverage-scenarios");
+  await rm(unitDir, { recursive: true, force: true });
+  await rm(v8Dir, { recursive: true, force: true });
+  const checks = [await typesCheck(dir, run), await unitCheck(dir, run, unitDir), await scenariosCheck(dir, run, v8Dir)];
+  return [...checks, await coverageCheck(dir, since.start, unitDir, v8Dir)];
+}
+
+/** The branches the run added since `start` that no test runs, unit test or scenario, joined by place (FR-GATE-02). */
+async function coverageCheck(dir: string, start: string, unitDir: string, v8Dir: string): Promise<CheckResult> {
+  const unit = unitCoverage(unitDir);
+  if (unit === undefined) return checkResult("coverage", { ran: false, ranNothing: false, output: "vitest wrote no coverage report", failures: [] });
+  const added = addedLines(await git(dir, "diff", "-U0", "--no-color", start, "--", ...WRITABLE.code));
+  const left = uncoveredNew(untaken([unit, await scenarioCoverage(v8Dir, dir)], dir), added);
+  const failures = left.map((item) => `${item.file}:${item.line}:${item.column + 1}: ${item.what}`);
+  return checkResult("coverage", { ran: true, ranNothing: false, output: failures.join("\n"), failures });
 }
 
 interface Outcome {
@@ -72,16 +95,16 @@ function typeErrorFiles(output: string): string[] {
   return [...new Set([...output.matchAll(/^(\S[^(\n]*)\(\d+,\d+\): error TS\d+/gm)].map((match) => match[1]!))];
 }
 
-async function unitCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
-  const unit = await runUnitTests(dir, [], run);
+async function unitCheck(dir: string, run: CommandRunner, coverageDir?: string): Promise<CheckResult> {
+  const unit = await runUnitTests(dir, [], run, coverageDir);
   const failures = (unit.failures ?? []).map((failure) => `${failure.test}: ${failure.message}`);
   const ranNothing = unit.ran && unit.passed.length === 0 && failures.length === 0;
   const result = checkResult("unit", { ran: unit.ran, ranNothing, output: unit.output, failures }, { failedTests: (unit.failures ?? []).map((failure) => failure.test) });
   return unit.ran ? { ...result, tests: unit.passed.length + failures.length } : result;
 }
 
-async function scenariosCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
-  const { ran, results, steps, output } = await runAllScenarios(dir, run);
+async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: string): Promise<CheckResult> {
+  const { ran, results, steps, output } = await runAllScenarios(dir, run, v8CoverageDir);
   const failedScenarios = results
     .filter((result) => result.status !== "passed")
     .map((result) => {

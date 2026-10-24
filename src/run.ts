@@ -9,6 +9,7 @@ import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.
 import type { AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
 import { LimitReached } from "./limits.ts";
+import { missingCoverageProvider } from "./coverage.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
 import { innerLoop } from "./inner-loop.ts";
@@ -148,6 +149,8 @@ async function buildFr(
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
   }
+  const noProvider = missingCoverageProvider(worktree.dir);
+  if (noProvider !== undefined) return stop(noProvider, out);
   await record({ event: "stage", stage: "unit tests" });
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
   const { retries, turns } = await readLimits(worktree.dir);
@@ -159,7 +162,7 @@ async function buildFr(
   await record({ event: "stage", stage: "gate" });
   const gate = await gateLoop(
     retries,
-    () => runGate(worktree.dir, runCommand),
+    () => runGate(worktree.dir, runCommand, { start: worktree.start }),
     (kind, refusal) => attemptAfterGate(run, kind, last, refusal),
     (refusal, sendTo) =>
       record({ event: "gate", verdict: refusal === undefined ? "passed" : "refused", ...(refusal === undefined ? {} : { refusal }), ...(sendTo === undefined ? {} : { sendTo }) }),

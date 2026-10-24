@@ -39,8 +39,13 @@ export async function runScenarios(dir: string, scenarios: Scenario[], run: Comm
  * Runs every scenario the project's cucumber-js config finds, as the gate does, with each one's steps by `<uri>:<line>`.
  * `ran` is false when cucumber wrote no report.
  */
-export async function runAllScenarios(dir: string, run: CommandRunner): Promise<{ ran: boolean; results: ScenarioResult[]; steps: Map<string, string[]>; output: string }> {
-  const { report, output } = await cucumber(dir, [], run);
+export async function runAllScenarios(
+  dir: string,
+  run: CommandRunner,
+  v8CoverageDir?: string,
+): Promise<{ ran: boolean; results: ScenarioResult[]; steps: Map<string, string[]>; output: string }> {
+  // With a coverage dir, Node writes the V8 coverage of every process cucumber-js runs there (FR-GATE-02).
+  const { report, output } = await cucumber(dir, [], run, v8CoverageDir === undefined ? {} : { NODE_V8_COVERAGE: v8CoverageDir });
   if (report === undefined) return { ran: false, results: [], steps: new Map(), output };
   return { ran: true, results: scenarioResults(report), steps: scenarioSteps(report), output };
 }
@@ -50,12 +55,12 @@ function location(scenario: Scenario): string {
 }
 
 /** Runs the project's cucumber-js and reads its message report; a load error stops cucumber before it writes one. */
-async function cucumber(dir: string, args: string[], run: CommandRunner): Promise<{ report: string | undefined; output: string }> {
+async function cucumber(dir: string, args: string[], run: CommandRunner, env: Record<string, string> = {}): Promise<{ report: string | undefined; output: string }> {
   const reportFile = await reportPath(dir, "oid-scenarios.ndjson");
   await rm(reportFile, { force: true });
   const { output } = await run(projectBin(dir, RUNNERS.scenarios.bin), [...args, "--format", `message:${reportFile}`], {
     cwd: dir,
-    env: { ...process.env, ...TYPESCRIPT_STEPS_ENV },
+    env: { ...process.env, ...TYPESCRIPT_STEPS_ENV, ...env },
   });
   return { report: existsSync(reportFile) ? await readFile(reportFile, "utf8") : undefined, output };
 }

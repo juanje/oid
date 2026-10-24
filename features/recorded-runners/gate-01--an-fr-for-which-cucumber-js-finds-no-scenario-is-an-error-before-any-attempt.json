@@ -10,6 +10,6 @@
     ],
     "exitCode": 0,
     "output": "\n\n0 scenarios\n0 steps\n0m 0.000s (0m 0.000s executing your code)\n",
-    "report": "{\"meta\":{\"protocolVersion\":\"34.2.1\",\"implementation\":{\"version\":\"13.3.0\",\"name\":\"cucumber-js\"},\"cpu\":{\"name\":\"arm64\"},\"os\":{\"name\":\"darwin\",\"version\":\"24.6.0\"},\"runtime\":{\"name\":\"node.js\",\"version\":\"26.0.0\"}}}\n{\"testRunStarted\":{\"id\":\"01d529f1-0f0f-4809-962e-f58e2e191054\",\"timestamp\":{\"seconds\":1792865793,\"nanos\":663000000}}}\n{\"testRunFinished\":{\"testRunStartedId\":\"01d529f1-0f0f-4809-962e-f58e2e191054\",\"timestamp\":{\"seconds\":1792865793,\"nanos\":663000000},\"success\":true}}\n"
+    "report": "{\"meta\":{\"protocolVersion\":\"34.2.1\",\"implementation\":{\"version\":\"13.3.0\",\"name\":\"cucumber-js\"},\"cpu\":{\"name\":\"arm64\"},\"os\":{\"name\":\"darwin\",\"version\":\"24.6.0\"},\"runtime\":{\"name\":\"node.js\",\"version\":\"26.0.0\"}}}\n{\"testRunStarted\":{\"id\":\"6563c067-11d3-40c6-a2af-33441b84b8e9\",\"timestamp\":{\"seconds\":1792882597,\"nanos\":600000000}}}\n{\"testRunFinished\":{\"testRunStartedId\":\"6563c067-11d3-40c6-a2af-33441b84b8e9\",\"timestamp\":{\"seconds\":1792882597,\"nanos\":600000000},\"success\":true}}\n"
   }
 ]

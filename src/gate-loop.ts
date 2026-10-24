@@ -56,7 +56,8 @@ export async function gateLoop(
 function ownerOfFailures(results: CheckResult[]): AttemptKind | undefined {
   const failed = results.filter((result) => !result.passed);
   const kinds = failed.map((result) => {
-    if (result.name === "unit" || result.name === "scenarios") return ["code" as const];
+    // A branch no test runs is code no test asks for: a code attempt removes it (FR-GATE-02).
+    if (result.name === "unit" || result.name === "scenarios" || result.name === "coverage") return ["code" as const];
     if (result.name === "types" && (result.failedFiles?.length ?? 0) > 0) return result.failedFiles!.map(ownerOf);
     return undefined;
   });
