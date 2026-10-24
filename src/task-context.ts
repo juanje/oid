@@ -35,7 +35,20 @@ export async function taskContext(dir: string, kind: AttemptKind, shared: FrText
   };
 }
 
-async function failureContext(dir: string, { step, message, definedIn, definedAt }: StepFailure): Promise<NonNullable<TaskContext["failure"]>> {
+/**
+ * A failure's message without the stack frames of Node and the packages, which cost tokens and point nowhere the agent
+ * can change: its text, and the first frame in a file of the project in `dir`.
+ */
+export function trimmedMessage(message: string, dir: string): string {
+  const lines = message.split("\n");
+  const isFrame = (line: string) => /^\s+at /.test(line);
+  const text = lines.filter((line) => !isFrame(line));
+  const own = lines.find((line) => isFrame(line) && line.includes(`${dir}/`) && !line.includes("/node_modules/"));
+  return [...text, ...(own === undefined ? [] : [own])].join("\n").trimEnd();
+}
+
+async function failureContext(dir: string, { step, message: full, definedIn, definedAt }: StepFailure): Promise<NonNullable<TaskContext["failure"]>> {
+  const message = trimmedMessage(full, dir);
   if (definedIn === undefined || definedAt === undefined) return { step, message };
   const source = definitionSource(await readFile(join(dir, definedIn), "utf8"), definedAt);
   return { step, message, ...(source === undefined ? {} : { definition: { file: definedIn, line: definedAt, source } }) };
