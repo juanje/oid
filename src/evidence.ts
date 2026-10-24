@@ -1,6 +1,6 @@
 import type { CommandRunner } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { classifyFailure, isValidRed, type RedClass } from "./red-class.ts";
+import { classifyFailure, classifyScenario, isValidRed, type RedClass } from "./red-class.ts";
 import type { Refusal } from "./refusal.ts";
 import type { ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, type UnitRun } from "./unit-tests.ts";
@@ -42,12 +42,20 @@ export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => 
       next: "Check that the step definitions load: a static import of a module that does not exist yet stops cucumber-js; import it dynamically inside the step",
     });
   }
-  const failure = result.failure;
-  const redClass = classifyFailure(failure?.message ?? "", symbolExists);
+  const redClass = classifyScenario(result, symbolExists);
   if (isValidRed(redClass)) return accepted([`${scenario}: ${redClass}`]);
+  const failure = result.failure;
+  const where = `${scenario}, step "${failure?.step ?? "?"}"`;
+  if (failure !== undefined && failure.message === "") {
+    return refused({
+      failed: `A step of the scenario has no usable definition: ${redClass}`,
+      evidence: `${where}: ${failure.status}`,
+      next: "Define every step of the scenario exactly once, with a real assertion where it checks an outcome",
+    });
+  }
   return refused({
     failed: `The scenario's failure is not a valid Red: ${redClass}`,
-    evidence: `${scenario}, step "${failure?.step ?? "?"}": ${failure?.message ?? ""}`,
+    evidence: `${where}: ${failure?.message ?? ""}`,
     next: NEXT[redClass],
   });
 }

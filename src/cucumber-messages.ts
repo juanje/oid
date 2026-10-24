@@ -19,6 +19,8 @@ export interface ScenarioResult extends Scenario {
   failure?: StepFailure;
 }
 
+const NO_DEFINITION = new Set(["UNDEFINED", "PENDING", "AMBIGUOUS"]);
+
 interface FinishedStep {
   testStepId: string;
   status: string;
@@ -76,7 +78,8 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
     const scenario = messages.pickles.get(messages.testCases.get(testCaseId) ?? "");
     if (scenario === undefined) continue;
     const steps = messages.finished.get(startedId) ?? [];
-    const notPassed = steps.find((step) => step.status !== "PASSED");
+    // A step with no usable definition decides the class wherever it is, so it is the failure to report.
+    const notPassed = steps.find((step) => NO_DEFINITION.has(step.status)) ?? steps.find((step) => step.status !== "PASSED");
     if (steps.length > 0 && notPassed === undefined) {
       results.push({ ...scenario, status: "passed" });
       continue;
