@@ -38,13 +38,13 @@ Then("every attempt's task gives FR-GREET-01's text from SPEC.md and the steps o
   }
 });
 
-/** A step definition's source in a prepared attempt: the lines from the call that defines `pattern` to its end. */
+/** A step definition's source in a prepared attempt: the call that defines `pattern`, from its first line to its closing parenthesis. */
 function definitionSource(file: string, pattern: string): string {
   const lines = readFileSync(file, "utf8").split("\n");
   const start = lines.findIndex((line) => line.includes(`("${pattern}"`));
   assert.notEqual(start, -1, `No step definition for "${pattern}" in ${file}`);
   const end = lines.findIndex((line, index) => index > start && line.startsWith("});"));
-  return lines.slice(start, end + 1).join("\n");
+  return [...lines.slice(start, end), "})"].join("\n");
 }
 
 Then("the test and code attempts' tasks give the scenario's failure and the source of the step definition it failed in", function (this: RunWorld) {
