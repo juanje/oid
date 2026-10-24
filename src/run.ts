@@ -57,7 +57,9 @@ export async function runFr(options: RunOptions): Promise<number> {
   } catch (error) {
     // A limit ends the run at the work accepted so far, and says which limit (FR-RUN-09).
     if (!(error instanceof LimitReached)) throw error;
-    await record(attemptEvent(error.kind, error.scenario, undefined, false, error.outcome, "stopped at the turn limit"));
+    await record(
+      attemptEvent({ kind: error.kind, scenario: error.scenario, refusal: undefined, retry: false, outcome: error.outcome, verdict: "stopped at the turn limit" }),
+    );
     await record({ event: "stop", limit: "turns" });
     options.out(`${error.message}\n`);
     exitCode = EXIT_LIMIT;
@@ -73,16 +75,18 @@ export async function runFr(options: RunOptions): Promise<number> {
 }
 
 /** An attempt as the run log keeps it: its verdict, and what the executor reported of it. */
-function attemptEvent(
-  kind: AttemptKind,
-  scenario: string,
-  refusal: Refusal | undefined,
-  retry: boolean,
-  outcome: AttemptOutcome,
-  verdict: AttemptEvent["verdict"] = refusal === undefined ? "accepted" : "refused",
-  reds: string[] = [],
-): AttemptEvent {
-  const { turns, model, tokens, cost, deniedToolCalls } = outcome;
+function attemptEvent(attempt: {
+  kind: AttemptKind;
+  scenario: string;
+  refusal: Refusal | undefined;
+  retry: boolean;
+  outcome: AttemptOutcome;
+  verdict?: AttemptEvent["verdict"];
+  reds?: string[];
+}): AttemptEvent {
+  const { kind, scenario, refusal, retry, reds = [] } = attempt;
+  const { turns, model, tokens, cost, deniedToolCalls } = attempt.outcome;
+  const verdict = attempt.verdict ?? (refusal === undefined ? "accepted" : "refused");
   const shown = { ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
   return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cost, deniedToolCalls };
 }
@@ -103,7 +107,6 @@ async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree,
   const gate = await gateLoop(retries, () => runGate(worktree.dir, runCommand), (refusal) => codeAttempt(run, last, refusal));
   if ("error" in gate) return stop(gate.error, out);
   if (gate.refusal !== undefined) return refuse(gate.refusal, out);
-  out(`${fr} built on branch ${worktree.branch}\n`);
   return EXIT_BUILT;
 }
 
@@ -140,7 +143,7 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
       const attempt = await attemptFor(run, kind, scenario, previous);
       const judgment = attempt.refusal === undefined ? await judge(attempt.files) : { refusal: attempt.refusal, reds: [] };
       const refusal = judgment.refusal;
-      await run.record(attemptEvent(kind, scenario.name, refusal, previous !== undefined, attempt.outcome, undefined, judgment.reds));
+      await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, reds: judgment.reds }));
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
       return { refusal, rollback: accepted.restore };
     });
@@ -180,7 +183,7 @@ async function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | u
   const accepted = await acceptedWork(run.worktree.dir);
   const attempt = await attemptFor(run, "code", scenario, previous);
   const refusal = attempt.refusal ?? (await judgeCodeAttempt(run));
-  await run.record(attemptEvent("code", scenario.name, refusal, previous !== undefined, attempt.outcome));
+  await run.record(attemptEvent({ kind: "code", scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome }));
   if (refusal === undefined) await checkpoint(run.worktree, `code attempt for "${scenario.name}"`);
   return { refusal, rollback: accepted.restore };
 }
