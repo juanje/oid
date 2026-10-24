@@ -1,9 +1,10 @@
 import { runCommand } from "./command.ts";
-import { judgeNewTests } from "./evidence.ts";
+import type { Scenario } from "./cucumber-messages.ts";
+import { judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { gateRefusal, runGate } from "./gate.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
-import { listScenarios } from "./scenarios.ts";
+import { listScenarios, runScenarios } from "./scenarios.ts";
 import { commitRun, createRunWorktree, takeAttemptChanges } from "./worktree.ts";
 
 export interface RunOptions {
@@ -34,17 +35,22 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
 /** Builds the FR's scenarios one at a time, in file order, and returns the first refusal, if any. */
 async function buildScenarios(executor: Executor, fr: string, worktreeDir: string): Promise<Refusal | undefined> {
   for (const scenario of await listScenarios(worktreeDir, fr, runCommand)) {
-    const refusal = await runAttempts(executor, fr, scenario.name, worktreeDir);
+    const refusal = await runAttempts(executor, fr, scenario, worktreeDir);
     if (refusal !== undefined) return refusal;
   }
   return undefined;
 }
 
 /** Runs each attempt for one scenario in order and returns the first refusal, if any. */
-async function runAttempts(executor: Executor, fr: string, scenario: string, worktreeDir: string): Promise<Refusal | undefined> {
+async function runAttempts(executor: Executor, fr: string, scenario: Scenario, worktreeDir: string): Promise<Refusal | undefined> {
   for (const kind of ATTEMPTS) {
-    await executor.run({ kind, fr, scenario, worktree: worktreeDir });
+    await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir });
     const changed = await takeAttemptChanges(worktreeDir);
+    if (kind === "steps") {
+      const [result] = await runScenarios(worktreeDir, [scenario], runCommand);
+      const refusal = judgeSteps(result!);
+      if (refusal !== undefined) return refusal;
+    }
     if (kind === "test") {
       const refusal = await judgeNewTests(worktreeDir, changed);
       if (refusal !== undefined) return refusal;
