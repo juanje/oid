@@ -34,10 +34,14 @@ export async function runScenarios(dir: string, scenarios: Scenario[], run: Comm
   });
 }
 
-/** Runs every scenario the project's cucumber-js config finds, as the gate does. `ran` is false when cucumber wrote no report. */
-export async function runAllScenarios(dir: string, run: CommandRunner): Promise<{ ran: boolean; results: ScenarioResult[]; output: string }> {
+/**
+ * Runs every scenario the project's cucumber-js config finds, as the gate does, with each one's steps by `<uri>:<line>`.
+ * `ran` is false when cucumber wrote no report.
+ */
+export async function runAllScenarios(dir: string, run: CommandRunner): Promise<{ ran: boolean; results: ScenarioResult[]; steps: Map<string, string[]>; output: string }> {
   const { report, output } = await cucumber(dir, [], run);
-  return { ran: report !== undefined, results: report === undefined ? [] : scenarioResults(report), output };
+  if (report === undefined) return { ran: false, results: [], steps: new Map(), output };
+  return { ran: true, results: scenarioResults(report), steps: scenarioSteps(report), output };
 }
 
 function location(scenario: Scenario): string {

@@ -16,8 +16,8 @@ export interface CheckResult {
   failures?: string[];
   /** The failing tests, as `<file> > <full name>`. */
   failedTests?: string[];
-  /** The scenarios that fail, with where they are: what a code attempt after the gate must look at first. */
-  failedScenarios?: ScenarioResult[];
+  /** The scenarios that fail, with where they are and their steps: what a code attempt after the gate must look at first. */
+  failedScenarios?: (ScenarioResult & { steps?: string[] })[];
   /** The files the type errors are in, each once: their owners fix them (FR-GATE-04). */
   failedFiles?: string[];
   /** How many tests the unit check ran, passing or failing: an attempt the gate sent back must not drop any. */
@@ -80,8 +80,13 @@ async function unitCheck(dir: string, run: CommandRunner): Promise<CheckResult> 
 }
 
 async function scenariosCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
-  const { ran, results, output } = await runAllScenarios(dir, run);
-  const failedScenarios = results.filter((result) => result.status !== "passed");
+  const { ran, results, steps, output } = await runAllScenarios(dir, run);
+  const failedScenarios = results
+    .filter((result) => result.status !== "passed")
+    .map((result) => {
+      const scenarioSteps = steps.get(`${result.uri}:${result.line}`);
+      return scenarioSteps === undefined ? result : { ...result, steps: scenarioSteps };
+    });
   const failures = failedScenarios.map(
     (scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}", step "${scenario.failure?.step ?? "?"}": ${scenario.failure?.message ?? scenario.failure?.status ?? ""}`,
   );
@@ -101,7 +106,9 @@ export function gateError(results: CheckResult[]): string | undefined {
 export function gateRefusal(results: CheckResult[]): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);
   if (failed.length === 0) return undefined;
-  const scenarios = failed.flatMap((result) => result.failedScenarios ?? []).map(({ uri, line, name }) => ({ uri, line, name }));
+  const scenarios = failed
+    .flatMap((result) => result.failedScenarios ?? [])
+    .map(({ uri, line, name, steps, failure }) => ({ uri, line, name, ...(steps === undefined ? {} : { steps }), ...(failure === undefined ? {} : { failure }) }));
   const tests = failed.flatMap((result) => result.failedTests ?? []);
   return {
     failed: `The gate failed: ${failed.map((result) => `${result.name}: ${result.ranNothing === true ? "FAIL, ran no test" : "FAIL"}`).join(", ")}`,
