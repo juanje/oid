@@ -17,11 +17,12 @@ The person writes `SPEC.md` and the feature files, approves them, and runs `oid 
 The walking skeleton comes first. It is the smallest loop end to end, on one FR of the target: steps → unit test → code → gate → commit.
 
 The rest of the MVP adds what the target and the first runs ask for:
+- coverage of the FR's new branches in the gate (FR-GATE-02), first;
 - several FRs in one run;
 - the mutant as Red's legal exit;
 - shelving a scenario with a contract-change proposal;
 - the FR refactor;
-- coverage and traceability in the gate;
+- traceability in the gate;
 - budget limits;
 - `progress.json`;
 - the `status`, `gate`, `init`, `doctor`/`setup`, `resume` and `abort` commands;
@@ -158,8 +159,8 @@ No agent writes feature files, `SPEC.md`, the gate's configuration or oid's stat
 #### FR-GATE-01: The gate
 **Skeleton:** types, the full unit suite and every scenario of every feature, over the whole project. **MVP:** it adds the project's autofixes first, then format, lint, coverage (FR-GATE-02) and traceability (FR-GATE-03). Lint and types count only errors that are new against the baseline. Each check is PASS or FAIL. A run where no test ran fails, and an unknown option is an error. Shelved scenarios are left out of the run and listed in its output. It runs at the start of a run (FR-RUN-10) and before each FR's commit. *Why:* done means the gate passes; that question is answered by evidence, not by an agent.
 
-#### FR-GATE-02: Coverage of the new lines
-**MVP.** Lines the FR added that no test covers fail the gate. The refusal goes to the code agent: it removes them, or asks for a test attempt. *Why:* it is the check against over-engineering, the article's third failure. Code without a test is behaviour without a scenario.
+#### FR-GATE-02: Coverage of the FR's new branches
+**MVP, built first.** A branch the FR added that no test runs fails the gate: covered means taken by a unit test or by a scenario, both tests that failed first, joined by their place in the source. A function no test calls counts as untaken. What the FR added is what its diff from the run's start added; branches that were there before are not its to cover. The refusal goes to a code attempt, which removes the branch: with both kinds of tests counted, a branch no test runs is code no test asks for. The unit side needs the project's vitest coverage provider (`@vitest/coverage-v8`, at its vitest's version); a project without it is an error before any attempt. *Why:* it is the check against over-engineering, the article's third failure: code without a test is behaviour without a scenario. Branches, not lines, because one line can hold a branch no test takes.
 
 #### FR-GATE-03: Traceability
 **MVP.** Every scenario carries an FR tag found in `SPEC.md`. Every FR in the run has at least one scenario. A tag with no FR, or an FR with no scenario, fails the gate. *Why:* every behaviour traces to a scenario and every scenario to a requirement, or the spec and the product drift.

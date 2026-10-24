@@ -135,7 +135,7 @@ One function, two entry points (D-06): the loop step before each commit, and `oi
 | Types, new errors only | Yes | Yes | The attempt kind that owns the file; a code attempt for a file no kind owns |
 | Unit suite, whole | Yes | Yes | Code attempt with the failing test |
 | Scenarios, all not shelved | Yes | Yes | Code attempt; a contract change shelves the FR |
-| Coverage of the FR's new lines | — | Yes | Code agent: remove the lines, or ask for a test attempt |
+| Coverage of the FR's new branches, unit tests and scenarios together | Yes | Yes | Code attempt: remove the branch no test runs |
 | Traceability | — | Yes | Shown to the person |
 
 The gate also runs at the start of a run as the baseline. A red test stops the run and asks; findings are recorded. A check that ran nothing, or got an unknown option, fails.
