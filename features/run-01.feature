@@ -43,3 +43,9 @@ Feature: Run one FR on approved features
     And the output names the option "--no-such-option"
     And the run created no branch
     And the executor was asked for no attempt
+
+  Scenario: The oid command the package installs runs as the person types it
+    When I run "oid run FR-GREET-01 --no-such-option" with the oid command
+    Then the run stops with an error, not a refusal and not a crash
+    And the output names the option "--no-such-option"
+    And the run created no branch
