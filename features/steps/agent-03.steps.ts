@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
-import { attemptDir, greet02AttemptDir, greet03AttemptDir, scenarioNames } from "../support/fixture.ts";
+import { attemptDir, git, greet02AttemptDir, greet03AttemptDir, scenarioNames } from "../support/fixture.ts";
 import { scriptedModel } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -128,4 +129,38 @@ Then("the code attempt after the gate was given the broken scenario of FR-GREET-
     assert.ok(task.includes(step), `The task does not give the broken scenario's step "${step}":\n${task}`);
   }
   assert.match(task, /AssertionError/, `The task does not give the broken scenario's failure:\n${task}`);
+});
+
+const DOMAIN_TEXT = "A greeting is one sentence that names everyone it greets.";
+const CONVENTIONS_TEXT = "Exported functions are pure, because the scenarios call them directly.";
+
+/** Puts `text` where the project keeps it: a file, a section of SPEC.md, or a file named in .oid.json under `paths`. */
+async function keep(dir: string, where: string, text: string, section: string, key: string): Promise<void> {
+  const named = /^(\S+), named in \.oid\.json$/.exec(where)?.[1];
+  if (where === `the ${section} section of SPEC.md`) {
+    await appendFile(join(dir, "SPEC.md"), `\n## ${section}\n\n${text}\n`);
+  } else if (named !== undefined) {
+    await mkdir(dirname(join(dir, named)), { recursive: true });
+    await writeFile(join(dir, named), `${text}\n`);
+    const path = join(dir, ".oid.json");
+    const config = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+    config.paths = { ...config.paths, [key]: named };
+    await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
+  } else {
+    await writeFile(join(dir, where), `${text}\n`);
+  }
+}
+
+Given("the project keeps its domain in {} and its conventions in {}", async function (this: RunWorld, domain: string, conventions: string) {
+  await keep(this.projectDir, domain, DOMAIN_TEXT, "Domain", "domain");
+  await keep(this.projectDir, conventions, CONVENTIONS_TEXT, "Conventions", "conventions");
+  git(this.projectDir, "add", "--all");
+  git(this.projectDir, "commit", "-q", "-m", "docs: the project's domain and conventions");
+});
+
+Then("every attempt's task gives the project's domain and its conventions", function (this: RunWorld) {
+  for (const { kind, task } of tasksOf(this)) {
+    assert.ok(task.includes(DOMAIN_TEXT), `The ${kind} attempt's task does not give the project's domain:\n${task}`);
+    assert.ok(task.includes(CONVENTIONS_TEXT), `The ${kind} attempt's task does not give the project's conventions:\n${task}`);
+  }
 });
