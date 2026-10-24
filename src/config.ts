@@ -15,7 +15,22 @@ export interface Limits {
 }
 
 export async function readLimits(dir: string): Promise<Limits> {
-  const path = join(dir, CONFIG_FILE);
-  const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
+  const config = await readConfig(dir);
   return { retries: config.limits?.retries ?? DEFAULT_RETRIES, turns: config.limits?.turns ?? DEFAULT_TURNS };
+}
+
+/** The project's own files a task reads, when `.oid.json` names them (FR-AGENT-03). */
+export interface Paths {
+  domain?: string;
+  conventions?: string;
+}
+
+export async function readPaths(dir: string): Promise<Paths> {
+  const { paths } = await readConfig(dir);
+  return { ...(paths?.domain === undefined ? {} : { domain: paths.domain }), ...(paths?.conventions === undefined ? {} : { conventions: paths.conventions }) };
+}
+
+async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; paths?: Paths }> {
+  const path = join(dir, CONFIG_FILE);
+  return existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
 }
