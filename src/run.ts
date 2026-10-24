@@ -4,7 +4,8 @@ import { judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { gateRefusal, runGate } from "./gate.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
-import { listScenarios, runScenarios } from "./scenarios.ts";
+import { innerLoop } from "./inner-loop.ts";
+import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { commitRun, createRunWorktree, takeAttemptChanges } from "./worktree.ts";
 
 export interface RunOptions {
@@ -16,8 +17,6 @@ export interface RunOptions {
 
 const EXIT_BUILT = 0;
 const EXIT_REFUSED = 1;
-
-const ATTEMPTS: AttemptKind[] = ["steps", "test", "code"];
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr({ projectDir, fr, executor, out }: RunOptions): Promise<number> {
@@ -35,28 +34,32 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
 /** Builds the FR's scenarios one at a time, in file order, and returns the first refusal, if any. */
 async function buildScenarios(executor: Executor, fr: string, worktreeDir: string): Promise<Refusal | undefined> {
   for (const scenario of await listScenarios(worktreeDir, fr, runCommand)) {
-    const refusal = await runAttempts(executor, fr, scenario, worktreeDir);
+    const refusal = await buildScenario(executor, fr, scenario, worktreeDir);
     if (refusal !== undefined) return refusal;
   }
   return undefined;
 }
 
-/** Runs each attempt for one scenario in order and returns the first refusal, if any. */
-async function runAttempts(executor: Executor, fr: string, scenario: Scenario, worktreeDir: string): Promise<Refusal | undefined> {
-  for (const kind of ATTEMPTS) {
+/** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes. */
+async function buildScenario(executor: Executor, fr: string, scenario: Scenario, worktreeDir: string): Promise<Refusal | undefined> {
+  const attempt = async (kind: AttemptKind): Promise<string[]> => {
     await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir });
-    const changed = await takeAttemptChanges(worktreeDir);
-    if (kind === "steps") {
-      const [result] = await runScenarios(worktreeDir, [scenario], runCommand);
-      const refusal = judgeSteps(result!);
-      if (refusal !== undefined) return refusal;
-    }
-    if (kind === "test") {
-      const refusal = await judgeNewTests(worktreeDir, changed);
-      if (refusal !== undefined) return refusal;
-    }
-  }
-  return undefined;
+    return takeAttemptChanges(worktreeDir);
+  };
+  const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
+
+  await attempt("steps");
+  const stepsRefusal = judgeSteps(await runScenario());
+  if (stepsRefusal !== undefined) return stepsRefusal;
+  return innerLoop(
+    async () => {
+      const testRefusal = await judgeNewTests(worktreeDir, await attempt("test"));
+      if (testRefusal !== undefined) return testRefusal;
+      await attempt("code");
+      return undefined;
+    },
+    async () => (await runScenario()).status === "passed",
+  );
 }
 
 function runId(fr: string): string {
