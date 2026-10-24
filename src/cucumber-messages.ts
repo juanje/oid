@@ -32,6 +32,8 @@ interface FinishedStep {
 
 interface Messages {
   pickles: Map<string, Scenario>;
+  /** pickle id → its steps' ids, in order. */
+  pickleStepIds: Map<string, string[]>;
   /** pickle step id → its text and kind. */
   pickleSteps: Map<string, { text: string; kind: StepFailure["kind"] }>;
   /** testCase id → pickle id, in the order cucumber selected them. */
@@ -47,7 +49,7 @@ interface Messages {
 }
 
 function parse(ndjson: string): Messages {
-  const messages: Messages = { pickles: new Map(), pickleSteps: new Map(), testCases: new Map(), testSteps: new Map(), definitions: new Map(), started: new Map(), finished: new Map() };
+  const messages: Messages = { pickles: new Map(), pickleStepIds: new Map(), pickleSteps: new Map(), testCases: new Map(), testSteps: new Map(), definitions: new Map(), started: new Map(), finished: new Map() };
   for (const line of ndjson.split("\n")) {
     if (line.trim() === "") continue;
     const message = JSON.parse(line);
@@ -56,6 +58,7 @@ function parse(ndjson: string): Messages {
     } else if (message.pickle) {
       const { id, uri, location, name, steps } = message.pickle;
       messages.pickles.set(id, { uri, line: location.line, name });
+      messages.pickleStepIds.set(id, (steps ?? []).map((step: { id: string }) => step.id));
       for (const step of steps ?? []) messages.pickleSteps.set(step.id, { text: step.text, kind: step.type ?? "Unknown" });
     } else if (message.testCase) {
       messages.testCases.set(message.testCase.id, message.testCase.pickleId);
@@ -77,6 +80,19 @@ function parse(ndjson: string): Messages {
 export function scenariosIn(ndjson: string): Scenario[] {
   const { pickles, testCases } = parse(ndjson);
   return [...testCases.values()].map((pickleId) => pickles.get(pickleId)).filter((scenario) => scenario !== undefined);
+}
+
+const KEYWORD: Record<StepFailure["kind"], string> = { Context: "Given", Action: "When", Outcome: "Then", Unknown: "*" };
+
+/** Each scenario's steps, Background included, with the keyword of their kind, by `<uri>:<line>` of the scenario. */
+export function scenarioSteps(ndjson: string): Map<string, string[]> {
+  const { pickles, pickleStepIds, pickleSteps } = parse(ndjson);
+  const steps = new Map<string, string[]>();
+  for (const [id, scenario] of pickles) {
+    const texts = (pickleStepIds.get(id) ?? []).map((stepId) => pickleSteps.get(stepId)!).map(({ kind, text }) => `${KEYWORD[kind]} ${text}`);
+    steps.set(`${scenario.uri}:${scenario.line}`, texts);
+  }
+  return steps;
 }
 
 /** The scenarios that ran, each passed only when every one of its steps passed, and failed at its first step that did not. */
