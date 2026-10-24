@@ -7,7 +7,7 @@ import { projectSymbols } from "./project-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
-import { runUnitTests } from "./unit-tests.ts";
+import { runUnitTests, type UnitRun } from "./unit-tests.ts";
 import { commitRun, createRunWorktree, takeAttemptChanges } from "./worktree.ts";
 
 export interface RunOptions {
@@ -36,8 +36,9 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
 /** Builds the FR's scenarios one at a time, in file order, and returns the first refusal, if any. */
 async function buildScenarios(executor: Executor, fr: string, worktreeDir: string, out: (text: string) => void): Promise<Refusal | undefined> {
   const green: Scenario[] = [];
+  const known = testsIn(await runUnitTests(worktreeDir, [], runCommand));
   for (const scenario of await listScenarios(worktreeDir, fr, runCommand)) {
-    const refusal = await buildScenario(executor, fr, scenario, green, worktreeDir, out);
+    const refusal = await buildScenario(executor, fr, scenario, green, known, worktreeDir, out);
     if (refusal !== undefined) return refusal;
     green.push(scenario);
   }
@@ -50,6 +51,7 @@ async function buildScenario(
   fr: string,
   scenario: Scenario,
   green: Scenario[],
+  known: Set<string>,
   worktreeDir: string,
   out: (text: string) => void,
 ): Promise<Refusal | undefined> {
@@ -73,14 +75,21 @@ async function buildScenario(
   if (stepsRefusal !== undefined) return stepsRefusal;
   return innerLoop(
     async () => {
-      const testRefusal = accept(await judgeNewTests(worktreeDir, await attempt("test"), runCommand, await symbolExists()));
+      const testRefusal = accept(await judgeNewTests(worktreeDir, await attempt("test"), runCommand, await symbolExists(), known));
       if (testRefusal !== undefined) return testRefusal;
       await attempt("code");
       const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
-      return judgeCode(await runUnitTests(worktreeDir, [], runCommand), greenRuns);
+      const unit = await runUnitTests(worktreeDir, [], runCommand);
+      for (const test of testsIn(unit)) known.add(test);
+      return judgeCode(unit, greenRuns);
     },
     async () => (await runScenario()).status === "passed",
   );
+}
+
+/** Every test and test file a unit run reported on: what a later test attempt finds already there. */
+function testsIn(unit: UnitRun): Set<string> {
+  return new Set([...unit.passed, ...(unit.failures ?? []).map((failure) => failure.test)]);
 }
 
 function runId(fr: string): string {

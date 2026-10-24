@@ -94,12 +94,16 @@ export function judgeCode(unit: UnitRun, greenScenarios: ScenarioRun[]): Refusal
   return undefined;
 }
 
-/** Accepts a test attempt only when every new test fails with a valid Red on the code it was written against (D-02). */
+/**
+ * Accepts a test attempt only when every new test fails with a valid Red on the code it was written against (D-02).
+ * A test is new when it is in a file the attempt changed and not in `known`, the tests there were before the attempt.
+ */
 export async function judgeNewTests(
   worktreeDir: string,
   testFiles: string[],
   run: CommandRunner,
   symbolExists: (name: string) => boolean,
+  known: Set<string>,
 ): Promise<Judgment> {
   const unit = await runUnitTests(worktreeDir, testFiles, run);
   if (!unit.ran) {
@@ -120,7 +124,8 @@ export async function judgeNewTests(
       next: NEXT.not_run,
     });
   }
-  const passing = unit.passed.filter(inFiles);
+  const isNew = (test: string): boolean => inFiles(test) && !known.has(test);
+  const passing = unit.passed.filter(isNew);
   if (passing.length > 0) {
     return refused({
       failed: "New tests pass before their code exists: test_bug",
@@ -129,7 +134,7 @@ export async function judgeNewTests(
     });
   }
   const classified = (unit.failures ?? [])
-    .filter((failure) => inFiles(failure.test))
+    .filter((failure) => isNew(failure.test))
     .map((failure) => ({ ...failure, redClass: classifyFailure(failure.message, symbolExists) }));
   const invalid = classified.filter((failure) => !isValidRed(failure.redClass));
   if (invalid.length > 0) {
