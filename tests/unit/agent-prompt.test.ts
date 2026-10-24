@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { OID_FACTS, systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
 import { AGENT_TOOLS } from "../../src/agent-tools.ts";
 import { WRITABLE } from "../../src/boundaries.ts";
+import { RUNNERS } from "../../src/runners.ts";
 
 const SCENARIO = "A person is greeted by name";
 const REFUSAL = { failed: "The test passes before its code exists: test_bug", evidence: "tests/greet.test.ts", next: "Write a test that fails" };
@@ -20,6 +21,16 @@ describe("systemPromptFor", () => {
 
       for (const path of WRITABLE[kind]) expect(prompt).toContain(path);
       for (const tool of AGENT_TOOLS) expect(prompt).toMatch(new RegExp(`\\b${tool.name}\\b`));
+    }
+  });
+
+  test("tells the test and steps agents the runner oid runs their files with, and what those files import from it", () => {
+    for (const [kind, runner] of [["test", RUNNERS.unit], ["steps", RUNNERS.scenarios]] as const) {
+      const prompt = systemPromptFor(kind);
+
+      expect(prompt).toContain(runner.bin);
+      expect(prompt).toContain(runner.module);
+      for (const name of runner.imports) expect(prompt).toMatch(new RegExp(`\\b${name}\\b`));
     }
   });
 
