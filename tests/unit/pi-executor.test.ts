@@ -6,9 +6,11 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
 import type { Attempt, TryResult, TryTarget } from "../../src/executor.ts";
 import { piExecutor } from "../../src/pi-executor.ts";
-import { GREET_01_SCENARIO as SCENARIO, attemptDir } from "../../features/support/fixture.ts";
 import { type ModelAttempt, ScriptedModel } from "../../features/support/scripted-model.ts";
 
+const SCENARIO = "A person is greeted by name";
+// A prepared attempt of the greet fixture; fixture.ts itself loads cucumber, so its helpers are not imported here.
+const attemptDir = (name: string) => join(import.meta.dirname, "../../fixtures/greet/attempts", name);
 const QUICK_RETRIES = { maxRetries: 2, baseDelayMs: 1 };
 const TOOLS = ["edit", "find", "grep", "ls", "read", "report", "try", "write"];
 

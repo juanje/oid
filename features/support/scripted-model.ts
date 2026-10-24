@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 import {
   type AssistantMessage,
   type AssistantMessageEventStream,
@@ -18,7 +18,6 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { AttemptKind, TryTarget } from "../../src/executor.ts";
-import { filesUnder } from "./fixture.ts";
 
 /** How the scripted model answers one attempt: it writes a prepared attempt's files, keeps calling tools, or fails. */
 export interface ModelAttempt {
@@ -118,6 +117,12 @@ export class ScriptedModel {
     if (prepared.tries === undefined) return fauxAssistantMessage([...writes, report]);
     return fauxAssistantMessage([...writes, ...prepared.tries.map((target) => fauxToolCall("try", { ...target }))]);
   }
+}
+
+/** Every file under `dir`, relative to it. Not fixture.ts's: that one loads cucumber, and unit tests use this model too. */
+async function filesUnder(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  return entries.filter((entry) => entry.isFile()).map((entry) => relative(dir, join(entry.parentPath, entry.name)));
 }
 
 const NO_CREDENTIALS: CredentialStore = {
