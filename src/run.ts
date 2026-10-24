@@ -30,7 +30,6 @@ interface FrRun {
   executor: Executor;
   fr: string;
   worktree: RunWorktree;
-  worktreeDir: string;
   out: (text: string) => void;
   /** The scenarios already built, which every code attempt must keep green. */
   green: Scenario[];
@@ -63,7 +62,7 @@ export async function runFr(options: RunOptions): Promise<number> {
 async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree): Promise<number> {
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
   const { retries, turns } = await readLimits(worktree.dir);
-  const run: FrRun = { executor, fr, worktree, worktreeDir: worktree.dir, out, green: [], known, retries, turns };
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns };
   const scenarios = await listScenarios(worktree.dir, fr, runCommand);
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
@@ -102,7 +101,8 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
 
 /** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping the green ones green. */
 async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
-  const { worktreeDir, out, known, retries } = run;
+  const { out, known, retries } = run;
+  const worktreeDir = run.worktree.dir;
   // An attempt and the judgment of its kind, retried from the work accepted before it while refused (FR-RUN-07).
   const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Refusal | undefined>) =>
     withRetries(retries, async (previous) => {
@@ -140,12 +140,13 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
 
 /** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
 function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktreeDir, refusal: previous, turns: run.turns });
+  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns });
 }
 
 /** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
 async function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
-  const { worktreeDir, green, known } = run;
+  const { green, known } = run;
+  const worktreeDir = run.worktree.dir;
   const accepted = await acceptedWork(worktreeDir);
   const attempt = await attemptFor(run, "code", scenario, previous);
   if (attempt.refusal !== undefined) return { refusal: attempt.refusal, rollback: accepted.restore };
