@@ -17,5 +17,6 @@ Feature: A failing gate is a refusal
     Given the scripted code attempt for FR-GREET-03 breaks a scenario of FR-GREET-02 that no unit test covers, and so does its retry
     When I run "oid run FR-GREET-03"
     Then the run stops with a refusal, not a crash
+    And the executor was asked for every prepared attempt, in order
     And the output names the scenario of FR-GREET-02 that fails
     And the run's branch has no commit on top of the starting HEAD
