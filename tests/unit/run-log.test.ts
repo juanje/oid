@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { type AttemptEvent, measuresOf, openRunLog } from "../../src/run-log.ts";
+import { type AttemptEvent, type LogEvent, measuresOf, openRunLog } from "../../src/run-log.ts";
 import { createRunWorktree } from "../../src/worktree.ts";
 import { tempRepo } from "./support/repo.ts";
 
@@ -26,6 +26,19 @@ describe("measuresOf", () => {
     ];
 
     expect(measuresOf(events, 1500)).toMatchObject({ attempts: { steps: 1, code: 3 }, rejections: { code: 3 }, blindRetries: 1, timeMs: 1500 });
+  });
+
+  test("counts a gate refusal as a rejection of the attempt kind it goes back to, and one with no kind as none", () => {
+    const refusal = { failed: "The gate failed: types: FAIL", evidence: "…", next: "…" };
+    const events: LogEvent[] = [
+      attempt("steps", "accepted"),
+      { event: "gate", verdict: "refused", refusal, sendTo: "steps" },
+      attempt("steps", "accepted", { retry: true }),
+      { event: "gate", verdict: "refused", refusal },
+      { event: "gate", verdict: "passed" },
+    ];
+
+    expect(measuresOf(events, 1).rejections).toEqual({ steps: 1 });
   });
 
   test("totals the tokens read from the provider's cache, apart from the tokens", () => {

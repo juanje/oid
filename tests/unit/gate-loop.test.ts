@@ -101,6 +101,32 @@ describe("gateLoop", () => {
     expect({ refused: "refusal" in outcome && outcome.refusal !== undefined, kinds }).toEqual({ refused: true, kinds: ["code"] });
   });
 
+  test("tells each gate run's verdict, and a refusal's kind to go back to", async () => {
+    const { gate, afterGate } = fakes([typesFail(["tests/a.test.ts"]), PASSING]);
+    const runs: { verdict: string; sendTo?: AttemptKind }[] = [];
+
+    await gateLoop(1, gate, afterGate, async (refusal, sendTo) => {
+      runs.push({ verdict: refusal === undefined ? "passed" : "refused", ...(sendTo === undefined ? {} : { sendTo }) });
+    });
+
+    expect(runs).toEqual([{ verdict: "refused", sendTo: "test" }, { verdict: "passed" }]);
+  });
+
+  test("gives a refusal a next step for the kind of attempt it goes back to", async () => {
+    const nextFor = async (files: string[]) => {
+      const { gate, afterGate, given } = fakes([typesFail(files), PASSING]);
+      await gateLoop(1, gate, afterGate);
+      return given[0]!.next;
+    };
+
+    expect(await nextFor(["src/a.ts"])).toMatch(/\bcode\b/);
+    for (const [file, kind] of [["tests/a.test.ts", /\bunit tests?\b/], ["features/steps/a.steps.ts", /\bstep definitions?\b/]] as const) {
+      const next = await nextFor([file]);
+      expect(next).toMatch(kind);
+      expect(next).not.toMatch(/\bthe code\b/);
+    }
+  });
+
   test("a runner that does not know an option is an error, never sent back", async () => {
     const { gate, afterGate, given } = fakes([UNKNOWN_OPTION, PASSING]);
 
