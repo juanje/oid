@@ -37,6 +37,7 @@ Each FR below says which of the two it belongs to.
 6. FR-RUN-07, FR-RUN-09: retries and the turn limit
 7. FR-STATE-01, FR-STATE-02, FR-CLI-01: checkpoints, the run log, the end-of-run summary
 8. FR-AGENT-01, FR-AGENT-02, FR-AGENT-03, FR-AGENT-05: the real Pi executor, its prompts, its context, no shell
+9. Before the first real run: `bin/oid` (FR-RUN-01) and the `model` key of `.oid.json` (FR-AGENT-01)
 
 The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with the real Pi executor.
 
@@ -68,7 +69,7 @@ The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with t
 ### Run
 
 #### FR-RUN-01: Run one FR on approved features
-**Skeleton.** `oid run <FR>` builds one FR whose feature files are approved and in the repository. It works in its own git worktree, branched from the current `HEAD`, and ends with one commit of that FR on the run's branch. The person's working copy is never touched. *Why:* the contract comes from outside the run, and a run that can damage the working copy cannot be trusted to run alone.
+**Skeleton.** `oid run <FR>`, the command oid's package installs as `bin/oid`, builds one FR whose feature files are approved and in the repository. It works in its own git worktree, branched from the current `HEAD`, and ends with one commit of that FR on the run's branch. The person's working copy is never touched. *Why:* the contract comes from outside the run, and a run that can damage the working copy cannot be trusted to run alone.
 
 #### FR-RUN-02: One scenario at a time, Red first
 **Skeleton.** For each scenario of the FR, in file order, a steps attempt writes its step definitions. The attempt is accepted only when the scenario fails with a valid Red (FR-EVID-01). Then the inner loop runs until the scenario passes, and the run moves to the next scenario. *Why:* the outer loop is what turns the contract into a design; a scenario that passed before its code would prove nothing.
@@ -117,7 +118,7 @@ The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with t
 ### Agents
 
 #### FR-AGENT-01: One attempt, one agent process
-**Skeleton.** Each attempt starts a fresh Pi agent in the run's worktree with four inputs: its system prompt, the task, its write boundary, and its tools. It ends with a diff and a report. oid judges the result the same way whichever agent produced it. The agent never advances the run. Two executors sit behind that seam: Pi, and a scripted executor that returns prepared diffs and reports. oid's own scenarios use the scripted one. *Why:* a fresh agent per attempt keeps context small. A judgment that ignores who wrote the diff lets another executor come in later as an adapter.
+**Skeleton.** Each attempt starts a fresh Pi agent in the run's worktree with four inputs: its system prompt, the task, its write boundary, and its tools. It ends with a diff and a report. oid judges the result the same way whichever agent produced it. The agent never advances the run. Two executors sit behind that seam: Pi, and a scripted executor that returns prepared diffs and reports. oid's own scenarios use the scripted one. Pi runs the model that the `model` key of the project's `.oid.json` names, as `<provider>/<model>`, resolved through Pi's own registry and credentials, which oid never reads. *Why:* a fresh agent per attempt keeps context small. A judgment that ignores who wrote the diff lets another executor come in later as an adapter.
 
 #### FR-AGENT-02: A prompt per agent, in two layers
 **Skeleton.** Each kind of agent has its own system prompt. Its identity says what it is, does and is not, with a few traits stated as values with their why. Its limits are generated from its write boundary and tools, so the text and the enforcement cannot differ. The task is a procedure: Step 0 (the input), numbered steps with the reason for any non-obvious order, the success criterion in plain words, negative constraints at the step they apply to, and a short checklist. Facts every agent needs (what oid is, the goal of the whole system, what oid checks) come from one source. *Why:* each agent has its own objective, focus and limits; values carry to cases a rule does not foresee.
@@ -156,7 +157,7 @@ No agent writes feature files, `SPEC.md`, the gate's configuration or oid's stat
 **MVP.** Every scenario carries an FR tag found in `SPEC.md`. Every FR in the run has at least one scenario. A tag with no FR, or an FR with no scenario, fails the gate. *Why:* every behaviour traces to a scenario and every scenario to a requirement, or the spec and the product drift.
 
 #### FR-GATE-04: A failing gate is a refusal
-**Skeleton:** a failing test or scenario goes back to a code attempt, with the failure as evidence. A type error goes back to the attempt kind that owns its file (source to a code attempt, unit tests to a test attempt, step definitions to a steps attempt), with the error as evidence. Each attempt the gate sends back counts as a retry. **MVP:** a new lint error goes to the agent that owns the file. If a regression can only be fixed by changing another FR's scenario or test, that is a contract change, and the FR is shelved with a proposed diff (FR-RUN-06). *Why:* no dead ends; the gate's output is the next attempt's focus.
+**Skeleton:** a failing test or scenario goes back to a code attempt, with the failure as evidence. A type error goes back to the attempt kind that owns its file (source to a code attempt, unit tests to a test attempt, step definitions to a steps attempt), with the error as evidence; a file no kind owns goes to a code attempt, since nobody can write it and the cause is almost always in the source. When errors are in files of several owners, one attempt goes back at a time, outside-in. A test or steps attempt the gate sends back is judged by its boundary, its report and the gate run again, with no new Red, and the number of tests must not drop. Each attempt the gate sends back counts as a retry; when the retries run out, the gate's failure is a refusal. **MVP:** a new lint error goes to the agent that owns the file. If a regression can only be fixed by changing another FR's scenario or test, that is a contract change, and the FR is shelved with a proposed diff (FR-RUN-06). *Why:* no dead ends; the gate's output is the next attempt's focus.
 
 #### FR-GATE-05: `oid gate`
 **MVP.** `oid gate` runs the same gate on the working copy and writes nothing: format runs as a check, not as an autofix. It prints one PASS/FAIL line per check and exits 0 only when every check passes. *Why:* the person can confirm that everything really passed, and CI can run it. One function behind both entry points means they cannot disagree.

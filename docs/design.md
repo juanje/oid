@@ -130,7 +130,7 @@ One function, two entry points (D-06): the loop step before each commit, and `oi
 | Autofixes | — | In the run only | — |
 | Format | — | Yes (a check, in `oid gate`) | Code agent |
 | Lint, new errors only | — | Yes | The agent that owns the file |
-| Types, new errors only | Yes | Yes | The agent that owns the file |
+| Types, new errors only | Yes | Yes | The attempt kind that owns the file; a code attempt for a file no kind owns |
 | Unit suite, whole | Yes | Yes | Code attempt with the failing test |
 | Scenarios, all not shelved | Yes | Yes | Code attempt; a contract change shelves the FR |
 | Coverage of the FR's new lines | — | Yes | Code agent: remove the lines, or ask for a test attempt |
@@ -189,5 +189,6 @@ These parts of the design came from analysis, not from runs. The first runs conf
 - the agent choosing the next attempt kind (§2);
 - no shell for any agent (§3);
 - coverage of new lines as a gate check (§5);
+- a test or steps attempt the gate sends back for a type error is not asked for a new Red, only to keep the number of tests: it can still weaken a test unseen. That risk closes in the MVP with the recorded evidence (FR-EVID-04) and the refactor's mutant (FR-REF-03);
 - secret containment entering after the skeleton, which is safe only because the shortener holds no secrets;
 - the order in which the rest of the MVP is built: the mutant, shelving, several FRs, the refactor and coverage first; then budget limits, `progress.json`, `oid status` and `oid gate`; `init`, `doctor`/`setup` and `resume`/`abort` last.
