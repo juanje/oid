@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { readLimits, personalConfigDir } from "../../src/config.ts";
+import { readLimits, personalConfigDir, uncommittedProjectConfig } from "../../src/config.ts";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { tempRepo } from "./support/repo.ts";
 
 describe("readLimits", () => {
@@ -22,5 +24,19 @@ describe("personalConfigDir", () => {
     expect(personalConfigDir({ OID_CONFIG_DIR: "/c", XDG_CONFIG_HOME: "/x", HOME: "/h" })).toBe("/c");
     expect(personalConfigDir({ XDG_CONFIG_HOME: "/x", HOME: "/h" })).toBe("/x/oid");
     expect(personalConfigDir({ HOME: "/h" })).toBe("/h/.config/oid");
+  });
+});
+
+describe("uncommittedProjectConfig", () => {
+  test("says whether the working copy's .oid.json differs from HEAD's, or is not committed at all", async () => {
+    const committed = await tempRepo({ ".oid.json": "{}\n" });
+    expect(await uncommittedProjectConfig(committed)).toBe(false);
+
+    await writeFile(join(committed, ".oid.json"), '{ "limits": { "retries": 0 } }\n');
+    expect(await uncommittedProjectConfig(committed)).toBe(true);
+
+    const untracked = await tempRepo({ "a.txt": "a\n" });
+    await writeFile(join(untracked, ".oid.json"), "{}\n");
+    expect(await uncommittedProjectConfig(untracked)).toBe(true);
   });
 });
