@@ -84,3 +84,10 @@ function exportsOf(source: ts.SourceFile): Set<string> | "anything" {
 function isRelative(specifier: string): boolean {
   return specifier.startsWith("./") || specifier.startsWith("../");
 }
+
+/** For each of `files` that exists, whether a name it imports exists; a file not given answers that it does. */
+export async function importedSymbolsOf(dir: string, files: string[]): Promise<(name: string, file: string) => boolean> {
+  const present = files.filter((file) => existsSync(join(dir, file)));
+  const checks = new Map(await Promise.all(present.map(async (file) => [file, await importedSymbolExists(dir, file)] as const)));
+  return (name, file) => checks.get(file)?.(name) ?? true;
+}

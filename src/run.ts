@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { runAttempt } from "./attempt.ts";
 import { isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
@@ -10,7 +8,7 @@ import type { AttemptKind, Executor } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_REFUSED } from "./exit.ts";
 import { gateError, gateRefusal, runGate } from "./gate.ts";
 import { innerLoop } from "./inner-loop.ts";
-import { importedSymbolExists } from "./imported-symbols.ts";
+import { importedSymbolsOf } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { withRetries } from "./retries.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
@@ -94,11 +92,7 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
     });
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
   // Asked at each judgment, of the file that failed: the project changes with every attempt.
-  const symbolsOf = async (files: string[]): Promise<(name: string, file: string) => boolean> => {
-    const present = files.filter((file) => existsSync(join(worktreeDir, file)));
-    const checks = new Map(await Promise.all(present.map(async (file) => [file, await importedSymbolExists(worktreeDir, file)] as const)));
-    return (name, file) => checks.get(file)?.(name) ?? true;
-  };
+  const symbolsOf = (files: string[]) => importedSymbolsOf(worktreeDir, files);
   const accept = ({ refusal, reds }: Judgment): Refusal | undefined => {
     for (const red of reds) out(`Red: ${red}\n`);
     return refusal;
