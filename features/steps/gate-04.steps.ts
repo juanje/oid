@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
 import { createGreetProjectWith, greet03AttemptDir, scenarioNames, typeCheckAt } from "../support/fixture.ts";
-import { assertOutputNames, requestsOf, runBranch } from "../support/run.ts";
+import { assertOutputNames, requestsOf, runBranch, runLog } from "../support/run.ts";
 import type { PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -75,4 +75,16 @@ Then("the {word} attempt after the gate was given the type error, naming its fil
 Then("the type check passes on the run's branch", async function (this: RunWorld) {
   const { exitCode, output } = await typeCheckAt(this.projectDir, runBranch(this));
   assert.equal(exitCode, 0, `The type check fails on the run's branch:\n${output}`);
+});
+
+Then("the run's log counts the gate's refusal as a rejection of the {word} attempt", async function (this: RunWorld, kind: AttemptKind) {
+  const log = await runLog(this);
+  const refused = log.filter((event) => event.event === "gate" && event.verdict === "refused");
+  assert.ok(
+    refused.some((event) => event.event === "gate" && event.sendTo === kind),
+    `The run's log has no gate refusal sent to a ${kind} attempt:\n${JSON.stringify(refused)}`,
+  );
+  const end = log.find((event) => event.event === "end");
+  assert.ok(end?.event === "end", "The run's log has no measures");
+  assert.equal(end.measures.rejections[kind], 1, `The run's measures do not count the gate's refusal as a ${kind} rejection: ${JSON.stringify(end.measures.rejections)}`);
 });
