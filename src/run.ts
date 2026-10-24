@@ -97,12 +97,12 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
 
 /** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping the green ones green. */
 async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
-  const { executor, fr, worktreeDir, out, known, retries } = run;
+  const { worktreeDir, out, known, retries } = run;
   // An attempt and the judgment of its kind, retried from the work accepted before it while refused (FR-RUN-07).
   const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Refusal | undefined>) =>
     withRetries(retries, async (previous) => {
       const accepted = await acceptedWork(worktreeDir);
-      const attempt = await runAttempt({ executor, kind, fr, scenario, worktreeDir, refusal: previous, turns: run.turns });
+      const attempt = await attemptFor(run, kind, scenario, previous);
       return { refusal: attempt.refusal ?? (await judge(attempt.files)), rollback: accepted.restore };
     });
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
@@ -131,11 +131,16 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   );
 }
 
+/** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
+function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
+  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktreeDir, refusal: previous, turns: run.turns });
+}
+
 /** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
 async function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
-  const { executor, fr, worktreeDir, green, known } = run;
+  const { worktreeDir, green, known } = run;
   const accepted = await acceptedWork(worktreeDir);
-  const attempt = await runAttempt({ executor, kind: "code", fr, scenario, worktreeDir, refusal: previous, turns: run.turns });
+  const attempt = await attemptFor(run, "code", scenario, previous);
   if (attempt.refusal !== undefined) return { refusal: attempt.refusal, rollback: accepted.restore };
   const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
   const unit = await runUnitTests(worktreeDir, [], runCommand);
