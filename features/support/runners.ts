@@ -12,8 +12,8 @@ const TOOLS = ["tsc", "vitest", "cucumber-js"];
 
 // One real runner per kind of check (DOMAIN.md, Testing oid itself): this scenario runs real tsc, vitest and
 // cucumber-js; every other scenario replays what they answered when it was recorded. A real model writes something
-// new each time, so the smoke scenario runs the real tools too.
-const REAL_RUNNERS = new Set(["The FR is built in one commit on the run's branch", "On a real model, each attempt runs and its use reaches the run log"]);
+// new each time, so the scenarios tagged @smoke run the real tools too.
+const REAL_RUNNERS = new Set(["The FR is built in one commit on the run's branch"]);
 
 /**
  * Gives a fixture project oid's packages and, in place of its tsc, vitest and cucumber-js, the recorded runner.
@@ -41,7 +41,8 @@ Before(async function ({ pickle }) {
   // The examples of a Scenario Outline share its name; the line of their row tells their recordings apart.
   const row = pickle.astNodeIds.length > 1 ? `--row-${pickle.location?.line ?? "unknown"}` : "";
   const recording = join(RECORDINGS, `${slug(basename(pickle.uri, ".feature"))}--${slug(pickle.name)}${row}.json`);
-  const mode = REAL_RUNNERS.has(pickle.name) ? "real" : process.env.OID_RECORD_RUNNERS === "1" ? "record" : "replay";
+  const real = REAL_RUNNERS.has(pickle.name) || pickle.tags.some((tag) => tag.name === "@smoke");
+  const mode = real ? "real" : process.env.OID_RECORD_RUNNERS === "1" ? "record" : "replay";
   const state = join(await mkdtemp(join(tmpdir(), "oid-runner-")), "next");
   await writeFile(state, "0");
   if (mode === "record") await writeFile(recording, "[]\n");

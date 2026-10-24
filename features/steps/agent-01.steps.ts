@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
-import { GREET_01_SCENARIO, attemptDir, branches, git } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, OID_ROOT, attemptDir, branches, git } from "../support/fixture.ts";
 import { assertOutputNames, attemptsIn, runLog, runOid, scriptedModel } from "../support/run.ts";
 import { type ModelAttempt, ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -124,15 +124,11 @@ Given("the project has a .pi\\/settings.json that would change the agent's tools
   git(this.projectDir, "commit", "-q", "-m", "chore: the project's Pi settings");
 });
 
-Given("the Pi executor runs on the real model named in OID_SMOKE_MODEL, instead of the scripted one", function (this: RunWorld) {
+Given("the project's .oid.json names the real model in OID_SMOKE_MODEL", async function (this: RunWorld) {
   const name = process.env.OID_SMOKE_MODEL;
   assert.ok(name !== undefined && name !== "", 'Name the real model: OID_SMOKE_MODEL=<provider>/<model> NODE_OPTIONS="--import tsx" npx cucumber-js -p smoke');
   this.smokeModel = name;
-  this.piExecutor = async () => {
-    const { piExecutor } = await import("../../src/pi-executor.ts");
-    const { piModel } = await import("../../src/pi-model.ts");
-    return piExecutor(await piModel(name));
-  };
+  await configModel(this, name);
 });
 
 Then("the run ends without an error or a crash", function (this: RunWorld) {
@@ -196,4 +192,24 @@ Then(/^the output names (nowhere\/no-such-model)$/, function (this: RunWorld, mo
 
 Then("the scripted model was asked nothing", function (this: RunWorld) {
   assert.equal(scriptedModel(this).attempts.length, 0, "The scripted model was asked for an attempt");
+});
+
+Then("the run's summary is shown: what it built or not, where it stopped, its attempts and its cost", function (this: RunWorld) {
+  const summary = this.output.slice(this.output.lastIndexOf("Summary of"));
+  assert.ok(this.output.includes("Summary of"), `The run printed no summary:\n${this.output}`);
+  assert.match(summary, /\b(built|not built)\b/, `The summary does not say what was built:\n${summary}`);
+  assert.match(summary, /attempts .*cost/, `The summary does not give the attempts and the cost:\n${summary}`);
+  // Shown whether the scenario passes or not: the person running the smoke scenario reads it.
+  process.stdout.write(`\n${summary}\n`);
+});
+
+Then("a copy of the run's log is kept outside the temporary directory, and its path is shown", async function (this: RunWorld) {
+  const runs = join(this.projectDir, ".git/oid/runs");
+  const [log] = await readdir(runs);
+  assert.ok(log !== undefined, `The run left no log in ${runs}`);
+  // In oid's own .git: never committed, and not deleted with the fixture.
+  const kept = join(OID_ROOT, ".git/oid-smoke", log);
+  await mkdir(dirname(kept), { recursive: true });
+  await copyFile(join(runs, log), kept);
+  process.stdout.write(`The run's log is kept in ${kept}\n`);
 });
