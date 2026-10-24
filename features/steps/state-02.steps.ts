@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { attemptDir } from "../support/fixture.ts";
+import { OID_ROOT, attemptDir } from "../support/fixture.ts";
 import type { EndEvent, Measures } from "../../src/run-log.ts";
 import { assertOutputNames, attemptsIn, runLog, scriptedModel } from "../support/run.ts";
 import type { Usage } from "../support/scripted-executor.ts";
@@ -108,4 +108,11 @@ Then("next to the run's log is a directory with one transcript per attempt, each
 
 Then("the run's summary names that directory", function (this: RunWorld) {
   assertOutputNames(this, transcriptsDir(this));
+});
+
+Then("the run's log names the version of oid that made it", async function (this: RunWorld) {
+  const { version } = JSON.parse(readFileSync(join(OID_ROOT, "package.json"), "utf8")) as { version: string };
+  const start = (await runLog(this)).find((event) => event.event === "start");
+  assert.ok(start !== undefined, "The run's log has no start");
+  assert.equal((start as { oid?: string }).oid, version, "The run's log does not name the version of oid that made it");
 });
