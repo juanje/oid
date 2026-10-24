@@ -8,7 +8,7 @@ import { Given, Then } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
 import { GREET_01_SCENARIO, attemptDir, git } from "../support/fixture.ts";
 import { assertOutputNames, attemptsIn, runLog } from "../support/run.ts";
-import { ScriptedModel } from "../support/scripted-model.ts";
+import { type ModelAttempt, ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
 
 // Pi's own retries of a provider error, kept short so that a scenario does not wait seconds between them.
@@ -88,17 +88,22 @@ Then("the run's log gives each attempt the scripted model's id, its turns, and t
   }
 });
 
-/** The prepared attempt of `kind` in the scripted model's script, and its index there. */
+/** The index of the prepared attempt of `kind` in the scripted model's script. */
 function modelAttemptOf(model: ScriptedModel, kind: AttemptKind): number {
   const index = model.script.findIndex((attempt) => attempt.kind === kind);
   assert.notEqual(index, -1, `No prepared ${kind} attempt for the scripted model`);
   return index;
 }
 
-Given("the scripted model keeps calling tools in the code attempt without ending it", function (this: RunWorld) {
-  const model = scriptedModel(this);
+/** Has the scripted model answer the code attempt with `answer` instead of writing its files. */
+function codeAttemptAnswers(world: RunWorld, answer: Pick<ModelAttempt, "loops" | "error">): void {
+  const model = scriptedModel(world);
   const index = modelAttemptOf(model, "code");
-  model.script[index] = { ...model.script[index]!, dir: undefined, loops: true };
+  model.script[index] = { kind: "code", scenario: model.script[index]!.scenario, ...answer };
+}
+
+Given("the scripted model keeps calling tools in the code attempt without ending it", function (this: RunWorld) {
+  codeAttemptAnswers(this, { loops: true });
 });
 
 Then("the scripted model was asked for {int} turns in the code attempt", function (this: RunWorld, turns: number) {
@@ -109,9 +114,7 @@ Then("the scripted model was asked for {int} turns in the code attempt", functio
 const PROVIDER_ERROR = "529 overloaded_error: the scripted provider is overloaded";
 
 Given("the scripted model answers the code attempt with a provider error every time", function (this: RunWorld) {
-  const model = scriptedModel(this);
-  const index = modelAttemptOf(model, "code");
-  model.script[index] = { ...model.script[index]!, dir: undefined, error: PROVIDER_ERROR };
+  codeAttemptAnswers(this, { error: PROVIDER_ERROR });
 });
 
 Then("the output names the provider error", function (this: RunWorld) {
