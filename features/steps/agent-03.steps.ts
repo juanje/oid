@@ -89,3 +89,21 @@ Then(
     }
   },
 );
+
+/** The patterns of the step definitions in a prepared attempt's files. */
+function patternsIn(dir: string, file: string): string[] {
+  return [...readFileSync(join(dir, file), "utf8").matchAll(/\b(?:Given|When|Then)\("([^"]+)"/g)].map((match) => match[1]!);
+}
+
+Then("each steps attempt was given the patterns of the step definitions the project had when it started", function (this: RunWorld) {
+  // FR-GREET-01's steps are built; the second scenario's steps attempt also finds those of the first.
+  const greet01 = patternsIn(attemptDir("steps"), "features/steps/greet.steps.ts");
+  const expected = new Map([
+    [GREET_02_FIRST, greet01],
+    [GREET_02_SECOND, [...greet01, ...patternsIn(greet02AttemptDir("s1-steps"), "features/steps/greet-all.steps.ts")]],
+  ]);
+  for (const [scenario, patterns] of expected) {
+    const task = taskOf(this, "steps", scenario);
+    for (const pattern of patterns) assert.ok(task.includes(pattern), `The steps attempt for "${scenario}" was not given the pattern "${pattern}":\n${task}`);
+  }
+});
