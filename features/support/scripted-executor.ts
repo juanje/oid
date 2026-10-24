@@ -1,16 +1,26 @@
 import { cp } from "node:fs/promises";
-import type { Attempt, AttemptKind, Executor, Report } from "../../src/executor.ts";
+import type { Attempt, AttemptKind, Executor, Report, TryResult, TryTarget } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
 export interface PreparedAttempt {
   kind: AttemptKind;
   scenario: string;
   dir: string;
+  /** What the attempt checks with try once its files are in place, as an agent would before it ends. */
+  tries?: TryTarget[];
+}
+
+/** One call to try, with what it answered. */
+export interface Tried {
+  kind: AttemptKind;
+  target: TryTarget;
+  result: TryResult;
 }
 
 /** An executor that answers each request with the next prepared attempt, the way an agent's diff would land. */
 export class ScriptedExecutor implements Executor {
   asked = 0;
+  readonly tried: Tried[] = [];
   readonly #projectDir: string;
   readonly #script: PreparedAttempt[];
 
@@ -35,6 +45,7 @@ export class ScriptedExecutor implements Executor {
     }
     this.asked += 1;
     await cp(next.dir, attempt.worktree, { recursive: true });
+    for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
     return { result: `scripted ${attempt.kind} attempt` };
   }
 }
