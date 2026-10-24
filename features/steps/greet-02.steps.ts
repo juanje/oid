@@ -72,3 +72,11 @@ Then("the output names the unit test that turned red", function (this: RunWorld)
   const [name] = testNames(join(attemptDir("test"), "tests/greet.test.ts"));
   assert.ok(name !== undefined && this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
 });
+
+Given("the scripted code attempt for the second scenario breaks the first scenario of FR-GREET-02, and no unit test", function (this: RunWorld) {
+  this.script = [...BUILD_FIRST, ...secondScenarioBreaking("s2-code-names-breaks-pair")];
+});
+
+Then("the output names the scenario that turned red", function (this: RunWorld) {
+  assert.ok(this.output.includes(FIRST), `The output does not name "${FIRST}":\n${this.output}`);
+});
