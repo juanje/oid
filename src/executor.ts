@@ -3,6 +3,8 @@ export type AttemptKind = "steps" | "test" | "code";
 export interface Attempt {
   kind: AttemptKind;
   fr: string;
+  /** The name of the scenario the attempt works on. */
+  scenario: string;
   /** The run's worktree, where the attempt writes its diff. */
   worktree: string;
 }
