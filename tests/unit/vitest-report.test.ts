@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { passedTests } from "../../src/vitest-report.ts";
+import { failedTests, passedTests } from "../../src/vitest-report.ts";
+import { recorded } from "./support/recorded.ts";
 
 describe("passedTests", () => {
   test("names each passed test by its file, relative to the root, and its full name", () => {
@@ -22,5 +23,21 @@ describe("passedTests", () => {
     };
 
     expect(passedTests(report, "/work")).toEqual(["tests/greet.test.ts > greet says hello"]);
+  });
+});
+
+describe("failedTests", () => {
+  test("names a failed test by its file and full name", () => {
+    const report = JSON.parse(recorded("vitest-greet-02-assert.json"));
+
+    expect(failedTests(report, "/work")).toEqual(["tests/greet-all.test.ts > greets two people together"]);
+  });
+
+  test("names a test file that failed to load by its file and message", () => {
+    const report = JSON.parse(recorded("vitest-greet-02-load.json"));
+
+    expect(failedTests(report, "/work")).toEqual([
+      "tests/greet-all.test.ts: Cannot find module '../src/greet-all.ts' imported from '/work/tests/greet-all.test.ts'",
+    ]);
   });
 });

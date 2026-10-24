@@ -1,0 +1,32 @@
+{
+  "numTotalTests": 2,
+  "numFailedTests": 1,
+  "testResults": [
+    {
+      "name": "/work/tests/greet-all.test.ts",
+      "status": "failed",
+      "message": "",
+      "assertionResults": [
+        {
+          "fullName": "greets two people together",
+          "status": "failed",
+          "failureMessages": [
+            "AssertionError: expected 'Hello, Ada!' to be 'Hello, Ada and Grace!' // Object.is equality"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "/work/tests/greet.test.ts",
+      "status": "passed",
+      "message": "",
+      "assertionResults": [
+        {
+          "fullName": "greets a person by name",
+          "status": "passed",
+          "failureMessages": []
+        }
+      ]
+    }
+  ]
+}
