@@ -81,6 +81,24 @@ describe("taskFor", () => {
     for (const pattern of patterns) expect(task).toContain(pattern);
   });
 
+  test("after the gate, gives each scenario in its focus, of whichever FR, with its steps and its failure", () => {
+    const broken = {
+      uri: "features/greet-02.feature",
+      line: 4,
+      name: "Two people are greeted together",
+      steps: ['When I greet "Ada" and "Grace"', 'Then I get "Hello, Ada and Grace!"'],
+      failure: { step: 'I get "Hello, Ada and Grace!"', kind: "Outcome" as const, status: "FAILED", message: "AssertionError: expected 'Hello, Grace and Ada!'" },
+    };
+    const refusal = { ...REFUSAL, focus: { scenarios: [broken], tests: [] } };
+
+    const task = taskFor({ kind: "code", fr: "FR-GREET-03", scenario: SCENARIO, refusal, context: CONTEXT });
+
+    expect(task).toContain("features/greet-02.feature:4");
+    expect(task).toContain(broken.name);
+    for (const step of broken.steps) expect(task).toContain(step);
+    expect(task).toContain(broken.failure.message);
+  });
+
   test("gives a retry the refusal of the attempt before it", () => {
     const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
 
