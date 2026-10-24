@@ -1,8 +1,9 @@
-import { parseArgs } from "./cli-args.ts";
+import { helpText, parseArgs, usageOf } from "./cli-args.ts";
 import { ConfigError } from "./config.ts";
 import type { Executor } from "./executor.ts";
-import { EXIT_ERROR } from "./exit.ts";
+import { EXIT_BUILT, EXIT_ERROR } from "./exit.ts";
 import { runFr } from "./run.ts";
+import { oidVersion } from "./version.ts";
 
 export interface CliIo {
   cwd: string;
@@ -16,8 +17,16 @@ export interface CliIo {
 export async function runCli(args: string[], io: CliIo): Promise<number> {
   const parsed = parseArgs(args);
   if ("error" in parsed) {
-    io.stderr(`${parsed.error}\n`);
+    io.stderr(`${parsed.error}\n\n${helpText()}\n`);
     return EXIT_ERROR;
+  }
+  if (parsed.command === "help") {
+    io.stdout(`${parsed.of === undefined ? helpText() : usageOf(parsed.of)}\n`);
+    return EXIT_BUILT;
+  }
+  if (parsed.command === "version") {
+    io.stdout(`${oidVersion()}\n`);
+    return EXIT_BUILT;
   }
   let executor: Executor;
   try {
