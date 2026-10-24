@@ -216,6 +216,8 @@ With `--reporter=json --outputFile=<file>`:
 
 - **`os.homedir()` follows `$HOME`.** The account's real home is `os.userInfo().homedir`, which throws when the account has no passwd entry.
 - **Resolve symlinks before checking for secrets.** Match secret-shaped names (`.env.alias`), not only exact ones.
+- **Secret-shaped names** (FR-AGENT-05), matched on the path asked for and on where it leads: `.env`, `.env.*`, `.npmrc`, `.netrc`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `auth.json`, and anything under a `secrets/` directory. `.npmrc` often holds a registry token in TypeScript projects. Home's `.ssh`, `.aws` and `.gnupg` need no rule: they are outside every worktree.
+- **Noise:** `.git`, which in a worktree is a file naming the gitdir, not a directory, and oid's own state. Agents never read it, and listings and searches leave it out, as they leave out secret-shaped files.
 
 ## Edge cases
 
