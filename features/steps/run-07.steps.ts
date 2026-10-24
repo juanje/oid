@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir, git } from "../support/fixture.ts";
 import { assertOutputNames, requestsOf, runBranch } from "../support/run.ts";
@@ -49,4 +51,17 @@ Then("the run's commit does not hold the file only the refused attempt wrote", f
 
 Then("the output gives the refusal of the retry", function (this: RunWorld) {
   assertOutputNames(this, RETRY_REFUSED);
+});
+
+Given("my working copy's .oid.json allows no retries, not committed", async function (this: RunWorld) {
+  const path = join(this.projectDir, ".oid.json");
+  const config = JSON.parse(await readFile(path, "utf8"));
+  config.limits = { ...config.limits, retries: 0 };
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
+});
+
+Then("the output says the uncommitted .oid.json was not used", function (this: RunWorld) {
+  // Fixed words, not wording: a line that names the file and that it is not committed.
+  const line = this.output.split("\n").find((text) => text.includes(".oid.json") && /commit/i.test(text));
+  assert.ok(line !== undefined, `The output does not say the uncommitted .oid.json was not used:\n${this.output}`);
 });
