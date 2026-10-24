@@ -1,4 +1,5 @@
 import type { CommandRunner } from "./command.ts";
+import type { Scenario } from "./cucumber-messages.ts";
 import type { Refusal } from "./refusal.ts";
 import type { ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, type UnitRun } from "./unit-tests.ts";
@@ -6,7 +7,7 @@ import { runUnitTests, type UnitRun } from "./unit-tests.ts";
 /** Refuses a steps attempt unless its scenario ran and failed: a scenario that passes before its code proves nothing (D-02). */
 export function judgeSteps(result: ScenarioRun): Refusal | undefined {
   if (result.status === "failed") return undefined;
-  const scenario = `${result.uri}:${result.line} "${result.name}"`;
+  const scenario = describeScenario(result);
   if (result.status === "passed") {
     return {
       failed: "The scenario passes before its code exists",
@@ -41,7 +42,7 @@ export function judgeCode(unit: UnitRun, greenScenarios: ScenarioRun[]): Refusal
   if (turnedRed.length > 0) {
     return {
       failed: "Scenarios that passed before this code no longer pass",
-      evidence: turnedRed.map((scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}": ${scenario.status}`).join("\n"),
+      evidence: turnedRed.map((scenario) => `${describeScenario(scenario)}: ${scenario.status}`).join("\n"),
       next: "Change the code so that these scenarios pass again, keeping the unit tests green",
     };
   }
@@ -65,4 +66,8 @@ export async function judgeNewTests(worktreeDir: string, testFiles: string[], ru
     evidence: passing.join("\n"),
     next: "Make each of these tests assert behaviour the code does not have yet",
   };
+}
+
+function describeScenario(scenario: Scenario): string {
+  return `${scenario.uri}:${scenario.line} "${scenario.name}"`;
 }
