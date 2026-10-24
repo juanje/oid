@@ -14,6 +14,15 @@ export interface PreparedAttempt {
   report?: string | null;
   /** How many turns its agent would take to finish; 1 when left out. */
   turns?: number;
+  /** What the executor reports of the agent's use: its model, tokens, cost and denied tool calls. */
+  usage?: Usage;
+}
+
+export interface Usage {
+  model: string;
+  tokens: number;
+  cost: number;
+  deniedToolCalls: number;
 }
 
 /** One call to try, with what it answered. */
@@ -68,7 +77,7 @@ export class ScriptedExecutor implements Executor {
     // finishTurn; an agent ended before it finished leaves no diff and no report.
     const wanted = next.turns ?? 1;
     const limit = attempt.limits?.turns ?? Number.POSITIVE_INFINITY;
-    const outcome = { turns: Math.min(wanted, limit), stoppedAtLimit: wanted > limit };
+    const outcome = { turns: Math.min(wanted, limit), stoppedAtLimit: wanted > limit, ...next.usage };
     this.requests.push({
       kind: attempt.kind,
       refusal: attempt.refusal,
