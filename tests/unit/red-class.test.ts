@@ -23,6 +23,10 @@ describe("classifyFailure", () => {
     expect(classifyFailure("TypeError: greetWith is not a function", greetExists)).toBe("missing_implementation");
   });
 
+  test("a test file vitest cannot transform is test_bug", () => {
+    expect(classifyFailure("Transform failed with 1 error:", nothingExists)).toBe("test_bug");
+  });
+
   test("anything it cannot tell is undecided", () => {
     expect(classifyFailure("Error: something unexpected", nothingExists)).toBe("undecided");
   });
