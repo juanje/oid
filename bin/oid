@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+// oid's command. Node strips the source's types as it loads it, so oid runs from its checkout (npm link); a package
+// built to JavaScript is MVP packaging.
+import { main } from "../src/main.ts";
+
+process.exitCode = await main(process.argv.slice(2));

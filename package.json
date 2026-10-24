@@ -2,7 +2,7 @@
   "name": "oid",
   "version": "0.0.0",
   "private": true,
-  "description": "oid — Outside-In Development: coding agents build software from a verifiable contract",
+  "description": "oid \u2014 Outside-In Development: coding agents build software from a verifiable contract",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -23,5 +23,8 @@
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "typescript-api": "npm:typescript@6.0.3"
+  },
+  "bin": {
+    "oid": "bin/oid"
   }
 }
