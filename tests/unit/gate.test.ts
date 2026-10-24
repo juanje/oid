@@ -162,6 +162,22 @@ describe("gateRefusal", () => {
     expect(refusal?.focus).toEqual({ scenarios: [GREET_02_SECOND], tests: ["tests/greet.test.ts > greets"] });
   });
 
+  test("gives each failing scenario in focus with its steps and its failure, when the gate has them", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    // Recorded with FR-GREET-02's second scenario failing on an assertion.
+    const run = runnersAnswering(dir, { tsc: { exitCode: 0, output: "" }, vitest: { report: PASSING_UNIT }, cucumber: { report: recorded("cucumber-greet-02-assertion.ndjson") } });
+
+    const focus = gateRefusal(await runGate(dir, run))?.focus;
+
+    expect(focus?.scenarios).toMatchObject([
+      {
+        name: GREET_02_SECOND.name,
+        steps: ['When I greet "Ada", "Grace" and "Linus"', 'Then I get "Hello, Ada, Grace and Linus!"'],
+        failure: { step: 'I get "Hello, Ada, Grace and Linus!"', message: expect.stringContaining("AssertionError") },
+      },
+    ]);
+  });
+
   test("refuses nothing when every check passes", () => {
     expect(gateRefusal([{ name: "types", passed: true, output: "" }])).toBeUndefined();
   });
