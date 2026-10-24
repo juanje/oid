@@ -22,13 +22,9 @@ export interface RunWorktree {
 }
 
 /**
- * Starts a run on a new branch from HEAD, in a worktree beside the repository, in ../.oid-worktrees/<repository>/<run id>:
- * the person's checkout never holds it, and tools that skip paths containing .git still see it. The worktree's HEAD
- * is detached, so checkpoints never touch the branch. A run id another run already took gets a suffix.
- */
-/**
  * `runId`, or `runId-<n>` when another run took it: its branch, its checkpoints, its worktree or its log. The run
- * starts its log before its worktree, so a run that stopped before creating one still holds its id.
+ * starts its log before its worktree, so a run that stopped before creating one still holds its id. It is the one
+ * place a run's id is chosen: once its log exists, the run's own log would look like another run's.
  */
 export async function freeRunId(projectDir: string, runId: string): Promise<string> {
   const root = await git(projectDir, "rev-parse", "--show-toplevel");
@@ -41,11 +37,16 @@ export async function freeRunId(projectDir: string, runId: string): Promise<stri
   return id;
 }
 
-export async function createRunWorktree(projectDir: string, runId: string): Promise<RunWorktree> {
+/**
+ * Starts run `id` on a new branch from HEAD, in a worktree beside the repository, in
+ * ../.oid-worktrees/<repository>/<run id>: the person's checkout never holds it, and tools that skip paths containing
+ * .git still see it. The worktree's HEAD is detached, so checkpoints never touch the branch. `id` is the one
+ * freeRunId chose.
+ */
+export async function createRunWorktree(projectDir: string, id: string): Promise<RunWorktree> {
   const root = await git(projectDir, "rev-parse", "--show-toplevel");
   const start = await git(projectDir, "rev-parse", "HEAD");
   const runs = join(dirname(root), ".oid-worktrees", basename(root));
-  const id = await freeRunId(projectDir, runId);
   const worktree = { id, dir: join(runs, id), branch: `oid/${id}`, checkpoints: `${CHECKPOINTS}${id}`, start, projectDir: root };
   await git(root, "branch", worktree.branch, start);
   await git(root, "worktree", "add", "-q", "--detach", worktree.dir, start);
