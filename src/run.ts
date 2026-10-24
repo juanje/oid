@@ -13,7 +13,7 @@ import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
-import { type AttemptEvent, type LogEvent, measuresOf, openRunLog } from "./run-log.ts";
+import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { acceptedWork, checkpoint, createRunWorktree, finishRun, type RunWorktree } from "./worktree.ts";
@@ -46,15 +46,9 @@ interface FrRun {
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr(options: RunOptions): Promise<number> {
-  // A monotonic clock: a suspended machine does not count in the run's time (DOMAIN.md, Node child processes).
-  const started = performance.now();
   const worktree = await createRunWorktree(options.projectDir, runId(options.fr));
-  const log = await openRunLog(worktree.dir, worktree.id);
-  const events: LogEvent[] = [];
-  const record = async (event: LogEvent): Promise<void> => {
-    events.push(event);
-    await log.append(event);
-  };
+  const log = await startRunLog(worktree.dir, worktree.id);
+  const record = log.record;
   let exitCode: number | undefined;
   try {
     exitCode = await buildFr(options, worktree, record);
@@ -70,7 +64,7 @@ export async function runFr(options: RunOptions): Promise<number> {
   } finally {
     // The worktree goes however the run ends; only a built FR gets its commit and drops its checkpoints.
     await finishRun(worktree, exitCode === EXIT_BUILT ? `feat(${options.fr}): built by oid run` : undefined);
-    if (exitCode !== undefined) await record({ event: "end", exitCode, measures: measuresOf(events, performance.now() - started) });
+    if (exitCode !== undefined) await log.end(exitCode);
   }
 }
 

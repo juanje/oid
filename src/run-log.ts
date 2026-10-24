@@ -60,6 +60,24 @@ export async function openRunLog(dir: string, runId: string): Promise<RunLog> {
   return { append: (event) => appendFile(path, `${JSON.stringify(event)}\n`) };
 }
 
+export interface RunRecorder {
+  record(event: LogEvent): Promise<void>;
+  /** Appends the end of the run, with its measures and its time since the log started. */
+  end(exitCode: number): Promise<void>;
+}
+
+/** Starts run `runId`'s log, and its clock: a monotonic one, so that a suspended machine does not count. */
+export async function startRunLog(dir: string, runId: string): Promise<RunRecorder> {
+  const started = performance.now();
+  const log = await openRunLog(dir, runId);
+  const events: LogEvent[] = [];
+  const record = async (event: LogEvent): Promise<void> => {
+    events.push(event);
+    await log.append(event);
+  };
+  return { record, end: (exitCode) => record({ event: "end", exitCode, measures: measuresOf(events, performance.now() - started) }) };
+}
+
 /** The run's measures, from its attempt events, and its time. */
 export function measuresOf(events: LogEvent[], timeMs: number): Measures {
   const attempts = events.filter((event): event is AttemptEvent => event.event === "attempt");
