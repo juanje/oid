@@ -8,7 +8,6 @@ import { installRunners } from "./runners.ts";
 
 export const OID_ROOT = resolve(import.meta.dirname, "../..");
 const GREET = join(OID_ROOT, "fixtures/greet");
-const GREET_02 = join(GREET, "greet-02");
 
 /** Runs git in `dir` and returns its trimmed stdout. Global and system config are cut off in hooks.ts. */
 export function git(dir: string, ...args: string[]): string {
@@ -28,21 +27,26 @@ export async function createGreetProject(): Promise<string> {
   return dir;
 }
 
-/** The greet project with FR-GREET-01 built and committed, then FR-GREET-02's approved feature file committed. */
-export async function createGreet02Project(): Promise<string> {
+/** The greet project with FR-GREET-01 built and committed, then another FR's approved contract committed. */
+export async function createGreetProjectWith(fr: "greet-02" | "greet-03"): Promise<string> {
   const dir = await createGreetProject();
   for (const attempt of ["steps", "test", "code"]) await cp(attemptDir(attempt), dir, { recursive: true });
   git(dir, "add", "--all");
   git(dir, "commit", "-q", "-m", "feat(FR-GREET-01): greet a person by name");
-  await cp(join(GREET_02, "contract"), dir, { recursive: true });
+  await cp(join(GREET, fr, "contract"), dir, { recursive: true });
   git(dir, "add", "--all");
-  git(dir, "commit", "-q", "-m", "spec(FR-GREET-02): greet a group of people");
+  git(dir, "commit", "-q", "-m", `spec: ${fr}`);
   return dir;
 }
 
 /** The directory of a prepared attempt for FR-GREET-02. */
 export function greet02AttemptDir(name: string): string {
-  return join(GREET_02, "attempts", name);
+  return join(GREET, "greet-02", "attempts", name);
+}
+
+/** The directory of a prepared attempt for FR-GREET-03. */
+export function greet03AttemptDir(name: string): string {
+  return join(GREET, "greet-03", "attempts", name);
 }
 
 /** The names of the scenarios of a fixture feature file, in file order. */

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { attemptDir, createGreet02Project, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
+import { attemptDir, createGreetProjectWith, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
 import { assertOutputNames } from "../support/run.ts";
 import { lastAttempt, type PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -17,7 +17,7 @@ const BUILD_FIRST = attempts(FIRST, ["steps", "s1-steps"], ["test", "s1-test"], 
 const BUILD_SECOND = attempts(SECOND, ["steps", "s2-steps"], ["test", "s2-test"], ["code", "s2-code"]);
 
 Given("a project where FR-GREET-01 is built and FR-GREET-02 has an approved feature file with two scenarios", async function (this: RunWorld) {
-  this.projectDir = await createGreet02Project();
+  this.projectDir = await createGreetProjectWith("greet-02");
 });
 
 Given("a scripted executor that builds the first scenario of FR-GREET-02 and then the second", function (this: RunWorld) {
