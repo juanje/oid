@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
-import { readFile, realpath, writeFile } from "node:fs/promises";
+import { chmod, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { acceptedWork, commitRun, createRunWorktree, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
+import { acceptedWork, checkpoint, createRunWorktree, finishRun, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
@@ -108,17 +108,84 @@ describe("acceptedWork", () => {
   });
 });
 
-describe("commitRun", () => {
-  test("commits every change in the worktree but the shared node_modules, as one commit on top of the starting HEAD", async () => {
+describe("two runs of one id", () => {
+  test("each get a branch, a worktree and checkpoints of their own", async () => {
+    const repo = await tempRepo({ "a.txt": "a\n" });
+
+    const first = await createRunWorktree(repo, "FR-X-01-20261024T120000");
+    const second = await createRunWorktree(repo, "FR-X-01-20261024T120000");
+
+    expect(new Set([first.branch, second.branch]).size).toBe(2);
+    expect(new Set([first.dir, second.dir]).size).toBe(2);
+    expect(new Set([first.checkpoints, second.checkpoints]).size).toBe(2);
+  });
+});
+
+describe("checkpoint", () => {
+  test("commits an accepted attempt on top of the last checkpoint and points the run's checkpoint ref at it", async () => {
+    const repo = await tempRepo({ "a.txt": "first\n" });
+    const start = git(repo, "rev-parse", "HEAD");
+    const worktree = await createRunWorktree(repo, "r1");
+    await writeFiles(worktree.dir, { "features/steps/a.steps.ts": "export {};\n" });
+    await takeAttemptDiff(worktree.dir);
+
+    await checkpoint(worktree, "steps for a scenario");
+
+    expect(git(repo, "rev-parse", `${worktree.checkpoints}^`)).toBe(start);
+    expect(git(repo, "ls-tree", "-r", "--name-only", worktree.checkpoints)).toContain("features/steps/a.steps.ts");
+    expect(git(repo, "rev-parse", worktree.branch)).toBe(start);
+  });
+
+  test("runs none of the project's hooks, for the worktree or its commits", async () => {
+    const repo = await tempRepo({ "a.txt": "first\n" });
+    const mark = `${repo}.hook-ran`;
+    for (const hook of ["pre-commit", "commit-msg", "post-commit", "post-checkout"]) {
+      await writeFiles(repo, { [`.git/hooks/${hook}`]: `#!/bin/sh\necho ${hook} >> "${mark}"\nexit 1\n` });
+      await chmod(join(repo, ".git/hooks", hook), 0o755);
+    }
+    const worktree = await createRunWorktree(repo, "r1");
+    await writeFiles(worktree.dir, { "src/a.ts": "export {};\n" });
+    await takeAttemptDiff(worktree.dir);
+
+    await checkpoint(worktree, "code for a scenario");
+    await finishRun(worktree, "feat(FR-X-01): built");
+
+    expect(existsSync(mark)).toBe(false);
+  });
+});
+
+describe("finishRun", () => {
+  test("a built run: its checkpoints squashed onto the branch as one commit, its checkpoint ref deleted, its worktree removed", async () => {
     const repo = await tempRepo({ "a.txt": "first\n" });
     await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
     const start = git(repo, "rev-parse", "HEAD");
     const worktree = await createRunWorktree(repo, "r1");
-    await writeFiles(worktree.dir, { "a.txt": "changed\n", "src/new.ts": "export {};\n" });
+    for (const files of [{ "features/steps/a.steps.ts": "export {};\n" }, { "a.txt": "changed\n", "src/new.ts": "export {};\n" }]) {
+      await writeFiles(worktree.dir, files);
+      await takeAttemptDiff(worktree.dir);
+      await checkpoint(worktree, "an accepted attempt");
+    }
 
-    await commitRun(worktree.dir, "feat(FR-X-01): built");
+    await finishRun(worktree, "feat(FR-X-01): built");
 
     expect(git(repo, "rev-parse", `${worktree.branch}^`)).toBe(start);
-    expect(git(repo, "diff", "--name-only", start, worktree.branch).split("\n")).toEqual(["a.txt", "src/new.ts"]);
+    expect(git(repo, "diff", "--name-only", start, worktree.branch).split("\n")).toEqual(["a.txt", "features/steps/a.steps.ts", "src/new.ts"]);
+    expect(git(repo, "for-each-ref", worktree.checkpoints)).toBe("");
+    expect(existsSync(worktree.dir)).toBe(false);
+  });
+
+  test("a run that stops before the end: its worktree removed, its branch at the start, its checkpoints kept", async () => {
+    const repo = await tempRepo({ "a.txt": "first\n" });
+    const start = git(repo, "rev-parse", "HEAD");
+    const worktree = await createRunWorktree(repo, "r1");
+    await writeFiles(worktree.dir, { "features/steps/a.steps.ts": "export {};\n" });
+    await takeAttemptDiff(worktree.dir);
+    await checkpoint(worktree, "steps for a scenario");
+
+    await finishRun(worktree, undefined);
+
+    expect(git(repo, "rev-parse", worktree.branch)).toBe(start);
+    expect(git(repo, "ls-tree", "-r", "--name-only", worktree.checkpoints)).toContain("features/steps/a.steps.ts");
+    expect(existsSync(worktree.dir)).toBe(false);
   });
 });
