@@ -26,10 +26,14 @@ export interface PiExecutorOptions {
 
 /** Runs each attempt as a fresh Pi agent in the run's worktree (FR-AGENT-01). */
 export function piExecutor(options: PiExecutorOptions): Executor {
-  // Pi must not download rg or fd when they are missing, nor send telemetry (DOMAIN.md, Pi SDK).
+  runPiOffline();
+  return { run: (attempt) => runAgent(options, attempt) };
+}
+
+/** Pi must not download rg or fd when they are missing, nor send telemetry (DOMAIN.md, Pi SDK). Set before its runtime is made. */
+export function runPiOffline(): void {
   process.env.PI_OFFLINE = "1";
   process.env.PI_TELEMETRY = "0";
-  return { run: (attempt) => runAgent(options, attempt) };
 }
 
 async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: Attempt): Promise<AttemptOutcome> {
