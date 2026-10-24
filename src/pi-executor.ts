@@ -101,6 +101,7 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
     stoppedAtLimit,
     model: `${model.provider}/${model.id}`,
     tokens: sum((usage) => usage.totalTokens),
+    cacheRead: sum((usage) => usage.cacheRead),
     cost: sum((usage) => usage.cost.total),
     deniedToolCalls,
   };

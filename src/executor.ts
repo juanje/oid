@@ -45,6 +45,8 @@ export interface AttemptOutcome {
   /** The agent's model and use, as the executor measured them (FR-STATE-02). */
   model?: string;
   tokens?: number;
+  /** Of the tokens, those read from the provider's cache: what makes two runs' costs comparable. */
+  cacheRead?: number;
   cost?: number;
   deniedToolCalls?: number;
   /** The agent stopped on an error no attempt can fix, such as a provider error its executor's own retries did not clear. */

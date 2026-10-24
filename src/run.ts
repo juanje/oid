@@ -130,10 +130,10 @@ function attemptEvent(attempt: {
   reds?: string[];
 }): AttemptEvent {
   const { kind, scenario, refusal, retry, reds = [] } = attempt;
-  const { turns, model, tokens, cost, deniedToolCalls } = attempt.outcome;
+  const { turns, model, tokens, cacheRead, cost, deniedToolCalls } = attempt.outcome;
   const verdict = attempt.verdict ?? (refusal === undefined ? "accepted" : "refused");
   const shown = { ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
-  return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cost, deniedToolCalls };
+  return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cacheRead, cost, deniedToolCalls };
 }
 
 async function buildFr(

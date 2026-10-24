@@ -22,6 +22,8 @@ export interface AttemptEvent {
   turns: number;
   model?: string;
   tokens?: number;
+  /** Of the tokens, those read from the provider's cache. */
+  cacheRead?: number;
   cost?: number;
   deniedToolCalls?: number;
 }
@@ -68,6 +70,8 @@ export interface Measures {
   /** Retries refused with the same failure and evidence as the attempt before them. */
   blindRetries: number;
   tokens: number;
+  /** Of the tokens, those read from the provider's cache; logs before 0.1.2 do not have it. */
+  cacheRead?: number;
   cost: number;
   deniedToolCalls: number;
   /** The run's time, on a monotonic clock, so that a suspended machine does not count. */
@@ -129,7 +133,7 @@ export async function startRunLog(dir: string, runId: string, onEvent: (event: L
 /** The run's measures, from its attempt events, and its time. */
 export function measuresOf(events: LogEvent[], timeMs: number): Measures {
   const attempts = events.filter((event): event is AttemptEvent => event.event === "attempt");
-  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, tokens: 0, cost: 0, deniedToolCalls: 0, timeMs };
+  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, timeMs };
   const last = new Map<AttemptKind, AttemptEvent>();
   for (const attempt of attempts) {
     measures.attempts[attempt.kind] = (measures.attempts[attempt.kind] ?? 0) + 1;
@@ -137,6 +141,7 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
     const before = last.get(attempt.kind)?.refusal;
     if (attempt.retry && attempt.refusal !== undefined && before !== undefined && sameFailure(attempt.refusal, before)) measures.blindRetries += 1;
     measures.tokens += attempt.tokens ?? 0;
+    measures.cacheRead = (measures.cacheRead ?? 0) + (attempt.cacheRead ?? 0);
     measures.cost += attempt.cost ?? 0;
     measures.deniedToolCalls += attempt.deniedToolCalls ?? 0;
     last.set(attempt.kind, attempt);
