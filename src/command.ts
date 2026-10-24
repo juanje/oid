@@ -11,6 +11,8 @@ export interface CommandOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+export type CommandRunner = typeof runCommand;
+
 /** Runs a command to its end. It uses spawn, not spawnSync, so the event loop keeps running while the child does. */
 export function runCommand(command: string, args: string[], options: CommandOptions): Promise<CommandResult> {
   return new Promise((resolve, reject) => {

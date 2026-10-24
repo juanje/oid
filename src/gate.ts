@@ -1,8 +1,6 @@
 import { join } from "node:path";
-import type { CommandOptions, CommandResult } from "./command.ts";
+import type { CommandRunner } from "./command.ts";
 import type { Refusal } from "./refusal.ts";
-
-export type CommandRunner = (command: string, args: string[], options: CommandOptions) => Promise<CommandResult>;
 
 export interface CheckResult {
   name: string;

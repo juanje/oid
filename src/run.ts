@@ -12,26 +12,17 @@ export interface RunOptions {
   out: (text: string) => void;
 }
 
-export const EXIT_BUILT = 0;
-export const EXIT_REFUSED = 1;
+const EXIT_BUILT = 0;
+const EXIT_REFUSED = 1;
 
 const ATTEMPTS: AttemptKind[] = ["steps", "test", "code"];
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr({ projectDir, fr, executor, out }: RunOptions): Promise<number> {
   const worktree = await createRunWorktree(projectDir, runId(fr));
-  for (const kind of ATTEMPTS) {
-    await executor.run({ kind, fr, worktree: worktree.dir });
-    const changed = await takeAttemptChanges(worktree.dir);
-    const refusal = await judgeAttempt(kind, worktree.dir, changed);
-    if (refusal !== undefined) {
-      out(formatRefusal(refusal));
-      return EXIT_REFUSED;
-    }
-  }
-  const gateFailure = gateRefusal(await runGate(worktree.dir, runCommand));
-  if (gateFailure !== undefined) {
-    out(formatRefusal(gateFailure));
+  const refusal = (await runAttempts(executor, fr, worktree.dir)) ?? gateRefusal(await runGate(worktree.dir, runCommand));
+  if (refusal !== undefined) {
+    out(formatRefusal(refusal));
     return EXIT_REFUSED;
   }
   await commitRun(worktree.dir, `feat(${fr}): built by oid run`);
@@ -39,8 +30,16 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
   return EXIT_BUILT;
 }
 
-async function judgeAttempt(kind: AttemptKind, worktreeDir: string, changed: string[]): Promise<Refusal | undefined> {
-  if (kind === "test") return judgeNewTests(worktreeDir, changed);
+/** Runs each attempt in order and returns the first refusal, if any. */
+async function runAttempts(executor: Executor, fr: string, worktreeDir: string): Promise<Refusal | undefined> {
+  for (const kind of ATTEMPTS) {
+    await executor.run({ kind, fr, worktree: worktreeDir });
+    const changed = await takeAttemptChanges(worktreeDir);
+    if (kind === "test") {
+      const refusal = await judgeNewTests(worktreeDir, changed);
+      if (refusal !== undefined) return refusal;
+    }
+  }
   return undefined;
 }
 

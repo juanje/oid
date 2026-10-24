@@ -3,6 +3,8 @@ import { appendFile, mkdir, readFile, symlink } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { git } from "./git.ts";
 
+const NODE_MODULES_PATTERN = "/node_modules";
+
 export interface RunWorktree {
   dir: string;
   branch: string;
@@ -29,8 +31,6 @@ async function shareNodeModules(projectDir: string, worktreeDir: string): Promis
     await appendFile(exclude, `${current === "" || current.endsWith("\n") ? "" : "\n"}${NODE_MODULES_PATTERN}\n`);
   }
 }
-
-const NODE_MODULES_PATTERN = "/node_modules";
 
 /** The files the last attempt changed, sorted. The index holds what earlier attempts changed, so this stages the new changes too. */
 export async function takeAttemptChanges(worktreeDir: string): Promise<string[]> {
