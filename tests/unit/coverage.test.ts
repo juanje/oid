@@ -1,5 +1,9 @@
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
-import { addedLines, untaken, uncoveredNew } from "../../src/coverage.ts";
+import { addedLines, scenarioCoverage, untaken, uncoveredNew } from "../../src/coverage.ts";
 
 const DIFF = `diff --git a/src/greet.ts b/src/greet.ts
 index 1111111..2222222 100644
@@ -80,5 +84,28 @@ describe("uncoveredNew", () => {
     ];
 
     expect(uncoveredNew(left, new Map([["src/greet.ts", new Set([1, 2, 3])]]))).toEqual([left[0]]);
+  });
+});
+
+describe("scenarioCoverage", () => {
+  test("keeps only the scripts under the source paths: a step definition's branches are not the code's to cover", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "oid-coverage-")));
+    const scripts = ["src/greet.js", "features/steps/greet.steps.js"];
+    for (const script of scripts) {
+      mkdirSync(join(root, script, ".."), { recursive: true });
+      writeFileSync(join(root, script), "export const ok = (x) => (x ? 1 : 2);\n");
+    }
+    const v8 = join(root, "v8");
+    mkdirSync(v8);
+    const result = scripts.map((script, id) => ({
+      scriptId: String(id),
+      url: pathToFileURL(join(root, script)).href,
+      functions: [{ functionName: "", isBlockCoverage: true, ranges: [{ startOffset: 0, endOffset: 39, count: 1 }] }],
+    }));
+    writeFileSync(join(v8, "coverage-1.json"), JSON.stringify({ result }));
+
+    const report = await scenarioCoverage(v8, root, ["src/"]);
+
+    expect(Object.keys(report).map((path) => relative(root, path))).toEqual(["src/greet.js"]);
   });
 });
