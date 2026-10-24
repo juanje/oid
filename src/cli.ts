@@ -2,7 +2,6 @@ import { helpText, parseArgs, usageOf } from "./cli-args.ts";
 import { ConfigError } from "./config.ts";
 import type { Executor } from "./executor.ts";
 import { EXIT_ERROR, EXIT_OK } from "./exit.ts";
-import { runFr } from "./run.ts";
 import { oidVersion } from "./version.ts";
 
 export interface CliIo {
@@ -36,5 +35,7 @@ export async function runCli(args: string[], io: CliIo): Promise<number> {
     io.stderr(`${error.message}\n`);
     return EXIT_ERROR;
   }
+  // The run's modules load only for a run, never for the help or the version (NFR-07).
+  const { runFr } = await import("./run.ts");
   return runFr({ projectDir: io.cwd, fr: parsed.fr, executor, out: io.stdout });
 }
