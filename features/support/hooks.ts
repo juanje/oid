@@ -1,15 +1,5 @@
-import { AfterAll, Before, setDefaultTimeout } from "@cucumber/cucumber";
+import { setDefaultTimeout } from "@cucumber/cucumber";
 
-// Each scenario runs oid on a fixture project with real git, tsc, vitest and cucumber-js.
+// Each scenario runs oid on a fixture project with real git and recorded (or, in one scenario, real) runners.
+// That no scenario ran fails the run in features/plugins/scenarios-ran.ts, which sees every worker's scenarios.
 setDefaultTimeout(180_000);
-
-let scenariosRun = 0;
-
-Before(() => {
-  scenariosRun += 1;
-});
-
-// cucumber-js exits 0 when no scenario ran, and a check that ran no test must fail (AGENTS.md, Gate).
-AfterAll(() => {
-  if (scenariosRun === 0) throw new Error("No scenario ran");
-});
