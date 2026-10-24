@@ -17,7 +17,7 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { AttemptKind } from "../../src/executor.ts";
+import type { AttemptKind, TryTarget } from "../../src/executor.ts";
 import { filesUnder } from "./fixture.ts";
 
 /** How the scripted model answers one attempt: it writes a prepared attempt's files, keeps calling tools, or fails. */
@@ -26,6 +26,8 @@ export interface ModelAttempt {
   scenario: string;
   /** Writes the files under `dir`, then reports, in one turn. */
   dir?: string;
+  /** Checks these with try after writing, and reports in the turn after, once it has seen what try answered. */
+  tries?: TryTarget[];
   /** Reads a file every turn and never ends. */
   loops?: true;
   /** Answers every request with this provider error. */
@@ -38,6 +40,8 @@ export interface ModelRequest {
   systemPrompt: string;
   task: string;
   tools: string[];
+  /** What the tools answered, as the model read it. */
+  toolResults: string[];
 }
 
 const PROVIDER = "scripted";
@@ -104,11 +108,15 @@ export class ScriptedModel {
     }
     if (prepared.error !== undefined) return fauxAssistantMessage("", { stopReason: "error", errorMessage: prepared.error });
     if (prepared.loops) return fauxAssistantMessage(fauxToolCall("read", { path: "package.json" }));
-    if (prepared.dir === undefined || this.attempts[index]!.length > 1) return fauxAssistantMessage("Done.");
+    const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt` });
+    const turn = this.attempts[index]!.length;
+    if (prepared.dir === undefined || turn > 2) return fauxAssistantMessage("Done.");
+    if (turn === 2) return fauxAssistantMessage(prepared.tries === undefined ? "Done." : report);
     const writes = await Promise.all(
       (await filesUnder(prepared.dir)).map(async (path) => fauxToolCall("write", { path, content: await readFile(join(prepared.dir!, path), "utf8") })),
     );
-    return fauxAssistantMessage([...writes, fauxToolCall("report", { result: `scripted ${prepared.kind} attempt` })]);
+    if (prepared.tries === undefined) return fauxAssistantMessage([...writes, report]);
+    return fauxAssistantMessage([...writes, ...prepared.tries.map((target) => fauxToolCall("try", { ...target }))]);
   }
 }
 
@@ -146,7 +154,13 @@ function requestOf(messages: Message[]): ModelRequest {
     systemPrompt ||= [textOf(message.content), ...Object.values(message.sections ?? {})].join("\n");
   }
   const user = messages.find((message) => message.role === "user");
-  return { roles: messages.map((message) => message.role), systemPrompt, task: user === undefined ? "" : textOf(user.content), tools: [...tools].sort() };
+  return {
+    roles: messages.map((message) => message.role),
+    systemPrompt,
+    task: user === undefined ? "" : textOf(user.content),
+    tools: [...tools].sort(),
+    toolResults: messages.flatMap((message) => (message.role === "toolResult" ? [textOf(message.content)] : [])),
+  };
 }
 
 function textOf(content: string | { type: string; text?: string }[]): string {
