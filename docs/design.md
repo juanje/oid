@@ -27,7 +27,7 @@ Held strictly:
 - the evidence (rules 2 and 3);
 - the safety parts of rules 5 and 6: secrets, the gate's configuration and the person's copy.
 
-Every other constraint has to justify itself and is measured. Every invariant has a legal exit, because an invariant without one becomes a dead end, and in v1 each dead end grew a new mechanism.
+Every other constraint has to justify itself and is measured. Every invariant has a legal exit; an invariant without one becomes a dead end.
 
 | Invariant | Its legal exit |
 |:--|:--|
@@ -44,9 +44,7 @@ Every other constraint has to justify itself and is measured. Every invariant ha
 | **Boundaries** | Writable paths per attempt kind, no shell, limits on turns, cost, time and retries. Stated to the agent exactly as they are applied. |
 | **Constraints** | The rules above, and the shape of the tools: few modes, opinionated defaults, structured results. |
 
-Two mechanisms worked best in v1, and the design leans on them:
-- refusals that point to the next step (blind retries fell from 6 to 0);
-- instructions that carry their reason (denials fell from 98 to 6).
+The design leans on two mechanisms: refusals that point to the next step, and instructions that carry their reason.
 
 ## 2. The loop
 
@@ -156,27 +154,32 @@ A change that needs both passes (a rename the tests import) takes three items: t
 - **The run log.** Append-only. It holds attempts, verdicts, refusals, questions, and the measures of `SPEC.md` FR-STATE-02, computed by oid.
 - **`oid status`** reads both: what is done with its evidence, what is shelved and why, and where the last run stopped.
 
-## 8. What comes from v1
+## 8. Reusable pieces in `~/git/outside-in-dev`
 
-v1 (`juanje/outside-in-dev`) is a quarry. A piece enters when this design asks for it, with new tests at the behaviour level. Candidates:
-- the runner verdict and the Red classification (`src/artifacts/red-classification.ts`);
-- the mutant (`src/artifacts/mutant.ts`);
-- secrets;
-- the git worktree, checkpoints and squash;
-- the Pi integration (`src/agents/`);
-- the typed rejection;
-- the Gherkin and SPEC parsers;
-- the detectors;
-- the command supervisor.
+Port a piece only when an FR needs it, through the cycle and with new tests.
 
-Left behind:
-- the state machine, freezes and return machinery;
+| Piece | Where |
+|:--|:--|
+| Runner verdict and Red classification | `src/artifacts/red-classification.ts` |
+| Mutant | `src/artifacts/mutant.ts` |
+| Secrets and containment | `src/agents/secrets.ts`, `src/agents/containment.ts` |
+| Worktree, checkpoints, squash | `src/artifacts/git-workspace.ts`, `git-checkpoints.ts`, `git-squash.ts` |
+| Pi integration | `src/agents/runner.ts`, `src/agents/sandbox.ts` |
+| Typed refusal | `src/artifacts/rejection.ts` |
+| SPEC and Gherkin parsing | `src/artifacts/spec.ts`, `src/artifacts/traceability.ts` |
+| Detectors | `src/artifacts/complexity.ts`, `duplication.ts`, `dead-code.ts`, `magic-values.ts`, `doc-drift.ts` |
+| Command supervisor | `src/artifacts/command-supervisor.ts` |
+
+Do not reintroduce:
+- the state machine;
+- freezes;
+- return machinery;
 - `cycle_step`;
-- hooks and overrides;
+- hooks;
+- overrides;
 - the shell floor;
-- one ADR per decision;
 - scenarios that pin wording or endings;
-- "one unit test per Red" as a check.
+- one unit test per Red as a check.
 
 ## 9. Not yet confirmed by runs
 
