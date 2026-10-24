@@ -79,7 +79,8 @@ export function judgeCode(unit: UnitRun, greenScenarios: ScenarioRun[]): Refusal
   if (unit.failed.length > 0) {
     return {
       failed: "Unit tests fail after the code",
-      evidence: unit.failed.join("\n"),
+      // Each failing test with its message: a retry needs to see why it fails, not only that it does.
+      evidence: (unit.failures?.map((failure) => `${failure.test}: ${failure.message}`) ?? unit.failed).join("\n"),
       next: "Change the code until these tests pass, without changing the tests",
     };
   }
