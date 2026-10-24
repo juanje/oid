@@ -46,6 +46,13 @@ export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => 
   if (isValidRed(redClass)) return accepted([`${scenario}: ${redClass}`]);
   const failure = result.failure;
   const where = `${scenario}, step "${failure?.step ?? "?"}"`;
+  if (failure?.kind === "Context") {
+    return refused({
+      failed: `The scenario fails while being set up, in a Given or Background step: ${redClass}`,
+      evidence: `${where}: ${failure.message}`,
+      next: "Set the scenario up without code that does not exist yet, or move that behaviour into a When or Then step",
+    });
+  }
   if (failure !== undefined && failure.message === "") {
     return refused({
       failed: `A step of the scenario has no usable definition: ${redClass}`,

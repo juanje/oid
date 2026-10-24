@@ -26,5 +26,7 @@ export function classifyScenario(result: ScenarioRun, symbolExists: (name: strin
   const failure = result.failure;
   if (failure === undefined) return "undecided";
   if (["UNDEFINED", "PENDING", "AMBIGUOUS"].includes(failure.status)) return "test_bug";
+  // The scenario failed while being set up: never a Red, whatever the message says (DOMAIN.md, Red classes).
+  if (failure.kind === "Context") return "test_bug";
   return classifyFailure(failure.message, symbolExists);
 }
