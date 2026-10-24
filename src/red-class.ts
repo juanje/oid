@@ -13,6 +13,7 @@ export function classifyFailure(message: string, symbolExists: (name: string) =>
   if (/^AssertionError\b/m.test(message)) return "business_assertion";
   // vitest says this of a test file it cannot parse, such as one with a syntax error.
   if (/^Transform failed\b/m.test(message)) return "test_bug";
+  if (/Cannot find package '/.test(message)) return "environment";
   // A relative or absolute path is a module of the project; a bare name would be a package.
   if (/Cannot find module '[./]/.test(message)) return "missing_implementation";
   const notAFunction = /(?:\(0 , )?([A-Za-z_$][\w$]*)\)?(?:\(\.\.\.\))? is not a function/.exec(message);
