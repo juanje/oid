@@ -83,6 +83,17 @@ describe("judgeNewTests", () => {
     expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: business_assertion"] });
   });
 
+  test("refuses a new test file the report does not mention as not_run, naming it", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    // The recording covers other files only: vitest did not collect this one.
+    const run = recordedVitest(dir, ["tests/greet-with.ts"], recorded("vitest-greet-02-load.json"));
+
+    const { refusal } = await judgeNewTests(dir, ["tests/greet-with.ts"], run, nothingExists);
+
+    expect(refusal?.failed).toContain("not_run");
+    expect(refusal?.evidence).toContain("tests/greet-with.ts");
+  });
+
   test("refuses new tests that did not run, never reading an earlier report", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     const files = ["tests/greet-all.test.ts"];
