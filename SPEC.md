@@ -24,7 +24,9 @@ The rest of the MVP adds what the target and the first runs ask for:
 - coverage and traceability in the gate;
 - budget limits;
 - `progress.json`;
-- the `status`, `gate`, `init`, `doctor`/`setup`, `resume` and `abort` commands.
+- the `status`, `gate`, `init`, `doctor`/`setup`, `resume` and `abort` commands;
+- a minimal help and the version (FR-CLI-04);
+- a `README.md`: what oid is, how to install it and run it, the commands it supports, and a pointer to `oid --help` for their options instead of a copy of them. It is rewritten in place when the commands change.
 
 Each FR below says which of the two it belongs to.
 
@@ -216,6 +218,9 @@ Next to the log, a directory keeps each attempt's transcript, its agent's whole 
 
 #### FR-CLI-03: `oid doctor` and `oid setup`
 **MVP.** `oid setup` configures the person's provider, credentials and the model per agent, in oid's own agent dir for Pi (FR-AGENT-01), and installs rg and fd there. It may offer to copy credentials from Pi once, as a copy and never a link. `oid doctor` checks, without changing anything, the project's runners, oid's agent dir with rg and fd, a credential per provider and each agent's model. *Why:* most failed first runs are environment problems, and they should be found before a run spends money.
+
+#### FR-CLI-04: Help and version
+**MVP.** `oid` with no arguments, `oid --help` and `oid help` list the commands and how to use each. `oid <command> --help` gives that command's usage and runs nothing. `oid --version` prints oid's version. The help is generated from the same command table the argument parser uses, so the two cannot disagree. An unknown command or option is still an error (NFR-02). *Why:* the person learns oid from oid itself, and a help written apart from the parser drifts from it.
 
 ## Non-functional requirements
 
