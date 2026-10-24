@@ -16,6 +16,8 @@ export interface Attempt {
   limits: { turns: number };
   /** What the task gives the agent besides its kind and scenario (FR-AGENT-03). */
   context?: TaskContext;
+  /** Where the executor keeps its agent's whole session, as JSONL, when it has one to keep (FR-STATE-02). */
+  transcript?: string;
 }
 
 /** What oid gathers for an attempt's task from the project and its own judgment (FR-AGENT-03). */

@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { AgentTurnDecision } from "@earendil-works/pi-agent-core";
 import { type Api, type AssistantMessage, type Model, Type } from "@earendil-works/pi-ai";
 import {
@@ -38,6 +40,7 @@ export function runPiOffline(): void {
 
 async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: Attempt): Promise<AttemptOutcome> {
   let reported = false;
+  const sessionManager = SessionManager.inMemory(attempt.worktree);
   const { session } = await createAgentSession({
     cwd: attempt.worktree,
     modelRuntime: runtime,
@@ -48,7 +51,7 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
       reported = true;
     }),
     resourceLoader: resourcesFor(attempt.kind),
-    sessionManager: SessionManager.inMemory(attempt.worktree),
+    sessionManager,
     // Neither the person's nor the project's Pi settings reach the agent; cache warming would send requests of its own.
     settingsManager: SettingsManager.inMemory({ cacheWarming: "off", ...(retry === undefined ? {} : { retry: { enabled: true, ...retry } }) }),
   });
@@ -90,6 +93,7 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
     await session.prompt(taskFor(attempt));
   } finally {
     session.dispose();
+    if (attempt.transcript !== undefined) await keepTranscript(attempt.transcript, sessionManager);
   }
   const sum = (of: (usage: AssistantMessage["usage"]) => number) => responses.reduce((total, response) => total + of(response.usage), 0);
   const outcome: AttemptOutcome = {
@@ -104,6 +108,13 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
   const last = responses.at(-1);
   if (last?.stopReason === "error") outcome.error = last.errorMessage ?? "The provider answered with an error";
   return outcome;
+}
+
+/** The session as Pi would write it to a file: its header, then its entries, one JSON per line. */
+async function keepTranscript(path: string, sessionManager: SessionManager): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const lines = [sessionManager.getHeader(), ...sessionManager.getEntries()].filter((entry) => entry !== null).map((entry) => JSON.stringify(entry));
+  await writeFile(path, `${lines.join("\n")}\n`);
 }
 
 function callsTools(message: AssistantMessage): boolean {
