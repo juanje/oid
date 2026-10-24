@@ -20,7 +20,7 @@ import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
 import { summarize } from "./summary.ts";
-import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
+import { frScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { acceptedWork, checkpoint, createRunWorktree, finishRun, type RunWorktree } from "./worktree.ts";
 
@@ -110,8 +110,8 @@ async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree,
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
   const { retries, turns } = await readLimits(worktree.dir);
   const frText = existsSync(join(worktree.dir, "SPEC.md")) ? specFrText(await readFile(join(worktree.dir, "SPEC.md"), "utf8"), fr) : undefined;
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, frText, steps: new Map() };
-  const scenarios = await listScenarios(worktree.dir, fr, runCommand);
+  const { scenarios, steps } = await frScenarios(worktree.dir, fr, runCommand);
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, frText, steps };
   await record({ event: "start", fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);

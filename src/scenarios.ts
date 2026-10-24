@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { type CommandRunner, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
-import { type Scenario, type ScenarioResult, type StepFailure, scenarioResults, scenariosIn } from "./cucumber-messages.ts";
+import { type Scenario, type ScenarioResult, type StepFailure, scenarioResults, scenarioSteps, scenariosIn } from "./cucumber-messages.ts";
 import { reportPath } from "./git.ts";
 
 export interface ScenarioRun extends Scenario {
@@ -11,9 +11,14 @@ export interface ScenarioRun extends Scenario {
 
 /** The scenarios tagged with the FR, in cucumber's order, from a dry run with the project's own cucumber config. */
 export async function listScenarios(dir: string, fr: string, run: CommandRunner): Promise<Scenario[]> {
+  return (await frScenarios(dir, fr, run)).scenarios;
+}
+
+/** The FR's scenarios, and each one's steps by `<uri>:<line>`, from one dry run. */
+export async function frScenarios(dir: string, fr: string, run: CommandRunner): Promise<{ scenarios: Scenario[]; steps: Map<string, string[]> }> {
   const { report, output } = await cucumber(dir, ["--dry-run", "--tags", `@${fr}`], run);
   if (report === undefined) throw new Error(`cucumber-js listed no scenarios for ${fr}:\n${output}`);
-  return scenariosIn(report);
+  return { scenarios: scenariosIn(report), steps: scenarioSteps(report) };
 }
 
 /** Runs the scenarios by location. A scenario asked for that did not run is "not run", never passed. */
