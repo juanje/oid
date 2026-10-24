@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { commitRun, createRunWorktree, takeAttemptChanges } from "../../src/worktree.ts";
+import { commitRun, createRunWorktree, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
@@ -62,6 +62,27 @@ describe("takeAttemptChanges", () => {
     const second = await takeAttemptChanges(worktree.dir);
 
     expect({ first, second }).toEqual({ first: ["a.txt", "features/steps/a.steps.ts"], second: ["tests/a.test.ts"] });
+  });
+});
+
+describe("takeAttemptDiff", () => {
+  test("gives the lines the last attempt added: new lines of a changed file, every line of a new one", async () => {
+    const repo = await tempRepo({ "src/greet.ts": "export function greet() {\n  return 1;\n}\n" });
+    const worktree = await createRunWorktree(repo, "r1");
+    await writeFiles(worktree.dir, {
+      "src/greet.ts": "export function greet() {\n  if (process.env.VITEST) return 2;\n  return 1;\n}\n",
+      "tests/greet.test.ts": "test.only('x', () => {});\n",
+    });
+
+    const diff = await takeAttemptDiff(worktree.dir);
+
+    expect(diff).toEqual({
+      files: ["src/greet.ts", "tests/greet.test.ts"],
+      added: [
+        { file: "src/greet.ts", text: "  if (process.env.VITEST) return 2;" },
+        { file: "tests/greet.test.ts", text: "test.only('x', () => {});" },
+      ],
+    });
   });
 });
 
