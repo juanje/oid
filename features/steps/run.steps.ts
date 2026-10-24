@@ -3,7 +3,7 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import { attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, scenarioNames, testNames } from "../support/fixture.ts";
-import { attemptOf, runBranch } from "../support/run.ts";
+import { assertOutputNames, attemptOf, runBranch } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -124,9 +124,7 @@ Then("the run stops with a refusal, not a crash", function (this: RunWorld) {
 });
 
 Then("the output names the test that passed without its code", async function (this: RunWorld) {
-  const [name] = testNames(join(attemptOf(this.script, "test").dir, "tests/greet.test.ts"));
-  assert.ok(name !== undefined, "The scripted test attempt has no test");
-  assert.ok(this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
+  assertOutputNames(this, testNames(join(attemptOf(this.script, "test").dir, "tests/greet.test.ts"))[0]);
 });
 
 Then("the run's branch has no commit on top of the starting HEAD", function (this: RunWorld) {
@@ -142,7 +140,7 @@ Then("the output names the type check and the file with the error", async functi
   // The gate's check is named "types"; tsc's message for the fixture's error says "type", so it cannot pass this alone.
   assert.match(this.output, /\btypes\b/i, `The output does not name the type check:\n${this.output}`);
   for (const file of await filesUnder(attemptOf(this.script, "code").dir)) {
-    assert.ok(this.output.includes(file), `The output does not name ${file}:\n${this.output}`);
+    assertOutputNames(this, file);
   }
 });
 

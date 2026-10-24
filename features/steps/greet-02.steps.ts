@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir, createGreet02Project, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
+import { assertOutputNames } from "../support/run.ts";
 import { lastAttempt, type PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -34,7 +35,7 @@ Given("the scripted steps attempt for the first scenario writes step definitions
 });
 
 Then("the output names the scenario that passed without its code", function (this: RunWorld) {
-  assert.ok(this.output.includes(FIRST), `The output does not name "${FIRST}":\n${this.output}`);
+  assertOutputNames(this, FIRST);
 });
 
 Given("the first scenario of FR-GREET-02 still fails after its first test and code attempts", function (this: RunWorld) {
@@ -55,8 +56,7 @@ Given("the scripted code attempt for the first scenario leaves its new test fail
 });
 
 Then("the output names the test that still fails", function (this: RunWorld) {
-  const [name] = testNames(join(greet02AttemptDir("s1-test"), "tests/greet-all.test.ts"));
-  assert.ok(name !== undefined && this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
+  assertOutputNames(this, testNames(join(greet02AttemptDir("s1-test"), "tests/greet-all.test.ts"))[0]);
 });
 
 /** The second scenario's first round: a helper and its test, with code that also breaks something that was green. */
@@ -69,8 +69,7 @@ Given("the scripted code attempt for the second scenario breaks the unit test of
 });
 
 Then("the output names the unit test that turned red", function (this: RunWorld) {
-  const [name] = testNames(join(attemptDir("test"), "tests/greet.test.ts"));
-  assert.ok(name !== undefined && this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
+  assertOutputNames(this, testNames(join(attemptDir("test"), "tests/greet.test.ts"))[0]);
 });
 
 Given("the scripted code attempt for the second scenario breaks the first scenario of FR-GREET-02, and no unit test", function (this: RunWorld) {
@@ -78,5 +77,5 @@ Given("the scripted code attempt for the second scenario breaks the first scenar
 });
 
 Then("the output names the scenario that turned red", function (this: RunWorld) {
-  assert.ok(this.output.includes(FIRST), `The output does not name "${FIRST}":\n${this.output}`);
+  assertOutputNames(this, FIRST);
 });

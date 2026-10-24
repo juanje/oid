@@ -16,3 +16,9 @@ export function attemptOf(script: PreparedAttempt[], kind: PreparedAttempt["kind
   assert.ok(attempt !== undefined, `No prepared ${kind} attempt`);
   return attempt;
 }
+
+/** Checks that the run's output names `name`, without pinning the wording around it. */
+export function assertOutputNames(world: RunWorld, name: string | undefined): void {
+  assert.ok(name !== undefined, "Nothing to look for in the output");
+  assert.ok(world.output.includes(name), `The output does not name "${name}":\n${world.output}`);
+}
