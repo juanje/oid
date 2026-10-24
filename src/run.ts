@@ -1,5 +1,7 @@
+import { runCommand } from "./command.ts";
 import { judgeNewTests } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
+import { gateRefusal, runGate } from "./gate.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { commitRun, createRunWorktree, takeAttemptChanges } from "./worktree.ts";
 
@@ -26,6 +28,11 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
       out(formatRefusal(refusal));
       return EXIT_REFUSED;
     }
+  }
+  const gateFailure = gateRefusal(await runGate(worktree.dir, runCommand));
+  if (gateFailure !== undefined) {
+    out(formatRefusal(gateFailure));
+    return EXIT_REFUSED;
   }
   await commitRun(worktree.dir, `feat(${fr}): built by oid run`);
   out(`${fr} built on branch ${worktree.branch}\n`);
