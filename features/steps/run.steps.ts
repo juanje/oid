@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
-import { attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt } from "../support/fixture.ts";
-import { scriptedExecutor } from "../support/scripted-executor.ts";
+import { attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, scenarioNames, testNames } from "../support/fixture.ts";
+import { attemptOf, runBranch } from "../support/run.ts";
+import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
 Given("a project with an approved feature file for FR-GREET-01", async function (this: RunWorld) {
   this.projectDir = await createGreetProject();
 });
 
+const [GREET_01_SCENARIO] = scenarioNames("project/features/greet-01.feature") as [string];
+
 Given("a scripted executor whose steps, test and code attempts build FR-GREET-01", function (this: RunWorld) {
-  this.attempts = { steps: attemptDir("steps"), test: attemptDir("test"), code: attemptDir("code") };
+  this.script = (["steps", "test", "code"] as const).map((kind) => ({ kind, scenario: GREET_01_SCENARIO, dir: attemptDir(kind) }));
 });
 
 Given("the run allows no retries", async function (this: RunWorld) {
@@ -27,13 +30,14 @@ When("I run {string}", async function (this: RunWorld, command: string) {
   this.branchesBefore = branches(this.projectDir);
   // A dynamic import, so that a missing CLI fails this step and not the whole load.
   const { runCli } = await import("../../src/cli.ts");
+  this.executor = new ScriptedExecutor(this.projectDir, this.script);
   const write = (text: string): void => {
     this.output += text;
   };
   try {
     this.exitCode = await runCli(args, {
       cwd: this.projectDir,
-      executor: scriptedExecutor(this.projectDir, this.attempts),
+      executor: this.executor,
       stdout: write,
       stderr: write,
     });
@@ -47,13 +51,6 @@ Then("the run succeeds", function (this: RunWorld) {
   assert.equal(this.exitCode, 0, `The run did not succeed. Output:\n${this.output}`);
 });
 
-/** The one branch the run created. */
-function runBranch(world: RunWorld): string {
-  const created = branches(world.projectDir).filter((branch) => !world.branchesBefore.includes(branch));
-  assert.equal(created.length, 1, `Expected the run to create one branch, it created: ${created.join(", ") || "none"}`);
-  return created[0]!;
-}
-
 Then("the run's branch has exactly one commit on top of the starting HEAD", function (this: RunWorld) {
   const branch = runBranch(this);
   const commits = git(this.projectDir, "rev-list", `${this.startHead}..${branch}`).split("\n").filter(Boolean);
@@ -63,15 +60,15 @@ Then("the run's branch has exactly one commit on top of the starting HEAD", func
 
 Then("that commit holds the FR's step definitions, unit test and source", async function (this: RunWorld) {
   const changed = git(this.projectDir, "diff", "--name-only", this.startHead, runBranch(this)).split("\n");
-  for (const kind of ["steps", "test", "code"] as const) {
-    for (const file of await filesUnder(this.attempts[kind]!)) {
+  for (const attempt of this.script) {
+    for (const file of await filesUnder(attempt.dir)) {
       assert.ok(changed.includes(file), `The commit does not hold ${file}. It holds:\n${changed.join("\n")}`);
     }
   }
 });
 
-Then("every scenario of FR-GREET-01 passes on the run's branch", async function (this: RunWorld) {
-  const { exitCode, output } = await runScenariosAt(this.projectDir, runBranch(this), "@FR-GREET-01");
+Then("every scenario of {word} passes on the run's branch", async function (this: RunWorld, fr: string) {
+  const { exitCode, output } = await runScenariosAt(this.projectDir, runBranch(this), `@${fr}`);
   assert.equal(exitCode, 0, `cucumber-js failed on the run's branch:\n${output}`);
   const summary = /(\d+) scenarios? \((\d+) passed\)/.exec(output);
   assert.ok(summary !== null && Number(summary[1]) > 0 && summary[1] === summary[2], `Not every scenario passed:\n${output}`);
@@ -117,7 +114,7 @@ Then("the run's commit does not contain my uncommitted change", function (this: 
 });
 
 Given("the scripted test attempt writes a test that passes without its code", function (this: RunWorld) {
-  this.attempts.test = attemptDir("test-passes-without-code");
+  this.script = lastAttempt(this.script, "test", GREET_01_SCENARIO, attemptDir("test-passes-without-code"));
 });
 
 Then("the run stops with a refusal, not a crash", function (this: RunWorld) {
@@ -127,9 +124,8 @@ Then("the run stops with a refusal, not a crash", function (this: RunWorld) {
 });
 
 Then("the output names the test that passed without its code", async function (this: RunWorld) {
-  const source = await readFile(join(this.attempts.test!, "tests/greet.test.ts"), "utf8");
-  const name = /test\("([^"]+)"/.exec(source)?.[1];
-  assert.ok(name !== undefined, "The scripted test attempt has no test name");
+  const [name] = testNames(join(attemptOf(this.script, "test").dir, "tests/greet.test.ts"));
+  assert.ok(name !== undefined, "The scripted test attempt has no test");
   assert.ok(this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
 });
 
@@ -139,13 +135,14 @@ Then("the run's branch has no commit on top of the starting HEAD", function (thi
 });
 
 Given("the scripted code attempt passes the tests but leaves a type error", function (this: RunWorld) {
-  this.attempts.code = attemptDir("code-type-error");
+  this.script = lastAttempt(this.script, "code", GREET_01_SCENARIO, attemptDir("code-type-error"));
 });
 
 Then("the output names the type check and the file with the error", async function (this: RunWorld) {
   // The gate's check is named "types"; tsc's message for the fixture's error says "type", so it cannot pass this alone.
   assert.match(this.output, /\btypes\b/i, `The output does not name the type check:\n${this.output}`);
-  for (const file of await filesUnder(this.attempts.code!)) {
+  for (const file of await filesUnder(attemptOf(this.script, "code").dir)) {
     assert.ok(this.output.includes(file), `The output does not name ${file}:\n${this.output}`);
   }
 });
+

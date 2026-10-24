@@ -1,4 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { cp, mkdtemp, readdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -6,6 +7,7 @@ import { promisify } from "node:util";
 
 export const OID_ROOT = resolve(import.meta.dirname, "../..");
 const GREET = join(OID_ROOT, "fixtures/greet");
+const GREET_02 = join(GREET, "greet-02");
 
 /** Runs git in `dir` and returns its trimmed stdout. Global and system config are cut off in hooks.ts. */
 export function git(dir: string, ...args: string[]): string {
@@ -23,6 +25,33 @@ export async function createGreetProject(): Promise<string> {
   git(dir, "add", "--all");
   git(dir, "commit", "-q", "-m", "chore: greet project");
   return dir;
+}
+
+/** The greet project with FR-GREET-01 built and committed, then FR-GREET-02's approved feature file committed. */
+export async function createGreet02Project(): Promise<string> {
+  const dir = await createGreetProject();
+  for (const attempt of ["steps", "test", "code"]) await cp(attemptDir(attempt), dir, { recursive: true });
+  git(dir, "add", "--all");
+  git(dir, "commit", "-q", "-m", "feat(FR-GREET-01): greet a person by name");
+  await cp(join(GREET_02, "contract"), dir, { recursive: true });
+  git(dir, "add", "--all");
+  git(dir, "commit", "-q", "-m", "spec(FR-GREET-02): greet a group of people");
+  return dir;
+}
+
+/** The directory of a prepared attempt for FR-GREET-02. */
+export function greet02AttemptDir(name: string): string {
+  return join(GREET_02, "attempts", name);
+}
+
+/** The names of the scenarios of a fixture feature file, in file order. */
+export function scenarioNames(featureFile: string): string[] {
+  return [...readFileSync(join(GREET, featureFile), "utf8").matchAll(/^\s*Scenario: (.+)$/gm)].map((match) => match[1]!);
+}
+
+/** The names of the vitest tests in `file`, in file order. */
+export function testNames(file: string): string[] {
+  return [...readFileSync(file, "utf8").matchAll(/\btest\("([^"]+)"/g)].map((match) => match[1]!);
 }
 
 /** Gives a fixture checkout the runners and libraries oid itself is tested with. */

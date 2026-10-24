@@ -1,11 +1,12 @@
 import { rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { After, BeforeAll, World, setWorldConstructor } from "@cucumber/cucumber";
-import type { AttemptKind } from "../../src/executor.ts";
+import type { PreparedAttempt, ScriptedExecutor } from "./scripted-executor.ts";
 
 export class RunWorld extends World {
   projectDir = "";
-  attempts: Partial<Record<AttemptKind, string>> = {};
+  script: PreparedAttempt[] = [];
+  executor: ScriptedExecutor | undefined;
   startHead = "";
   branchesBefore: string[] = [];
   output = "";
