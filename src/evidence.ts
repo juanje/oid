@@ -110,6 +110,16 @@ export async function judgeNewTests(
     });
   }
   const inFiles = (test: string): boolean => testFiles.some((file) => test === file || test.startsWith(`${file} > `));
+  // A file counts as run only when one of its tests passed or failed, or the file itself failed to load.
+  const reported = [...unit.passed, ...(unit.failures ?? []).map((failure) => failure.test)];
+  const notRun = testFiles.filter((file) => !reported.some((test) => test === file || test.startsWith(`${file} > `)));
+  if (notRun.length > 0) {
+    return refused({
+      failed: "New test files ran no test: not_run",
+      evidence: notRun.join("\n"),
+      next: NEXT.not_run,
+    });
+  }
   const passing = unit.passed.filter(inFiles);
   if (passing.length > 0) {
     return refused({
