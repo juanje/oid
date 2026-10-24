@@ -23,6 +23,8 @@ export class RunWorld extends World {
   model: ScriptedModel | undefined;
   /** The real model of the smoke scenario, as <provider>/<model>. */
   smokeModel: string | undefined;
+  /** The paths the scripted model's probes asked for, in order. */
+  probed: string[] = [];
 }
 
 setWorldConstructor(RunWorld);

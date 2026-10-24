@@ -8,6 +8,7 @@ import {
   type Model,
   type SimpleStreamOptions,
   type StreamFunction,
+  type ToolCall,
   type TranscriptContext,
   calculateCost,
   createAssistantMessageEventStream,
@@ -19,6 +20,12 @@ import {
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { AttemptKind, TryTarget } from "../../src/executor.ts";
 
+/** A tool call the scripted model makes, as the agent would. */
+export interface Probe {
+  tool: string;
+  args: ToolCall["arguments"];
+}
+
 /** How the scripted model answers one attempt: it writes a prepared attempt's files, keeps calling tools, or fails. */
 export interface ModelAttempt {
   kind: AttemptKind;
@@ -27,6 +34,8 @@ export interface ModelAttempt {
   dir?: string;
   /** Checks these with try after writing, and reports in the turn after, once it has seen what try answered. */
   tries?: TryTarget[];
+  /** Tool calls it makes in a turn of their own before anything else, such as reads that should be refused. */
+  probes?: Probe[];
   /** Reads a file every turn and never ends. */
   loops?: true;
   /** Answers every request with this provider error. */
@@ -110,7 +119,10 @@ export class ScriptedModel {
     if (prepared.error !== undefined) return fauxAssistantMessage("", { stopReason: "error", errorMessage: prepared.error });
     if (prepared.loops) return fauxAssistantMessage(fauxToolCall("read", { path: "package.json" }));
     const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt` });
-    const turn = this.attempts[index]!.length;
+    const probed = prepared.probes !== undefined && prepared.probes.length > 0;
+    if (probed && this.attempts[index]!.length === 1) return fauxAssistantMessage(prepared.probes!.map(({ tool, args }) => fauxToolCall(tool, args)));
+    // Its turns once the probes, if any, are answered.
+    const turn = this.attempts[index]!.length - (probed ? 1 : 0);
     if (prepared.dir === undefined || turn > 2) return fauxAssistantMessage("Done.");
     if (turn === 2) return fauxAssistantMessage(prepared.tries === undefined ? "Done." : report);
     const writes = await Promise.all(
