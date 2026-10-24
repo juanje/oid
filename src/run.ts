@@ -1,8 +1,9 @@
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
+import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { gateRefusal, runGate } from "./gate.ts";
+import { projectSymbols } from "./project-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
@@ -22,7 +23,7 @@ const EXIT_REFUSED = 1;
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr({ projectDir, fr, executor, out }: RunOptions): Promise<number> {
   const worktree = await createRunWorktree(projectDir, runId(fr));
-  const refusal = (await buildScenarios(executor, fr, worktree.dir)) ?? gateRefusal(await runGate(worktree.dir, runCommand));
+  const refusal = (await buildScenarios(executor, fr, worktree.dir, out)) ?? gateRefusal(await runGate(worktree.dir, runCommand));
   if (refusal !== undefined) {
     out(formatRefusal(refusal));
     return EXIT_REFUSED;
@@ -33,10 +34,10 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
 }
 
 /** Builds the FR's scenarios one at a time, in file order, and returns the first refusal, if any. */
-async function buildScenarios(executor: Executor, fr: string, worktreeDir: string): Promise<Refusal | undefined> {
+async function buildScenarios(executor: Executor, fr: string, worktreeDir: string, out: (text: string) => void): Promise<Refusal | undefined> {
   const green: Scenario[] = [];
   for (const scenario of await listScenarios(worktreeDir, fr, runCommand)) {
-    const refusal = await buildScenario(executor, fr, scenario, green, worktreeDir);
+    const refusal = await buildScenario(executor, fr, scenario, green, worktreeDir, out);
     if (refusal !== undefined) return refusal;
     green.push(scenario);
   }
@@ -44,19 +45,35 @@ async function buildScenarios(executor: Executor, fr: string, worktreeDir: strin
 }
 
 /** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping `green` green. */
-async function buildScenario(executor: Executor, fr: string, scenario: Scenario, green: Scenario[], worktreeDir: string): Promise<Refusal | undefined> {
+async function buildScenario(
+  executor: Executor,
+  fr: string,
+  scenario: Scenario,
+  green: Scenario[],
+  worktreeDir: string,
+  out: (text: string) => void,
+): Promise<Refusal | undefined> {
   const attempt = async (kind: AttemptKind): Promise<string[]> => {
     await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir });
     return takeAttemptChanges(worktreeDir);
   };
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
+  // Asked at each judgment: the project changes with every attempt.
+  const symbolExists = async (): Promise<(name: string) => boolean> => {
+    const symbols = await projectSymbols(worktreeDir);
+    return (name) => symbols.has(name);
+  };
+  const accept = ({ refusal, reds }: Judgment): Refusal | undefined => {
+    for (const red of reds) out(`Red: ${red}\n`);
+    return refusal;
+  };
 
   await attempt("steps");
-  const stepsRefusal = judgeSteps(await runScenario());
+  const stepsRefusal = accept(judgeSteps(await runScenario(), await symbolExists()));
   if (stepsRefusal !== undefined) return stepsRefusal;
   return innerLoop(
     async () => {
-      const testRefusal = await judgeNewTests(worktreeDir, await attempt("test"), runCommand);
+      const testRefusal = accept(await judgeNewTests(worktreeDir, await attempt("test"), runCommand, await symbolExists()));
       if (testRefusal !== undefined) return testRefusal;
       await attempt("code");
       const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);

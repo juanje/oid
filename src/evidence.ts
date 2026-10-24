@@ -1,25 +1,55 @@
 import type { CommandRunner } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
+import { classifyFailure, isValidRed, type RedClass } from "./red-class.ts";
 import type { Refusal } from "./refusal.ts";
 import type { ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, type UnitRun } from "./unit-tests.ts";
 
-/** Refuses a steps attempt unless its scenario ran and failed: a scenario that passes before its code proves nothing (D-02). */
-export function judgeSteps(result: ScenarioRun): Refusal | undefined {
-  if (result.status === "failed") return undefined;
+/** An attempt's evidence: a refusal, or the valid Reds it showed, each as `<what failed>: <class>`. */
+export interface Judgment {
+  refusal: Refusal | undefined;
+  reds: string[];
+}
+
+const accepted = (reds: string[]): Judgment => ({ refusal: undefined, reds });
+const refused = (refusal: Refusal): Judgment => ({ refusal, reds: [] });
+
+// What the agent can do about a failure that is not a valid Red, by its class.
+const NEXT: Record<RedClass, string> = {
+  business_assertion: "",
+  missing_implementation: "",
+  test_bug: "Fix the test itself so that it runs and fails only because the behaviour is missing",
+  environment: "Use only what the project already has installed; the gate's configuration, package.json included, is not yours to change",
+  not_run: "Put the test where the runner collects it, and check that it loads",
+  undecided:
+    "oid cannot tell that this failure shows missing behaviour: make the test fail on an assertion about the behaviour, or on the code under test not existing yet",
+};
+
+/** Accepts a steps attempt only when its scenario ran and failed with a valid Red (D-02). */
+export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => boolean): Judgment {
   const scenario = describeScenario(result);
   if (result.status === "passed") {
-    return {
-      failed: "The scenario passes before its code exists",
+    return refused({
+      failed: "The scenario passes before its code exists: test_bug",
       evidence: `${scenario} passed with the new step definitions alone`,
       next: "Make the step definitions call the code under test and assert the outcome the scenario states",
-    };
+    });
   }
-  return {
-    failed: "The scenario did not run",
-    evidence: `${scenario} is missing from cucumber-js's report`,
-    next: "Check that the step definitions load: a static import of a module that does not exist yet stops cucumber-js; import it dynamically inside the step",
-  };
+  if (result.status === "not run") {
+    return refused({
+      failed: "The scenario did not run: not_run",
+      evidence: `${scenario} is missing from cucumber-js's report`,
+      next: "Check that the step definitions load: a static import of a module that does not exist yet stops cucumber-js; import it dynamically inside the step",
+    });
+  }
+  const failure = result.failure;
+  const redClass = classifyFailure(failure?.message ?? "", symbolExists);
+  if (isValidRed(redClass)) return accepted([`${scenario}: ${redClass}`]);
+  return refused({
+    failed: `The scenario's failure is not a valid Red: ${redClass}`,
+    evidence: `${scenario}, step "${failure?.step ?? "?"}": ${failure?.message ?? ""}`,
+    next: NEXT[redClass],
+  });
 }
 
 /** Refuses a code attempt that leaves any unit test failing or turns a green scenario red. The current scenario may still fail. */
@@ -49,23 +79,42 @@ export function judgeCode(unit: UnitRun, greenScenarios: ScenarioRun[]): Refusal
   return undefined;
 }
 
-/** Refuses a test attempt whose new tests pass on the code they were written against: such a test proves nothing (D-02). */
-export async function judgeNewTests(worktreeDir: string, testFiles: string[], run: CommandRunner): Promise<Refusal | undefined> {
+/** Accepts a test attempt only when every new test fails with a valid Red on the code it was written against (D-02). */
+export async function judgeNewTests(
+  worktreeDir: string,
+  testFiles: string[],
+  run: CommandRunner,
+  symbolExists: (name: string) => boolean,
+): Promise<Judgment> {
   const unit = await runUnitTests(worktreeDir, testFiles, run);
   if (!unit.ran) {
-    return {
-      failed: "The new tests did not run",
+    return refused({
+      failed: "The new tests did not run: not_run",
       evidence: unit.output,
       next: "Fix what stops vitest from loading these test files, such as a syntax error",
-    };
+    });
   }
-  const passing = unit.passed.filter((test) => testFiles.some((file) => test.startsWith(`${file} > `)));
-  if (passing.length === 0) return undefined;
-  return {
-    failed: "New tests pass before their code exists",
-    evidence: passing.join("\n"),
-    next: "Make each of these tests assert behaviour the code does not have yet",
-  };
+  const inFiles = (test: string): boolean => testFiles.some((file) => test === file || test.startsWith(`${file} > `));
+  const passing = unit.passed.filter(inFiles);
+  if (passing.length > 0) {
+    return refused({
+      failed: "New tests pass before their code exists: test_bug",
+      evidence: passing.join("\n"),
+      next: "Make each of these tests assert behaviour the code does not have yet",
+    });
+  }
+  const classified = (unit.failures ?? [])
+    .filter((failure) => inFiles(failure.test))
+    .map((failure) => ({ ...failure, redClass: classifyFailure(failure.message, symbolExists) }));
+  const invalid = classified.filter((failure) => !isValidRed(failure.redClass));
+  if (invalid.length > 0) {
+    return refused({
+      failed: `New tests fail, but not with a valid Red: ${[...new Set(invalid.map((failure) => failure.redClass))].join(", ")}`,
+      evidence: invalid.map((failure) => `${failure.test}: ${failure.redClass}: ${failure.message}`).join("\n"),
+      next: NEXT[invalid[0]!.redClass],
+    });
+  }
+  return accepted(classified.map((failure) => `${failure.test}: ${failure.redClass}`));
 }
 
 function describeScenario(scenario: Scenario): string {

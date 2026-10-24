@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { type CommandRunner, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
-import { type Scenario, scenarioResults, scenariosIn } from "./cucumber-messages.ts";
+import { type Scenario, type StepFailure, scenarioResults, scenariosIn } from "./cucumber-messages.ts";
 import { reportPath } from "./git.ts";
 
 export interface ScenarioRun extends Scenario {
   status: "passed" | "failed" | "not run";
+  failure?: StepFailure;
 }
 
 /** The scenarios tagged with the FR, in cucumber's order, from a dry run with the project's own cucumber config. */
@@ -21,7 +22,7 @@ export async function runScenarios(dir: string, scenarios: Scenario[], run: Comm
   const results = report === undefined ? [] : scenarioResults(report);
   return scenarios.map((scenario) => {
     const result = results.find((ran) => location(ran) === location(scenario));
-    return { ...scenario, status: result?.status ?? "not run" };
+    return result === undefined ? { ...scenario, status: "not run" } : { ...scenario, status: result.status, failure: result.failure };
   });
 }
 
