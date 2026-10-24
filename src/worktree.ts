@@ -35,8 +35,7 @@ export interface AttemptDiff {
 
 /** The last attempt's diff. The index holds what earlier attempts changed, so this stages the new changes too. */
 export async function takeAttemptDiff(worktreeDir: string): Promise<AttemptDiff> {
-  const modified = nulSeparated(await git(worktreeDir, "diff", "--name-only", "-z", "--", ...NOT_NODE_MODULES));
-  const created = nulSeparated(await git(worktreeDir, "ls-files", "--others", "--exclude-standard", "-z", "--", ...NOT_NODE_MODULES));
+  const { modified, created } = await changedSinceLastAttempt(worktreeDir);
   const added = linesAddedTo(await git(worktreeDir, "diff", "-U0", "--no-color", "--", ...NOT_NODE_MODULES));
   for (const file of created) {
     const content = await readFile(join(worktreeDir, file), "utf8");
@@ -52,6 +51,19 @@ export async function takeAttemptDiff(worktreeDir: string): Promise<AttemptDiff>
 /** The files the last attempt changed, sorted, staged as `takeAttemptDiff` stages them. */
 export async function takeAttemptChanges(worktreeDir: string): Promise<string[]> {
   return (await takeAttemptDiff(worktreeDir)).files;
+}
+
+/** The files the attempt under way has changed so far, sorted, without staging them. */
+export async function attemptFiles(worktreeDir: string): Promise<string[]> {
+  const { modified, created } = await changedSinceLastAttempt(worktreeDir);
+  return [...new Set([...modified, ...created])].sort();
+}
+
+/** The files changed, and the files created, since the index: the index holds what earlier attempts changed. */
+async function changedSinceLastAttempt(worktreeDir: string): Promise<{ modified: string[]; created: string[] }> {
+  const modified = nulSeparated(await git(worktreeDir, "diff", "--name-only", "-z", "--", ...NOT_NODE_MODULES));
+  const created = nulSeparated(await git(worktreeDir, "ls-files", "--others", "--exclude-standard", "-z", "--", ...NOT_NODE_MODULES));
+  return { modified, created };
 }
 
 function nulSeparated(text: string): string[] {

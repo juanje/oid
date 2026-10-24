@@ -4,12 +4,13 @@ import { isTestFile, judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
-import type { AttemptKind, Executor } from "./executor.ts";
+import type { AttemptKind, Executor, TryTarget } from "./executor.ts";
 import { gateRefusal, runGate } from "./gate.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolExists } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
+import { tryAttempt } from "./try.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { commitRun, createRunWorktree, takeAttemptDiff } from "./worktree.ts";
 
@@ -65,7 +66,8 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   const { executor, fr, worktreeDir, out, green, known } = run;
   // Every attempt's diff must stay inside its boundary before any other judgment (FR-AGENT-04).
   const attempt = async (kind: AttemptKind): Promise<{ refusal: Refusal | undefined; files: string[] }> => {
-    await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir });
+    const tools = { try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand) };
+    await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir, tools });
     const diff = await takeAttemptDiff(worktreeDir);
     return { refusal: judgeBoundary(kind, diff), files: diff.files };
   };
