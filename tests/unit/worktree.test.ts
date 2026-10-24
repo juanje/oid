@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { commitRun, createRunWorktree } from "../../src/worktree.ts";
+import { commitRun, createRunWorktree, takeAttemptChanges } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
@@ -37,6 +37,20 @@ describe("createRunWorktree", () => {
     expect(existsSync(shared), "node_modules is not in the worktree").toBe(true);
     expect(await readFile(shared, "utf8")).toBe("export {};\n");
     expect(git(worktree.dir, "status", "--porcelain")).toBe("");
+  });
+});
+
+describe("takeAttemptChanges", () => {
+  test("returns only the files changed since the previous attempt", async () => {
+    const repo = await tempRepo({ "a.txt": "first\n" });
+    const worktree = await createRunWorktree(repo, "r1");
+    await writeFiles(worktree.dir, { "features/steps/a.steps.ts": "export {};\n", "a.txt": "changed\n" });
+    const first = await takeAttemptChanges(worktree.dir);
+    await writeFiles(worktree.dir, { "tests/a.test.ts": "export {};\n" });
+
+    const second = await takeAttemptChanges(worktree.dir);
+
+    expect({ first, second }).toEqual({ first: ["a.txt", "features/steps/a.steps.ts"], second: ["tests/a.test.ts"] });
   });
 });
 
