@@ -48,6 +48,20 @@ export async function takeAttemptDiff(worktreeDir: string): Promise<AttemptDiff>
   return { files, added };
 }
 
+/**
+ * The work accepted so far: the index, where every accepted attempt's diff is staged. `restore` brings the worktree
+ * and the index back to it, so a retry starts as the refused attempt did (FR-RUN-07). The checkpoints of FR-STATE-01
+ * take this place later.
+ */
+export async function acceptedWork(worktreeDir: string): Promise<{ restore: () => Promise<void> }> {
+  const tree = await git(worktreeDir, "write-tree");
+  return {
+    restore: async () => {
+      await git(worktreeDir, "read-tree", "-u", "--reset", tree);
+    },
+  };
+}
+
 /** The files the last attempt changed, sorted, staged as `takeAttemptDiff` stages them. */
 export async function takeAttemptChanges(worktreeDir: string): Promise<string[]> {
   return (await takeAttemptDiff(worktreeDir)).files;
