@@ -192,7 +192,7 @@ No agent writes feature files, `SPEC.md`, the gate's configuration or oid's stat
 - **attempts and rejections** per attempt kind;
 - **blind retries:** a retry that fails with the same failure and evidence as the one before it;
 - **denied tool calls;**
-- **cost, tokens and time;**
+- **cost, tokens and time,** with the tokens read from the provider's cache, so that runs launched one after another can be compared on cost;
 - **the model** of each agent;
 - **the instruction count** of each prompt.
 
