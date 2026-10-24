@@ -36,6 +36,16 @@ describe("importedSymbolExists", () => {
     expect((await importedSymbolExists(dir, "tests/greet-all.test.ts"))("greetAll")).toBe(false);
   });
 
+  test("a name imported from a module that re-exports another counts as existing: it may come from there", async () => {
+    const dir = await tempRepo({
+      "src/index.ts": 'export * from "./greet.ts";\n',
+      "src/greet.ts": "export function greet(): string {\n  return '';\n}\n",
+      "tests/index.test.ts": 'import { greet } from "../src/index.ts";\ngreet();\n',
+    });
+
+    expect((await importedSymbolExists(dir, "tests/index.test.ts"))("greet")).toBe(true);
+  });
+
   test("a name the file does not import from the project counts as existing: oid cannot say it is missing", async () => {
     const dir = await tempRepo(PROJECT);
 
