@@ -1,6 +1,6 @@
 import { cp, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { Attempt, AttemptKind, Executor, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, TryResult, TryTarget } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
 export interface PreparedAttempt {
@@ -11,6 +11,8 @@ export interface PreparedAttempt {
   tries?: TryTarget[];
   /** The result it ends with through report; null ends it without one. A short default when left out. */
   report?: string | null;
+  /** How many turns its agent would take to finish; 1 when left out. */
+  turns?: number;
 }
 
 /** One call to try, with what it answered. */
@@ -25,6 +27,9 @@ export interface Request {
   kind: AttemptKind;
   refusal: Attempt["refusal"];
   files: string[];
+  /** The turns its agent took, and whether the executor ended it at the turn limit before it finished. */
+  turns: number;
+  stoppedAtLimit: boolean;
 }
 
 /** An executor that answers each request with the next prepared attempt, the way an agent's diff would land. */
@@ -44,7 +49,7 @@ export class ScriptedExecutor implements Executor {
     return this.#script.length;
   }
 
-  async run(attempt: Attempt): Promise<void> {
+  async run(attempt: Attempt): Promise<AttemptOutcome> {
     // The reply checks the request it answers: an attempt works in the run's worktree, never in the person's copy,
     // and asks for the kind and scenario prepared next.
     if (attempt.worktree === this.#projectDir) throw new Error(`The ${attempt.kind} attempt was sent to the person's working copy`);
@@ -55,10 +60,17 @@ export class ScriptedExecutor implements Executor {
       throw new Error(`Expected the ${next.kind} attempt for "${next.scenario}", got ${asked}`);
     }
     this.asked += 1;
-    this.requests.push({ kind: attempt.kind, refusal: attempt.refusal, files: await filesIn(attempt.worktree) });
+    // The executor counts its agent's turns and ends it between turns at the limit, as the Pi executor does with
+    // finishTurn; an agent ended before it finished leaves no diff and no report.
+    const wanted = next.turns ?? 1;
+    const limit = attempt.limits?.turns ?? Number.POSITIVE_INFINITY;
+    const outcome = { turns: Math.min(wanted, limit), stoppedAtLimit: wanted > limit };
+    this.requests.push({ kind: attempt.kind, refusal: attempt.refusal, files: await filesIn(attempt.worktree), ...outcome });
+    if (outcome.stoppedAtLimit) return outcome;
     await cp(next.dir, attempt.worktree, { recursive: true });
     for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
     if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`);
+    return outcome;
   }
 }
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
@@ -16,19 +17,26 @@ Given("a scripted executor whose steps, test and code attempts build FR-GREET-01
   this.script = (["steps", "test", "code"] as const).map((kind) => ({ kind, scenario: GREET_01_SCENARIO, dir: attemptDir(kind) }));
 });
 
-/** The project's oid config, committed as the person's repository would have it. */
-async function allowRetries(world: RunWorld, retries: number): Promise<void> {
-  await writeFile(join(world.projectDir, ".oid.json"), `${JSON.stringify({ limits: { retries } }, null, 2)}\n`);
+/** Sets one limit in the project's oid config, keeping the others, committed as the person's repository would have it. */
+async function setLimit(world: RunWorld, limit: "retries" | "turns", value: number): Promise<void> {
+  const path = join(world.projectDir, ".oid.json");
+  const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
+  config.limits = { ...config.limits, [limit]: value };
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
   git(world.projectDir, "add", ".oid.json");
   git(world.projectDir, "commit", "-q", "-m", "chore: oid config");
 }
 
 Given("the run allows no retries", async function (this: RunWorld) {
-  await allowRetries(this, 0);
+  await setLimit(this, "retries", 0);
 });
 
 Given("the run allows {int} retry", async function (this: RunWorld, retries: number) {
-  await allowRetries(this, retries);
+  await setLimit(this, "retries", retries);
+});
+
+Given("the run allows {int} turns per attempt", async function (this: RunWorld, turns: number) {
+  await setLimit(this, "turns", turns);
 });
 
 When("I run {string}", async function (this: RunWorld, command: string) {
