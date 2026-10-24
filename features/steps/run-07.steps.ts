@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir, git } from "../support/fixture.ts";
-import { assertOutputNames, runBranch } from "../support/run.ts";
+import { assertOutputNames, requestsOf, runBranch } from "../support/run.ts";
 import type { PreparedAttempt, Request } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -19,9 +19,7 @@ function codeTwice(script: PreparedAttempt[], first: string, retry: string): Pre
 
 /** The executor's requests for code attempts: the first one, then its retry. */
 function codeRequests(world: RunWorld): [Request, Request] {
-  const requests = world.executor?.requests.filter((request) => request.kind === "code") ?? [];
-  assert.equal(requests.length, 2, `Expected a code attempt and its retry, got ${requests.length} code attempts`);
-  return requests as [Request, Request];
+  return requestsOf(world, "code", 2) as [Request, Request];
 }
 
 Given("the scripted code attempt is first refused, after writing a file that its retry does not write", function (this: RunWorld) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { branches } from "./fixture.ts";
-import type { PreparedAttempt } from "./scripted-executor.ts";
+import type { PreparedAttempt, Request } from "./scripted-executor.ts";
 import type { RunWorld } from "./world.ts";
 
 /** The one branch the run created. */
@@ -21,4 +21,11 @@ export function attemptOf(script: PreparedAttempt[], kind: PreparedAttempt["kind
 export function assertOutputNames(world: RunWorld, name: string | undefined): void {
   assert.ok(name !== undefined, "Nothing to look for in the output");
   assert.ok(world.output.includes(name), `The output does not name "${name}":\n${world.output}`);
+}
+
+/** The executor's requests for attempts of `kind`, in order, checking there were `count` of them. */
+export function requestsOf(world: RunWorld, kind: PreparedAttempt["kind"], count: number): Request[] {
+  const requests = world.executor?.requests.filter((request) => request.kind === kind) ?? [];
+  assert.equal(requests.length, count, `Expected ${count} ${kind} attempts, got ${requests.length}`);
+  return requests;
 }

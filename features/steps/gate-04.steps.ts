@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
 import { createGreetProjectWith, greet03AttemptDir, scenarioNames } from "../support/fixture.ts";
-import { assertOutputNames } from "../support/run.ts";
+import { assertOutputNames, requestsOf } from "../support/run.ts";
 import type { PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -34,9 +34,7 @@ Given(
 );
 
 Then("the retried code attempt was given the gate's failure, naming the scenario of FR-GREET-02 it broke", function (this: RunWorld) {
-  const code = this.executor?.requests.filter((request) => request.kind === "code") ?? [];
-  assert.equal(code.length, 2, `Expected a code attempt and one after the gate, got ${code.length} code attempts`);
-  const refusal = code[1]!.refusal;
+  const refusal = requestsOf(this, "code", 2)[1]!.refusal;
   assert.ok(refusal !== undefined, "The code attempt after the gate came without the gate's refusal");
   // The task's focus is the scenario the gate found failing, not the scenario the attempt belongs to.
   assert.deepEqual(
