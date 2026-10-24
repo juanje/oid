@@ -4,7 +4,7 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import { GREET_01_SCENARIO, attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, testNames } from "../support/fixture.ts";
-import { assertOutputNames, attemptOf, runBranch, runOid } from "../support/run.ts";
+import { assertOutputNames, attemptOf, noteBeforeRun, runBranch, runOid } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -42,8 +42,7 @@ Given("the run allows {int} turns per attempt", async function (this: RunWorld, 
 When("I run {string}", async function (this: RunWorld, command: string) {
   const [program, ...args] = command.split(" ");
   assert.equal(program, "oid");
-  this.startHead = git(this.projectDir, "rev-parse", "HEAD");
-  this.branchesBefore = branches(this.projectDir);
+  noteBeforeRun(this);
   this.executor = new ScriptedExecutor(this.projectDir, this.script);
   Object.assign(this, await runOid(this.projectDir, args, this.piExecutor === undefined ? this.executor : await this.piExecutor()));
 });

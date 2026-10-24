@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { branches } from "./fixture.ts";
+import { branches, git } from "./fixture.ts";
 import type { Executor } from "../../src/executor.ts";
 import type { AttemptEvent, LogEvent } from "../../src/run-log.ts";
 import type { PreparedAttempt, Request } from "./scripted-executor.ts";
@@ -77,4 +77,10 @@ export const attemptsIn = (log: LogEvent[]) => log.filter((entry): entry is Atte
 export function scriptedModel(world: RunWorld): ScriptedModel {
   assert.ok(world.model !== undefined, "No scripted model");
   return world.model;
+}
+
+/** Notes the project's HEAD and branches before a run, which the steps after it compare against. */
+export function noteBeforeRun(world: RunWorld): void {
+  world.startHead = git(world.projectDir, "rev-parse", "HEAD");
+  world.branchesBefore = branches(world.projectDir);
 }

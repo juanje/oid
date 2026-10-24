@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import { withFixedClock } from "../support/clock.ts";
 import { GREET_01_SCENARIO, attemptDir, branches, filesUnder, git } from "../support/fixture.ts";
-import { type OidRun, runBranch, runOid } from "../support/run.ts";
+import { type OidRun, noteBeforeRun, runBranch, runOid } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -49,8 +49,7 @@ Then("the project's hook never ran", function (this: RunWorld) {
 When("I run {string} twice, one after the other, with the clock fixed", async function (this: RunWorld, command: string) {
   const [program, ...args] = command.split(" ");
   assert.equal(program, "oid");
-  this.startHead = git(this.projectDir, "rev-parse", "HEAD");
-  this.branchesBefore = branches(this.projectDir);
+  noteBeforeRun(this);
   await withFixedClock("2026-10-24T12:00:00Z", async () => {
     for (let run = 0; run < 2; run += 1) this.runs.push(await runOid(this.projectDir, args, new ScriptedExecutor(this.projectDir, this.script)));
   });

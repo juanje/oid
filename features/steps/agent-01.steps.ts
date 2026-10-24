@@ -6,8 +6,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
-import { GREET_01_SCENARIO, OID_ROOT, attemptDir, branches, git } from "../support/fixture.ts";
-import { assertOutputNames, attemptsIn, runLog, runOid, scriptedModel } from "../support/run.ts";
+import { GREET_01_SCENARIO, OID_ROOT, attemptDir, git } from "../support/fixture.ts";
+import { assertOutputNames, attemptsIn, noteBeforeRun, runLog, runOid, scriptedModel } from "../support/run.ts";
 import { type ModelAttempt, ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -173,8 +173,7 @@ Given("the project's .oid.json names the model {}", async function (this: RunWor
 When("I run {string} with the executor oid makes from its config", async function (this: RunWorld, command: string) {
   const [program, ...args] = command.split(" ");
   assert.equal(program, "oid");
-  this.startHead = git(this.projectDir, "rev-parse", "HEAD");
-  this.branchesBefore = branches(this.projectDir);
+  noteBeforeRun(this);
   const model = scriptedModel(this);
   // oid's own path from config to executor, with the scripted model's registry in place of Pi's.
   const { executorFromConfig } = await import("../../src/pi-model.ts");

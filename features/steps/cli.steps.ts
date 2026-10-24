@@ -1,15 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { When } from "@cucumber/cucumber";
-import { OID_ROOT, branches, git } from "../support/fixture.ts";
+import { OID_ROOT } from "../support/fixture.ts";
+import { noteBeforeRun } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
 /** Runs `oid <args>` as the person types it: the package's bin/oid, as its own process, in the project. */
 export function runOidCommand(world: RunWorld, command: string): void {
   const [program, ...args] = command.split(" ");
   if (program !== "oid") throw new Error(`Not an oid command: ${command}`);
-  world.startHead = git(world.projectDir, "rev-parse", "HEAD");
-  world.branchesBefore = branches(world.projectDir);
+  noteBeforeRun(world);
   const result = spawnSync(process.execPath, [join(OID_ROOT, "bin/oid"), ...args], { cwd: world.projectDir, encoding: "utf8", env: { ...process.env, NODE_OPTIONS: "" } });
   world.output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
   world.exitCode = result.status ?? undefined;
