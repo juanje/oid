@@ -242,6 +242,9 @@ Tests check the mechanism around prompts, not their wording: that each agent's l
 ### NFR-06: The person's copy and secrets are safe
 A run never writes outside its worktree, and `oid gate` writes nothing. Nothing secret reaches a provider (FR-AGENT-05). *Why:* these are invariants; one breach is enough to stop trusting the tool.
 
+### NFR-07: The command line loads lazily
+`oid`, `oid --help`, `oid help`, `oid <command> --help`, `oid --version` and an unknown command load only the argument parser and the help. Pi, the TypeScript compiler API and the run's modules load only when a command needs them. Tests check which modules load, not how long it takes. *Why:* the help and the version should answer at once; loading Pi for them took about half a second and 1,557 modules.
+
 ## Draft notes
 
 - **FRs that rest on parts of the design not yet confirmed by runs** (`docs/design.md` §9):
