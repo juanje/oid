@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
 import { isTestFile } from "./boundaries.ts";
@@ -15,7 +16,7 @@ import { importedSymbolsOf } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
-import { summarize } from "./summary.ts";
+import { summarize, transcriptsOf } from "./summary.ts";
 import { type FrTexts, frTexts, taskContext } from "./task-context.ts";
 import { frScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
@@ -51,6 +52,9 @@ interface FrRun {
   steps: Map<string, string[]>;
   /** Each scenario's latest run, by `<uri>:<line>`: where it fails now. */
   latest: Map<string, ScenarioRun>;
+  /** Where the attempts' transcripts go, beside the run's log, and how many attempts have run. */
+  transcripts: string;
+  attempts: number;
 }
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
@@ -60,7 +64,7 @@ export async function runFr(options: RunOptions): Promise<number> {
   const record = log.record;
   let exitCode: number | undefined;
   try {
-    exitCode = await buildFr(options, worktree, record);
+    exitCode = await buildFr(options, worktree, record, transcriptsOf(log.path));
     return exitCode;
   } catch (error) {
     // An agent's error ends the run at the work accepted so far, as an error no attempt can fix; its use still counts.
@@ -105,11 +109,11 @@ function attemptEvent(attempt: {
   return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cost, deniedToolCalls };
 }
 
-async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree, record: (event: LogEvent) => Promise<void>): Promise<number> {
+async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree, record: (event: LogEvent) => Promise<void>, transcripts: string): Promise<number> {
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
   const { retries, turns } = await readLimits(worktree.dir);
   const { scenarios, steps } = await frScenarios(worktree.dir, fr, runCommand);
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, texts: await frTexts(worktree.dir, fr), steps, latest: new Map() };
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, texts: await frTexts(worktree.dir, fr), steps, latest: new Map(), transcripts, attempts: 0 };
   await record({ event: "start", fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
@@ -195,7 +199,9 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
 async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
   const location = locationOf(scenario);
   const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location));
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context });
+  run.attempts += 1;
+  const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
+  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context, transcript });
 }
 
 function locationOf(scenario: Scenario): string {

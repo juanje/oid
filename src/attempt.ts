@@ -21,6 +21,8 @@ export interface AttemptRequest {
   turns: number;
   /** What its task gives besides its kind and scenario. */
   context?: TaskContext;
+  /** Where its agent's session is kept. */
+  transcript?: string;
 }
 
 /**
@@ -38,6 +40,7 @@ export async function runAttempt({
   refusal: previous,
   turns,
   context,
+  transcript,
 }: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome }> {
   let reported: string | undefined;
   const tools = {
@@ -55,6 +58,7 @@ export async function runAttempt({
     limits: { turns },
     ...(previous === undefined ? {} : { refusal: previous }),
     ...(context === undefined ? {} : { context }),
+    ...(transcript === undefined ? {} : { transcript }),
   });
   const error = agentError(kind, scenario.name, outcome);
   if (error !== undefined) throw error;
