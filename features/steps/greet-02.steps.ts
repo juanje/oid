@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { createGreet02Project, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
+import { attemptDir, createGreet02Project, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
 import { lastAttempt, type PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -56,5 +56,19 @@ Given("the scripted code attempt for the first scenario leaves its new test fail
 
 Then("the output names the test that still fails", function (this: RunWorld) {
   const [name] = testNames(join(greet02AttemptDir("s1-test"), "tests/greet-all.test.ts"));
+  assert.ok(name !== undefined && this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
+});
+
+/** The second scenario's first round: a helper and its test, with code that also breaks something that was green. */
+function secondScenarioBreaking(code: string): PreparedAttempt[] {
+  return attempts(SECOND, ["steps", "s2-steps"], ["test", "s2-test-names"], ["code", code]);
+}
+
+Given("the scripted code attempt for the second scenario breaks the unit test of FR-GREET-01", function (this: RunWorld) {
+  this.script = [...BUILD_FIRST, ...secondScenarioBreaking("s2-code-names-breaks-greet")];
+});
+
+Then("the output names the unit test that turned red", function (this: RunWorld) {
+  const [name] = testNames(join(attemptDir("test"), "tests/greet.test.ts"));
   assert.ok(name !== undefined && this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
 });
