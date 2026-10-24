@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { GREET_01_SCENARIO, attemptDir } from "../support/fixture.ts";
+import { attemptsIn, runLog } from "../support/run.ts";
 import { ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -69,5 +70,18 @@ Then("the model was offered the tools {}, and no shell", function (this: RunWorl
       assert.ok(!request.tools.includes("bash") && !request.tools.includes("powershell"), `Attempt ${index + 1} was offered a shell`);
       assert.deepEqual(request.tools, offered, `Attempt ${index + 1} was offered other tools`);
     }
+  }
+});
+
+Then("the run's log gives each attempt the scripted model's id, its turns, and tokens and cost above zero", async function (this: RunWorld) {
+  const model = scriptedModel(this);
+  const attempts = attemptsIn(await runLog(this));
+  assert.equal(attempts.length, model.script.length, `Expected ${model.script.length} attempts in the run's log, found ${attempts.length}`);
+  for (const [index, attempt] of attempts.entries()) {
+    const which = `The log's ${attempt.kind} attempt`;
+    assert.equal(attempt.model, model.id, `${which} does not give the scripted model's id`);
+    assert.equal(attempt.turns, model.attempts[index]?.length, `${which} does not give the turns its agent took`);
+    assert.ok((attempt.tokens ?? 0) > 0, `${which} gives no tokens`);
+    assert.ok((attempt.cost ?? 0) > 0, `${which} gives no cost`);
   }
 });

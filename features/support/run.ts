@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { branches } from "./fixture.ts";
 import type { Executor } from "../../src/executor.ts";
+import type { AttemptEvent, LogEvent } from "../../src/run-log.ts";
 import type { PreparedAttempt, Request } from "./scripted-executor.ts";
 import type { RunWorld } from "./world.ts";
 
@@ -52,3 +55,16 @@ export async function runOid(projectDir: string, args: string[], executor: Execu
   }
   return result;
 }
+
+/** The run's log: the one file in the repository's .git/oid/runs. */
+export async function runLog(world: RunWorld): Promise<LogEvent[]> {
+  const dir = join(world.projectDir, ".git/oid/runs");
+  const logs = await readdir(dir).catch(() => []);
+  assert.equal(logs.length, 1, `Expected one run log in ${dir}, found ${logs.length}`);
+  return (await readFile(join(dir, logs[0]!), "utf8"))
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as LogEvent);
+}
+
+export const attemptsIn = (log: LogEvent[]) => log.filter((entry): entry is AttemptEvent => entry.event === "attempt");

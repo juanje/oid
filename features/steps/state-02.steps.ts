@@ -1,24 +1,10 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir } from "../support/fixture.ts";
-import type { AttemptEvent, EndEvent, LogEvent, Measures } from "../../src/run-log.ts";
+import type { EndEvent, Measures } from "../../src/run-log.ts";
+import { attemptsIn, runLog } from "../support/run.ts";
 import type { Usage } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
-
-/** The run's log: the one file in the repository's .git/oid/runs. */
-async function runLog(world: RunWorld): Promise<LogEvent[]> {
-  const dir = join(world.projectDir, ".git/oid/runs");
-  const logs = await readdir(dir).catch(() => []);
-  assert.equal(logs.length, 1, `Expected one run log in ${dir}, found ${logs.length}`);
-  return (await readFile(join(dir, logs[0]!), "utf8"))
-    .split("\n")
-    .filter((line) => line !== "")
-    .map((line) => JSON.parse(line) as LogEvent);
-}
-
-const attemptsIn = (log: LogEvent[]) => log.filter((entry): entry is AttemptEvent => entry.event === "attempt");
 
 async function measuresOf(world: RunWorld): Promise<Measures> {
   const end = (await runLog(world)).find((entry): entry is EndEvent => entry.event === "end");
