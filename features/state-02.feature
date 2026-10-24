@@ -20,11 +20,11 @@ Feature: The run log and its measures
     Then the run's log counts 2 code attempts and 2 code rejections
     And the run's log counts 1 blind retry
 
-  Scenario: The log takes each attempt's model, tokens, cost, turns and denied tool calls from the executor, and oid totals them
-    Given the scripted executor reports a model, tokens, cost, turns and denied tool calls for each attempt
+  Scenario: The log takes each attempt's model, tokens, tokens read from the cache, cost, turns and denied tool calls from the executor, and oid totals them
+    Given the scripted executor reports a model, tokens, tokens read from the cache, cost, turns and denied tool calls for each attempt
     When I run "oid run FR-GREET-01"
     Then the run's log gives each attempt what the executor reported for it
-    And the run's log totals the tokens, the cost and the denied tool calls of every attempt
+    And the run's log totals the tokens, the tokens read from the cache, the cost and the denied tool calls of every attempt
     And the run's log gives the run's time, measured by oid
 
   Scenario: The log keeps everything up to where a run stops
