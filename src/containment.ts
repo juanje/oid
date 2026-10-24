@@ -107,7 +107,7 @@ function linkTarget(path: string): string | undefined {
 }
 
 /** Whether a path in the worktree is secret-shaped by its name (DOMAIN.md, Paths and secrets). */
-export function isSecretShaped(path: string): boolean {
+function isSecretShaped(path: string): boolean {
   const name = basename(path);
   return (
     SECRET_NAMES.has(name) ||
