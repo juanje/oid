@@ -1,47 +1,123 @@
+import { realpath, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { describe, expect, test } from "vitest";
-import type { CommandResult } from "../../src/command.ts";
+import type { CommandOptions, CommandResult } from "../../src/command.ts";
 import { gateError, gateRefusal, runGate } from "../../src/gate.ts";
+import { GREET_02_SECOND, recorded } from "./support/recorded.ts";
+import { tempRepo } from "./support/repo.ts";
 
 const TYPE_ERROR = "src/a.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.";
+const PASSING_UNIT = JSON.stringify({ testResults: [{ name: "/work/tests/a.test.ts", status: "passed", message: "", assertionResults: [{ fullName: "a", status: "passed" }] }] });
+const NO_TEST = JSON.stringify({ numTotalTests: 0, testResults: [] });
 
-// The request each runner answers: its arguments, and what it needs from the environment.
-const REQUESTS: Record<string, (args: string[], env: NodeJS.ProcessEnv | undefined) => void> = {
-  tsc: (args) => expect(args).toEqual(["--noEmit"]),
-  vitest: (args) => expect(args).toEqual(["run"]),
-  "cucumber-js": (args, env) => {
-    expect(args).toEqual([]);
-    expect(env?.NODE_OPTIONS).toBe("--import tsx");
-  },
-};
+interface Replies {
+  tsc: CommandResult;
+  /** vitest's JSON report, recorded under /work, and its output. */
+  vitest: { report: string; output?: string };
+  /** cucumber-js's message report. */
+  cucumber: { report: string; output?: string };
+}
 
-/** Runners that answer with `replies`, by runner name, after checking the request is the one that runner answers. */
-function runnersAnswering(replies: Record<string, CommandResult>) {
-  return async (command: string, args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<CommandResult> => {
-    expect(options.cwd).toBe("/work");
-    const name = basename(command);
-    const reply = replies[name];
-    if (reply === undefined || REQUESTS[name] === undefined) throw new Error(`Unexpected command ${command}`);
-    REQUESTS[name](args, options.env);
-    return reply;
+/** The gate's runners answering as recorded, after checking each request is the one that runner answers. */
+function runnersAnswering(dir: string, replies: Replies) {
+  return async (command: string, args: string[], options: CommandOptions): Promise<CommandResult> => {
+    expect(options.cwd).toBe(dir);
+    switch (basename(command)) {
+      case "tsc":
+        expect(args).toEqual(["--noEmit"]);
+        return replies.tsc;
+      case "vitest": {
+        const outputFile = args.find((arg) => arg.startsWith("--outputFile="))!;
+        expect(args.filter((arg) => arg !== outputFile)).toEqual(["run", "--reporter=json"]);
+        await writeFile(outputFile.slice("--outputFile=".length), replies.vitest.report.replaceAll("/work", await realpath(dir)));
+        return { exitCode: 0, output: replies.vitest.output ?? "" };
+      }
+      case "cucumber-js": {
+        expect(options.env?.NODE_OPTIONS).toBe("--import tsx");
+        expect(args[0]).toBe("--format");
+        await writeFile(args[1]!.slice("message:".length), replies.cucumber.report);
+        return { exitCode: 0, output: replies.cucumber.output ?? "" };
+      }
+      default:
+        throw new Error(`Unexpected command ${command}`);
+    }
   };
 }
 
+// Recorded from cucumber-js 13.3.0 on a built FR-GREET-01: its one scenario passes.
+const CUCUMBER_PASSED = recorded("cucumber-greet-01-passed.ndjson");
+
 describe("runGate", () => {
   test("runs types, the unit suite and the scenarios over the project, each passing or failing", async () => {
-    const run = runnersAnswering({
-      tsc: { exitCode: 2, output: TYPE_ERROR },
-      vitest: { exitCode: 0, output: "Tests  1 passed (1)" },
-      "cucumber-js": { exitCode: 0, output: "1 scenario (1 passed)" },
-    });
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const run = runnersAnswering(dir, { tsc: { exitCode: 2, output: TYPE_ERROR }, vitest: { report: PASSING_UNIT }, cucumber: { report: CUCUMBER_PASSED } });
 
-    const checks = await runGate("/work", run);
+    const checks = await runGate(dir, run);
 
     expect(checks.map(({ name, passed }) => ({ name, passed }))).toEqual([
       { name: "types", passed: false },
       { name: "unit", passed: true },
       { name: "scenarios", passed: true },
     ]);
+  });
+
+  test("a failing test fails the unit check, with its message", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const run = runnersAnswering(dir, { tsc: { exitCode: 0, output: "" }, vitest: { report: recorded("vitest-greet-02-assert.json") }, cucumber: { report: CUCUMBER_PASSED } });
+
+    const unit = (await runGate(dir, run))[1]!;
+
+    expect(unit).toMatchObject({ name: "unit", passed: false, failures: [expect.stringContaining("tests/greet-all.test.ts > greets two people together: AssertionError")] });
+  });
+
+  test("a failing scenario fails the scenarios check, with the scenario it is", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    // Recorded with FR-GREET-02's second scenario failing on an assertion.
+    const run = runnersAnswering(dir, { tsc: { exitCode: 0, output: "" }, vitest: { report: PASSING_UNIT }, cucumber: { report: recorded("cucumber-greet-02-assertion.ndjson") } });
+
+    const scenarios = (await runGate(dir, run))[2]!;
+
+    expect(scenarios).toMatchObject({ name: "scenarios", passed: false, failedScenarios: [{ uri: GREET_02_SECOND.uri, line: GREET_02_SECOND.line, name: GREET_02_SECOND.name }] });
+  });
+});
+
+describe("runGate, a check that ran nothing", () => {
+  test("fails the unit and scenario checks that ran no test, whatever their runners' exit codes", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const run = runnersAnswering(dir, { tsc: { exitCode: 0, output: "" }, vitest: { report: NO_TEST }, cucumber: { report: "" } });
+
+    const checks = await runGate(dir, run);
+
+    expect(checks.map(({ name, passed, ranNothing }) => ({ name, passed, ranNothing: ranNothing ?? false }))).toEqual([
+      { name: "types", passed: true, ranNothing: false },
+      { name: "unit", passed: false, ranNothing: true },
+      { name: "scenarios", passed: false, ranNothing: true },
+    ]);
+  });
+
+  test("fails a type check that found no file to check", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const tsc = { exitCode: 2, output: "error TS18003: No inputs were found in config file '/work/tsconfig.json'." };
+    const run = runnersAnswering(dir, { tsc, vitest: { report: PASSING_UNIT }, cucumber: { report: CUCUMBER_PASSED } });
+
+    expect((await runGate(dir, run))[0]).toMatchObject({ name: "types", passed: false, ranNothing: true });
+  });
+});
+
+describe("gateError", () => {
+  test("a runner that does not know an option is an error that names the check and the option", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const tsc = { exitCode: 2, output: "tsconfig.json(13,5): error TS5023: Unknown compiler option 'noSuchCompilerOption'.\n" };
+    const run = runnersAnswering(dir, { tsc, vitest: { report: PASSING_UNIT }, cucumber: { report: CUCUMBER_PASSED } });
+
+    const error = gateError(await runGate(dir, run));
+
+    expect(error).toContain("types");
+    expect(error).toContain("noSuchCompilerOption");
+  });
+
+  test("no error when every runner knew its options", () => {
+    expect(gateError([{ name: "types", passed: false, output: TYPE_ERROR }])).toBeUndefined();
   });
 });
 
@@ -59,53 +135,5 @@ describe("gateRefusal", () => {
 
   test("refuses nothing when every check passes", () => {
     expect(gateRefusal([{ name: "types", passed: true, output: "" }])).toBeUndefined();
-  });
-});
-
-describe("runGate, a check that ran nothing", () => {
-  test("fails the unit and scenario checks that ran no test, even when the runner exits 0", async () => {
-    // As vitest 3.2.7 and cucumber-js 13.3.0 answered on a project with no test and no scenario.
-    const run = runnersAnswering({
-      tsc: { exitCode: 0, output: "" },
-      vitest: { exitCode: 1, output: "\n RUN  v3.2.7 /work\n\nNo test files found, exiting with code 1\n" },
-      "cucumber-js": { exitCode: 0, output: "\n\n0 scenarios\n0 steps\n0m 0.000s (0m 0.000s executing your code)\n" },
-    });
-
-    const checks = await runGate("/work", run);
-
-    expect(checks.map(({ name, passed, ranNothing }) => ({ name, passed, ranNothing: ranNothing ?? false }))).toEqual([
-      { name: "types", passed: true, ranNothing: false },
-      { name: "unit", passed: false, ranNothing: true },
-      { name: "scenarios", passed: false, ranNothing: true },
-    ]);
-  });
-
-  test("fails a type check that found no file to check", async () => {
-    const run = runnersAnswering({
-      tsc: { exitCode: 2, output: "error TS18003: No inputs were found in config file '/work/tsconfig.json'." },
-      vitest: { exitCode: 0, output: "Tests  1 passed (1)" },
-      "cucumber-js": { exitCode: 0, output: "1 scenario (1 passed)" },
-    });
-
-    expect((await runGate("/work", run))[0]).toMatchObject({ name: "types", passed: false, ranNothing: true });
-  });
-});
-
-describe("gateError", () => {
-  test("a runner that does not know an option is an error that names the check and the option", async () => {
-    const run = runnersAnswering({
-      tsc: { exitCode: 2, output: "tsconfig.json(13,5): error TS5023: Unknown compiler option 'noSuchCompilerOption'.\n" },
-      vitest: { exitCode: 0, output: "Tests  1 passed (1)" },
-      "cucumber-js": { exitCode: 0, output: "1 scenario (1 passed)" },
-    });
-
-    const error = gateError(await runGate("/work", run));
-
-    expect(error).toContain("types");
-    expect(error).toContain("noSuchCompilerOption");
-  });
-
-  test("no error when every runner knew its options", () => {
-    expect(gateError([{ name: "types", passed: false, output: TYPE_ERROR }])).toBeUndefined();
   });
 });
