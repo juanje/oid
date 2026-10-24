@@ -63,7 +63,9 @@ The decisions in force, with their reasons and the options they rule out. Read t
 - long-lived agent sessions that advance the cycle;
 - Claude Code in the MVP.
 
-**Follows.** With an external executor, secrets rely on its deny rules plus an audit of the session's reads. That invariant is weaker in that mode, and the person must be told.
+**Follows.**
+- In the MVP, oid runs Pi from its own agent dir: its model registry, credentials, and rg and fd. It never reads `~/.pi/agent`, so using Pi by hand and using oid cannot affect each other. `oid setup` may copy credentials from Pi once, never link them.
+- With an external executor, secrets rely on its deny rules plus an audit of the session's reads. That invariant is weaker in that mode, and the person must be told.
 
 ## D-05: No shell; read everything except secrets and noise; the gate's configuration is unwritable
 

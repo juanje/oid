@@ -76,6 +76,8 @@ An attempt is the unit of work (D-04):
 | Output | The diff, and the report |
 | Judgment | Write boundary on the diff; forbidden patterns in added lines; the evidence check of its kind |
 
+**Containment** (FR-AGENT-05). Every file tool checks its path before the call runs: a path that resolves outside the worktree, with symlinks resolved, or a secret-shaped name inside it, is refused, naming the path and why. The diff check cannot see what an agent read, or wrote outside the worktree.
+
 **Write boundaries** (D-05):
 
 | Kind | May write |
@@ -151,6 +153,7 @@ A change that needs both passes (a rename the tests import) takes three items: t
 ## 7. State and record
 
 - **Worktree and branch per run.** The worktree lives outside the repository, in `../.oid-worktrees/<repository>/<run id>`. Tools that skip paths containing `.git` must still see it, and the person's checkout must not hold it. Checkpoints are commits made without the project's hooks. The FR's commit is the squash of its checkpoints.
+- **oid's agent dir for Pi** (MVP, D-04): its own model registry, credentials, and rg and fd, apart from `~/.pi/agent`, which oid never reads. `oid setup` writes it; `oid doctor` checks it. The skeleton still uses Pi's own store.
 - **`progress.json`** (D-08), written only by oid and validated against its schema. It holds the status of each FR and, for each scenario and test, its evidence and whether it is shelved, with the proposal.
 - **The run log.** Append-only. It holds attempts, verdicts, refusals, questions, and the measures of `SPEC.md` FR-STATE-02, computed by oid.
 - **`oid status`** reads both: what is done with its evidence, what is shelved and why, and where the last run stopped.
@@ -190,5 +193,4 @@ These parts of the design came from analysis, not from runs. The first runs conf
 - no shell for any agent (§3);
 - coverage of new lines as a gate check (§5);
 - a test or steps attempt the gate sends back for a type error is not asked for a new Red, only to keep the number of tests: it can still weaken a test unseen. That risk closes in the MVP with the recorded evidence (FR-EVID-04) and the refactor's mutant (FR-REF-03);
-- secret containment entering after the skeleton, which is safe only because the shortener holds no secrets;
 - the order in which the rest of the MVP is built: the mutant, shelving, several FRs, the refactor and coverage first; then budget limits, `progress.json`, `oid status` and `oid gate`; `init`, `doctor`/`setup` and `resume`/`abort` last.
