@@ -23,6 +23,11 @@ Feature: Coverage of the FR's new branches
     When I run "oid run FR-GREET-01"
     Then the run succeeds
 
+  Scenario: A branch no run takes in a step definition does not refuse the gate
+    Given the scripted steps attempt writes a step definition with a branch no run takes
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+
   Scenario: A project without vitest's coverage provider is an error before any attempt
     Given the project does not have @vitest/coverage-v8
     When I run "oid run FR-GREET-01"
