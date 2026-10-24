@@ -175,7 +175,7 @@ No agent writes feature files, `SPEC.md`, the gate's configuration or oid's stat
 ### State and record
 
 #### FR-STATE-01: Worktree and checkpoints
-**Skeleton.** A run works in its own worktree and branch. It checkpoints each accepted attempt, and a rejected attempt goes back to the last checkpoint. The FR's commit is the squash of its checkpoints. *Why:* git is the undo; reverting costs nothing.
+**Skeleton.** A run works in its own worktree and branch. It checkpoints each accepted attempt, and a rejected attempt goes back to the last checkpoint. The FR's commit is the squash of its checkpoints. When the run ends, its worktree is removed and its branch kept. *Why:* git is the undo; reverting costs nothing.
 
 #### FR-STATE-02: The run log and its measures
 **Skeleton.** Each run writes an append-only log of its attempts, verdicts, refusals and questions, and the measures below, all computed by oid and never by an agent:
