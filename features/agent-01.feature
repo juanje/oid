@@ -60,6 +60,7 @@ Feature: One attempt, one agent process
   @smoke
   Scenario: On a real model, oid runs as the person types it, and each attempt's use reaches the run log
     Given the project's .oid.json names the real model in OID_SMOKE_MODEL
+    And the run uses oid's default limits, as a real run does
     When I run "oid run FR-GREET-01" with the oid command
     Then the run ends without an error or a crash
     And the run's log gives each attempt the real model's id, its turns, and tokens above zero
