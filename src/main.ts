@@ -6,7 +6,10 @@ export function main(args: string[]): Promise<number> {
   return runCli(args, {
     cwd,
     // Pi loads only when a command needs an executor, never for the help or the version (NFR-07).
-    executor: async () => (await import("./pi-model.ts")).executorFromConfig(cwd),
+    executor: async () => {
+      const [{ executorFromConfig }, { personalConfigDir }] = await Promise.all([import("./pi-model.ts"), import("./config.ts")]);
+      return executorFromConfig(cwd, { configDir: personalConfigDir(process.env) });
+    },
     stdout: (text) => process.stdout.write(text),
     stderr: (text) => process.stderr.write(text),
   });

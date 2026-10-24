@@ -1,9 +1,12 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import { git } from "./git.ts";
 
 // The project's oid config, written by hand in the skeleton (FR-CLI-02 writes it later).
 const CONFIG_FILE = ".oid.json";
+const PERSONAL_CONFIG_FILE = "config.json";
 const DEFAULT_RETRIES = 2;
 const DEFAULT_TURNS = 40;
 
@@ -33,12 +36,31 @@ export async function readPaths(dir: string): Promise<Paths> {
 /** A configuration oid cannot run with: an error no attempt can fix (exit 2), which names what to change. */
 export class ConfigError extends Error {}
 
-/** The model the project's agents run on, as `<provider>/<model>`, when .oid.json names one (FR-AGENT-01). */
-export async function readModel(dir: string): Promise<string | undefined> {
-  return (await readConfig(dir)).model;
+/** Where the person's own oid configuration lives (NFR-08): `$OID_CONFIG_DIR`, else `oid` in `$XDG_CONFIG_HOME`, else `.config/oid` in the home. */
+export function personalConfigDir(env: { OID_CONFIG_DIR?: string; XDG_CONFIG_HOME?: string; HOME?: string }): string {
+  if (env.OID_CONFIG_DIR !== undefined && env.OID_CONFIG_DIR !== "") return env.OID_CONFIG_DIR;
+  if (env.XDG_CONFIG_HOME !== undefined && env.XDG_CONFIG_HOME !== "") return join(env.XDG_CONFIG_HOME, "oid");
+  return join(env.HOME ?? homedir(), ".config", "oid");
 }
 
-async function readConfig(dir: string): Promise<{ model?: string; limits?: Partial<Limits>; paths?: Paths }> {
+/** The personal config's file, in its config dir. */
+export function personalConfigFile(configDir: string): string {
+  return join(configDir, PERSONAL_CONFIG_FILE);
+}
+
+/** The model the person's agents run on, as `<provider>/<model>`, when their personal config names one (FR-AGENT-01). */
+export async function readPersonalModel(configDir: string): Promise<string | undefined> {
+  const path = personalConfigFile(configDir);
+  return existsSync(path) ? (JSON.parse(await readFile(path, "utf8")) as { model?: string }).model : undefined;
+}
+
+/** Whether the project's .oid.json, as committed at HEAD, names a model, which is personal (NFR-08). */
+export async function projectNamesModel(projectDir: string): Promise<boolean> {
+  const committed = await git(projectDir, "show", `HEAD:${CONFIG_FILE}`).catch(() => undefined);
+  return committed !== undefined && (JSON.parse(committed) as { model?: unknown }).model !== undefined;
+}
+
+async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; paths?: Paths }> {
   const path = join(dir, CONFIG_FILE);
   return existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
 }
