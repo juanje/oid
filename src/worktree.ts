@@ -14,3 +14,9 @@ export async function createRunWorktree(projectDir: string, runId: string): Prom
   await git(projectDir, "worktree", "add", "-q", "-b", branch, dir, "HEAD");
   return { dir, branch };
 }
+
+/** Commits every change in the worktree as one commit on the run's branch. */
+export async function commitRun(worktreeDir: string, message: string): Promise<void> {
+  await git(worktreeDir, "add", "--all");
+  await git(worktreeDir, "commit", "-q", "-m", message);
+}
