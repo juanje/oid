@@ -137,3 +137,15 @@ Then("the run's branch has no commit on top of the starting HEAD", function (thi
   const branch = runBranch(this);
   assert.equal(git(this.projectDir, "rev-parse", branch), this.startHead, `The run committed on ${branch}`);
 });
+
+Given("the scripted code attempt passes the tests but leaves a type error", function (this: RunWorld) {
+  this.attempts.code = attemptDir("code-type-error");
+});
+
+Then("the output names the type check and the file with the error", async function (this: RunWorld) {
+  // The gate's check is named "types"; tsc's message for the fixture's error says "type", so it cannot pass this alone.
+  assert.match(this.output, /\btypes\b/i, `The output does not name the type check:\n${this.output}`);
+  for (const file of await filesUnder(this.attempts.code!)) {
+    assert.ok(this.output.includes(file), `The output does not name ${file}:\n${this.output}`);
+  }
+});
