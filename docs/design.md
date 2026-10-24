@@ -149,7 +149,7 @@ A change that needs both passes (a rename the tests import) takes three items: t
 
 ## 7. State and record
 
-- **Worktree and branch per run.** Checkpoints are commits made without the project's hooks. The FR's commit is the squash of its checkpoints.
+- **Worktree and branch per run.** The worktree lives outside the repository, in `../.oid-worktrees/<repository>/<run id>`. Tools that skip paths containing `.git` must still see it, and the person's checkout must not hold it. Checkpoints are commits made without the project's hooks. The FR's commit is the squash of its checkpoints.
 - **`progress.json`** (D-08), written only by oid and validated against its schema. It holds the status of each FR and, for each scenario and test, its evidence and whether it is shelved, with the proposal.
 - **The run log.** Append-only. It holds attempts, verdicts, refusals, questions, and the measures of `SPEC.md` FR-STATE-02, computed by oid.
 - **`oid status`** reads both: what is done with its evidence, what is shelved and why, and where the last run stopped.
