@@ -81,6 +81,23 @@ function exportsOf(source: ts.SourceFile): Set<string> | "anything" {
   return names;
 }
 
+/** The project's modules `file` imports, statically, dynamically or by re-export, as paths from `dir`; only those that exist. */
+export async function importedModules(dir: string, file: string): Promise<string[]> {
+  const specifiers = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier)) {
+      specifiers.add(node.moduleSpecifier.text);
+    }
+    if (ts.isCallExpression(node)) {
+      const specifier = dynamicImportOf(node);
+      if (specifier !== undefined) specifiers.add(specifier);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(await parse(dir, file));
+  return [...specifiers].filter(isRelative).map((specifier) => normalize(join(dirname(file), specifier))).filter((module) => existsSync(join(dir, module)));
+}
+
 function isRelative(specifier: string): boolean {
   return specifier.startsWith("./") || specifier.startsWith("../");
 }
