@@ -2,7 +2,7 @@ import { agentError } from "./agent-error.ts";
 import { judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { AttemptKind, AttemptOutcome, Executor, TryTarget } from "./executor.ts";
+import type { AttemptKind, AttemptOutcome, Executor, TaskContext, TryTarget } from "./executor.ts";
 import { LimitReached, turnLimitReached } from "./limits.ts";
 import type { Refusal } from "./refusal.ts";
 import { judgeReport } from "./report.ts";
@@ -19,6 +19,8 @@ export interface AttemptRequest {
   refusal: Refusal | undefined;
   /** The turns its agent may take. */
   turns: number;
+  /** What its task gives besides its kind and scenario. */
+  context?: TaskContext;
 }
 
 /**
@@ -35,6 +37,7 @@ export async function runAttempt({
   worktreeDir,
   refusal: previous,
   turns,
+  context,
 }: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome }> {
   let reported: string | undefined;
   const tools = {
@@ -51,6 +54,7 @@ export async function runAttempt({
     tools,
     limits: { turns },
     ...(previous === undefined ? {} : { refusal: previous }),
+    ...(context === undefined ? {} : { context }),
   });
   const error = agentError(kind, scenario.name, outcome);
   if (error !== undefined) throw error;

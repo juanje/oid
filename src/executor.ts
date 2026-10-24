@@ -14,6 +14,16 @@ export interface Attempt {
   refusal?: Refusal;
   /** The executor ends its agent between turns when it reaches `turns` (with Pi, finishTurn returning { action: "end" }). */
   limits: { turns: number };
+  /** What the task gives the agent besides its kind and scenario (FR-AGENT-03). */
+  context?: TaskContext;
+}
+
+/** What oid gathers for an attempt's task from the project and its own judgment (FR-AGENT-03). */
+export interface TaskContext {
+  /** The FR's heading and text from the spec, when the spec has it. */
+  fr?: string;
+  /** The scenario's steps, with their keywords. */
+  steps: string[];
 }
 
 /** What the executor reports of an attempt: its agent's turns, which the executor counts, never the model. */

@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
 import { isTestFile } from "./boundaries.ts";
@@ -12,6 +15,7 @@ import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
+import { frText as specFrText } from "./project-texts.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
@@ -44,6 +48,10 @@ interface FrRun {
   turns: number;
   /** Appends to the run log. */
   record: (event: LogEvent) => Promise<void>;
+  /** The FR's text from the spec, for every task (FR-AGENT-03). */
+  frText: string | undefined;
+  /** Each scenario's steps, by `<uri>:<line>`. */
+  steps: Map<string, string[]>;
 }
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
@@ -101,7 +109,8 @@ function attemptEvent(attempt: {
 async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree, record: (event: LogEvent) => Promise<void>): Promise<number> {
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
   const { retries, turns } = await readLimits(worktree.dir);
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record };
+  const frText = existsSync(join(worktree.dir, "SPEC.md")) ? specFrText(await readFile(join(worktree.dir, "SPEC.md"), "utf8"), fr) : undefined;
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, frText, steps: new Map() };
   const scenarios = await listScenarios(worktree.dir, fr, runCommand);
   await record({ event: "start", fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
@@ -182,7 +191,8 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
 
 /** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
 function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns });
+  const context = { ...(run.frText === undefined ? {} : { fr: run.frText }), steps: run.steps.get(`${scenario.uri}:${scenario.line}`) ?? [] };
+  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context });
 }
 
 /** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */

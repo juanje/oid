@@ -79,8 +79,11 @@ function procedureOf(kind: AttemptKind): string {
   ].join("\n");
 }
 
-/** The task of one attempt: what to build, and, for a retry, why the attempt before it was refused. */
-export function taskFor({ kind, fr, scenario, refusal }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal">): string {
-  const task = `Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`;
-  return refusal === undefined ? task : `${task}\n\nThe attempt before this one was refused:\n${formatRefusal(refusal)}`;
+/** The task of one attempt: what to build, from what the run gathered for it, and, for a retry, why the attempt before it was refused. */
+export function taskFor({ kind, fr, scenario, refusal, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "context">): string {
+  const parts = [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
+  if (context?.fr !== undefined) parts.push(`The FR, from the spec:\n${context.fr}`);
+  if (context !== undefined && context.steps.length > 0) parts.push(`The scenario's steps:\n${context.steps.join("\n")}`);
+  if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
+  return parts.join("\n\n");
 }
