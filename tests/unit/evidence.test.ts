@@ -16,6 +16,15 @@ describe("judgeSteps", () => {
     expect(judgment.reds).toEqual([`${SCENARIO.uri}:${SCENARIO.line} "${SCENARIO.name}": missing_implementation`]);
   });
 
+  test("refuses a scenario that fails while being set up, naming the step and pointing at When and Then", () => {
+    const failure = { step: 'the salutation is "Good morning"', kind: "Context" as const, status: "FAILED", message: "TypeError: setSalutation is not a function" };
+
+    const { refusal } = judgeSteps({ ...SCENARIO, status: "failed", failure }, nothingExists);
+
+    expect(refusal?.evidence).toContain(failure.step);
+    expect(refusal?.next).toContain("When or Then");
+  });
+
   test("refuses step definitions whose scenario passes before its code, naming the scenario", () => {
     const { refusal } = judgeSteps({ ...SCENARIO, status: "passed" }, nothingExists);
 

@@ -41,6 +41,10 @@ describe("classifyScenario", () => {
     expect(classifyScenario(failedAt("Action", "PENDING", ""), nothingExists)).toBe("test_bug");
   });
 
+  test("a scenario that fails in a Given or Background step is test_bug, whatever its message", () => {
+    expect(classifyScenario(failedAt("Context", "FAILED", "TypeError: setSalutation is not a function"), nothingExists)).toBe("test_bug");
+  });
+
   test("a scenario that fails in a When or Then step is classified by the step's message", () => {
     expect(classifyScenario(failedAt("Action", "FAILED", "TypeError: greetWith is not a function"), greetExists)).toBe("missing_implementation");
   });
