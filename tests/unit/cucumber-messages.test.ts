@@ -47,7 +47,7 @@ describe("scenarioResults", () => {
     expect(result?.failure).toEqual({ step: 'the greeting is "Good morning, Ada!"', kind: "Outcome", status: "UNDEFINED", message: "" });
   });
 
-  test("names the file that defines the step a scenario failed at", () => {
+  test("names the file and the line that define the step a scenario failed at", () => {
     // Recorded with FR-GREET-03: its When fails because greet.ts does not export greetWith yet.
     const [result] = scenarioResults(recorded("cucumber-greet-03-when-fails.ndjson"));
 
@@ -56,6 +56,7 @@ describe("scenarioResults", () => {
       kind: "Action",
       status: "FAILED",
       definedIn: "features/steps/greet-with.steps.ts",
+      definedAt: 13,
     });
   });
 
