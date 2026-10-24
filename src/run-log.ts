@@ -1,5 +1,6 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import type { Scenario } from "./cucumber-messages.ts";
 import type { AttemptKind } from "./executor.ts";
 import { git } from "./git.ts";
 import type { Refusal } from "./refusal.ts";
@@ -15,12 +16,29 @@ export interface AttemptEvent {
   /** The attempt came with the refusal of the one before it. */
   retry: boolean;
   refusal?: Refusal;
+  /** The valid Reds an accepted steps or test attempt showed, each as `<what failed>: <class>`. */
+  reds?: string[];
   /** As the executor reported them. */
   turns: number;
   model?: string;
   tokens?: number;
   cost?: number;
   deniedToolCalls?: number;
+}
+
+export interface StartEvent {
+  event: "start";
+  fr: string;
+  /** The FR's scenarios, in the order the run builds them. */
+  scenarios: Scenario[];
+  branch: string;
+  checkpoints: string;
+}
+
+/** A scenario that passes, with every attempt it took accepted. */
+export interface ScenarioEvent extends Scenario {
+  event: "scenario";
+  verdict: "built";
 }
 
 export interface StopEvent {
@@ -46,7 +64,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = AttemptEvent | StopEvent | EndEvent;
+export type LogEvent = StartEvent | AttemptEvent | ScenarioEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   append(event: LogEvent): Promise<void>;
