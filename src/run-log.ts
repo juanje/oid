@@ -67,6 +67,7 @@ export interface EndEvent {
 export type LogEvent = StartEvent | AttemptEvent | ScenarioEvent | StopEvent | EndEvent;
 
 export interface RunLog {
+  path: string;
   append(event: LogEvent): Promise<void>;
 }
 
@@ -75,10 +76,14 @@ export async function openRunLog(dir: string, runId: string): Promise<RunLog> {
   const runs = join(resolve(dir, await git(dir, "rev-parse", "--git-common-dir")), "oid", "runs");
   await mkdir(runs, { recursive: true });
   const path = join(runs, `${runId}.jsonl`);
-  return { append: (event) => appendFile(path, `${JSON.stringify(event)}\n`) };
+  return { path, append: (event) => appendFile(path, `${JSON.stringify(event)}\n`) };
 }
 
 export interface RunRecorder {
+  /** The log's file. */
+  path: string;
+  /** Every event so far, in order. */
+  events: LogEvent[];
   record(event: LogEvent): Promise<void>;
   /** Appends the end of the run, with its measures and its time since the log started. */
   end(exitCode: number): Promise<void>;
@@ -93,7 +98,12 @@ export async function startRunLog(dir: string, runId: string): Promise<RunRecord
     events.push(event);
     await log.append(event);
   };
-  return { record, end: (exitCode) => record({ event: "end", exitCode, measures: measuresOf(events, performance.now() - started) }) };
+  return {
+    path: log.path,
+    events,
+    record,
+    end: (exitCode) => record({ event: "end", exitCode, measures: measuresOf(events, performance.now() - started) }),
+  };
 }
 
 /** The run's measures, from its attempt events, and its time. */

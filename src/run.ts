@@ -14,6 +14,7 @@ import { importedSymbolsOf } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
+import { summarize } from "./summary.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { acceptedWork, checkpoint, createRunWorktree, finishRun, type RunWorktree } from "./worktree.ts";
@@ -64,7 +65,10 @@ export async function runFr(options: RunOptions): Promise<number> {
   } finally {
     // The worktree goes however the run ends; only a built FR gets its commit and drops its checkpoints.
     await finishRun(worktree, exitCode === EXIT_BUILT ? `feat(${options.fr}): built by oid run` : undefined);
-    if (exitCode !== undefined) await log.end(exitCode);
+    if (exitCode !== undefined) {
+      await log.end(exitCode);
+      options.out(summarize(log.events, log.path));
+    }
   }
 }
 
@@ -76,9 +80,11 @@ function attemptEvent(
   retry: boolean,
   outcome: AttemptOutcome,
   verdict: AttemptEvent["verdict"] = refusal === undefined ? "accepted" : "refused",
+  reds: string[] = [],
 ): AttemptEvent {
   const { turns, model, tokens, cost, deniedToolCalls } = outcome;
-  return { event: "attempt", kind, scenario, verdict, retry, ...(refusal === undefined ? {} : { refusal }), turns, model, tokens, cost, deniedToolCalls };
+  const shown = { ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
+  return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cost, deniedToolCalls };
 }
 
 async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree, record: (event: LogEvent) => Promise<void>): Promise<number> {
@@ -86,6 +92,7 @@ async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree,
   const { retries, turns } = await readLimits(worktree.dir);
   const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record };
   const scenarios = await listScenarios(worktree.dir, fr, runCommand);
+  await record({ event: "start", fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
   }
@@ -116,6 +123,7 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
   for (const scenario of scenarios) {
     const refusal = await buildScenario(run, scenario);
     if (refusal !== undefined) return refusal;
+    await run.record({ event: "scenario", ...scenario, verdict: "built" });
     run.green.push(scenario);
   }
   return undefined;
@@ -126,21 +134,22 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   const { out, known, retries } = run;
   const worktreeDir = run.worktree.dir;
   // An attempt and the judgment of its kind, retried from the work accepted before it while refused (FR-RUN-07).
-  const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Refusal | undefined>) =>
+  const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) =>
     withRetries(retries, async (previous) => {
       const accepted = await acceptedWork(worktreeDir);
       const attempt = await attemptFor(run, kind, scenario, previous);
-      const refusal = attempt.refusal ?? (await judge(attempt.files));
-      await run.record(attemptEvent(kind, scenario.name, refusal, previous !== undefined, attempt.outcome));
+      const judgment = attempt.refusal === undefined ? await judge(attempt.files) : { refusal: attempt.refusal, reds: [] };
+      const refusal = judgment.refusal;
+      await run.record(attemptEvent(kind, scenario.name, refusal, previous !== undefined, attempt.outcome, undefined, judgment.reds));
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
       return { refusal, rollback: accepted.restore };
     });
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
   // Asked at each judgment, of the file that failed: the project changes with every attempt.
   const symbolsOf = (files: string[]) => importedSymbolsOf(worktreeDir, files);
-  const accept = ({ refusal, reds }: Judgment): Refusal | undefined => {
-    for (const red of reds) out(`Red: ${red}\n`);
-    return refusal;
+  const accept = (judgment: Judgment): Judgment => {
+    for (const red of judgment.reds) out(`Red: ${red}\n`);
+    return judgment;
   };
 
   const stepsRefusal = await judged("steps", async () => {
