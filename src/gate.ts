@@ -56,7 +56,7 @@ async function coverageCheck(dir: string, start: string, unitDir: string, v8Dir:
   const unit = unitCoverage(unitDir);
   if (unit === undefined) return checkResult("coverage", { ran: false, ranNothing: false, output: "vitest wrote no coverage report", failures: [] });
   const added = addedLines(await git(dir, "diff", "-U0", "--no-color", start, "--", ...WRITABLE.code));
-  const left = uncoveredNew(untaken([unit, await scenarioCoverage(v8Dir, dir)], dir), added);
+  const left = uncoveredNew(untaken([unit, await scenarioCoverage(v8Dir, dir, WRITABLE.code)], dir), added);
   const failures = left.map((item) => `${item.file}:${item.line}:${item.column + 1}: ${item.what}`);
   return checkResult("coverage", { ran: true, ranNothing: false, output: failures.join("\n"), failures });
 }

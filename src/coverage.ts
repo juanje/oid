@@ -133,10 +133,11 @@ export function unitCoverage(dir: string): CoverageReport | undefined {
 
 /**
  * The scenarios' coverage: the V8 coverage Node wrote in `dir` (NODE_V8_COVERAGE) for the files of the project in
- * `root`, out of its node_modules, converted to istanbul through the source maps Node recorded (as c8 does: the
- * executed source is rebuilt from their line lengths).
+ * `root` under the `sourcePaths`, as the unit side's coverage includes only them, converted to istanbul through the
+ * source maps Node recorded (as c8 does: the executed source is rebuilt from their line lengths). Step definitions are
+ * left out: their branches are not the code's to cover.
  */
-export async function scenarioCoverage(dir: string, root: string): Promise<CoverageReport> {
+export async function scenarioCoverage(dir: string, root: string, sourcePaths: string[]): Promise<CoverageReport> {
   const report: CoverageReport = {};
   if (!existsSync(dir)) return report;
   const project = real(root);
@@ -148,7 +149,8 @@ export async function scenarioCoverage(dir: string, root: string): Promise<Cover
     for (const script of v8.result) {
       if (!script.url.startsWith("file://")) continue;
       const path = fileURLToPath(script.url);
-      if (!real(path).startsWith(`${project}/`) || path.includes("/node_modules/")) continue;
+      const file = relative(project, real(path));
+      if (!sourcePaths.some((prefix) => file.startsWith(prefix)) || file.includes("node_modules/")) continue;
       const cached = v8["source-map-cache"]?.[script.url];
       const sources = cached === undefined ? undefined : { source: cached.lineLengths.map((length) => "".padEnd(length, ".")).join("\n"), sourceMap: { sourcemap: cached.data } };
       const converter = v8ToIstanbul(path, 0, sources);
