@@ -99,6 +99,15 @@ describe("taskFor", () => {
     expect(task).toContain(broken.failure.message);
   });
 
+  test("gives the project's domain and its conventions", () => {
+    const texts = { domain: "A greeting is one sentence.", conventions: "Functions are pure, because scenarios call them." };
+
+    const task = taskFor({ kind: "code", fr: "FR-GREET-01", scenario: SCENARIO, context: { ...CONTEXT, ...texts } });
+
+    expect(task).toContain(texts.domain);
+    expect(task).toContain(texts.conventions);
+  });
+
   test("gives a retry the refusal of the attempt before it", () => {
     const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
 
