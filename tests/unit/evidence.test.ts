@@ -46,6 +46,15 @@ describe("judgeCode", () => {
     expect(judgeCode(unit([]), [{ ...GREEN, status: "passed" }])).toBeUndefined();
   });
 
+  test("sends a test file that registers no vitest test back to a test attempt, naming it and pointing to vitest", () => {
+    const message = "No test suite found in file /work/tests/greet-all.test.ts";
+    const refusal = judgeCode({ ...unit(["tests/greet-all.test.ts"]), failures: [{ test: "tests/greet-all.test.ts", message }] }, []);
+
+    expect(refusal?.sendTo).toBe("test");
+    expect(`${refusal?.failed}\n${refusal?.evidence}`).toContain("tests/greet-all.test.ts");
+    expect(refusal?.next).toMatch(/\bvitest\b/);
+  });
+
   test("refuses code that leaves a unit test failing, naming the test", () => {
     const refusal = judgeCode(unit(["tests/greet-all.test.ts > greets two people together"]), []);
 
