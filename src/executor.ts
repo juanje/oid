@@ -10,6 +10,8 @@ export interface Attempt {
   /** The run's worktree, where the attempt writes its diff. */
   worktree: string;
   tools: AttemptTools;
+  /** The refusal that led to this attempt, when it is a retry: the most useful part of its task (FR-AGENT-03). */
+  refusal?: Refusal;
 }
 
 /** One test file, or the attempt's own scenario. */

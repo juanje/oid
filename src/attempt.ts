@@ -13,13 +13,15 @@ export interface AttemptRequest {
   fr: string;
   scenario: Scenario;
   worktreeDir: string;
+  /** The refusal of the attempt before it, when this one is a retry. */
+  refusal: Refusal | undefined;
 }
 
 /**
  * Runs one attempt with its tools, then judges what holds for every kind: it ended with a report (FR-AGENT-07),
  * and its diff stays inside its boundary (FR-AGENT-04). The evidence of its kind is judged after.
  */
-export async function runAttempt({ executor, kind, fr, scenario, worktreeDir }: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[] }> {
+export async function runAttempt({ executor, kind, fr, scenario, worktreeDir, refusal: previous }: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[] }> {
   let reported: string | undefined;
   const tools = {
     try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand),
@@ -27,7 +29,7 @@ export async function runAttempt({ executor, kind, fr, scenario, worktreeDir }: 
       reported = result;
     },
   };
-  await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir, tools });
+  await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir, tools, ...(previous === undefined ? {} : { refusal: previous }) });
   const diff = await takeAttemptDiff(worktreeDir);
   return { refusal: judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff), files: diff.files };
 }
