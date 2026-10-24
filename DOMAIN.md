@@ -62,16 +62,17 @@ That codebase uses some of these words with other meanings. When you port a piec
 |:--|:--|:--|
 | `business_assertion` | Yes | An assertion about behaviour fails. |
 | `missing_implementation` | Yes | The source module or symbol under test does not exist yet, or the service under test does not answer yet. |
-| `test_bug` | No | The test does not compile, a step is undefined or pending, or the test passes without new code. |
+| `test_bug` | No | The test does not compile, a step is undefined or pending, a `Given` or `Background` step fails, or the test passes without new code. |
 | `environment` | No | A package that is not installed, a misconfigured runner, a timeout. |
-| undecided | — | None of the above can be told from the report. In the skeleton it is a refusal; in the MVP, a question to the person. |
+| `not_run` | No | The test or scenario asked for is not in the runner's report: the runner did not collect it, or stopped before it ran. |
+| `undecided` | — | None of the above can be told from the report. In the skeleton it is a refusal; in the MVP, a question to the person. |
 
-- **A failure in a `Given` or `Background` step is never a Red.** The scenario failed while being set up. A failure in a `When` or `Then` step is judged by its message.
+- **A failure in a `Given` or `Background` step is `test_bug`, never a Red.** The scenario failed while being set up. The refusal's next step: set the scenario up without code that does not exist yet, or move that behaviour into a `When` or `Then` step. A failure in a `When` or `Then` step is judged by its message.
 - **`ENOENT` reading something the code should produce is undecided.** Tests assert first that the output exists, then check its content, so that a missing behaviour fails as an assertion.
 - **`X is not a function` is a valid Red only if `X` does not exist in the project.** Ask the compiler API. If `X` exists, the test may be using it wrongly.
 - **An assertion that fails on a line the attempt did not add is undecided.**
 - **A test that passes before its code is not a Red.** If it describes a guard, its evidence is a mutant.
-- **A test that did not run is never evidence.** Check that the test asked for is in the report and ran before reading its result.
+- **A test that did not run is `not_run`, never evidence.** Check that the test asked for is in the report and ran before reading its result.
 
 ## Formats
 
