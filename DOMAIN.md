@@ -2,7 +2,7 @@
 
 What the words mean here, the formats oid reads and writes, and how the tools oid drives behave.
 
-The tool behaviour below was observed on Pi 1.1.0, cucumber-js 13 and vitest 3. oid pins Pi 1.4.0, so check each Pi behaviour on 1.4.0 the first time you rely on it. Do the same for any other tool whose pinned version differs. Update this file when a behaviour changed.
+The tool behaviour below was observed on Pi 1.1.0, cucumber-js 13 and vitest 3; the Pi section says what was checked against 1.4.0. If a pinned version differs from these, check a behaviour before you rely on it, and update this file when it changed.
 
 ## Terms
 
@@ -132,16 +132,22 @@ Categories: `complexity`, `duplication`, `dead_code`, `magic_value`, `doc_drift`
 
 ### Pi SDK
 
-- **Provider errors do not reject.** `prompt()` and `classify()` resolve with `stopReason: "error"` and an `errorMessage`, on `message_end` for `prompt()`. Usage is present and cost is 0. An empty assistant response is also possible. Neither is success.
+Observed on 1.1.0; the 1.4.0 code was compared and is the same unless a line says otherwise. Lines marked *(source)* come from reading the code, not from running it: check them the first time you rely on them.
+
+- **Provider errors do not reject.** `prompt()` and `classify()` resolve with `stopReason: "error"` and an `errorMessage`, on `message_end` for `prompt()`. A `prompt()` error carries usage with cost 0; `classify()`'s `usage` is optional. An empty assistant response is also possible. Neither is success.
+- **Pi retries provider errors itself** (by default 3 retries, 2 s base) *(source)*. oid's retries come on top, and one attempt's event stream can hold several error `message_end`s.
 - **A tool call that ignores the abort signal never settles.** `prompt()` and `session.abort()` then never resolve. To enforce a time or cost limit, race `prompt()` against the limit and abandon the session.
 - **Calling `abort()` from inside `beforeToolCall` or `afterToolCall` and awaiting it never settles.** Start it without awaiting.
+- **To end a session cleanly between turns** (a turn or cost limit), `Agent.finishTurn` can return `{ action: "end" }`. `AgentSession` wraps an existing `finishTurn`, so chain to it *(source)*.
 - **The `tools` allowlist also filters custom tools.** A custom tool missing from it is never offered, and nothing says so.
-- **`beforeToolCall` blocks a call when it returns `{ block: true, reason }`.** The reason reaches the model as the tool result. Chain to the previous handler, because Pi's extensions use the same hook.
+- **`beforeToolCall` blocks a call when it returns `{ block: true, reason }`.** The reason reaches the model as the tool result. Chain to the previous handler, because Pi's extensions use the same hook. Since 1.3.0, a call with malformed arguments fails validation before `beforeToolCall` runs.
 - **`tool_execution_end` carries no `args`.** Pair it with `tool_execution_start` by `toolCallId`.
-- **Without an explicit `agentDir`, Pi reads the user's `~/.pi/agent/settings.json`.** Always pass one.
-- **`SessionManager.create(cwd, dir)` writes the transcript only from the first message.** Create the directory before the call.
+- **Pi reads two settings files:** `<agentDir>/settings.json`, and `<cwd>/.pi/settings.json` of the project, which is trusted by default. An explicit `agentDir` does not stop the second. Give sessions `SettingsManager.inMemory(...)` so they read neither *(source)*.
+- **Run oid's sessions with `PI_OFFLINE=1` and `PI_TELEMETRY=0`.** Without them, `grep` and `find` download `rg` and `fd` from GitHub when they are missing, and requests to some providers (OpenRouter, NVIDIA, OpenCode) carry attribution headers *(source)*.
+- **`SessionManager.create(cwd, dir)` writes the transcript only from the first message.** It creates the directory itself.
 - **Usage** is on each assistant `message_end`: `message.usage.totalTokens` and `message.usage.cost.total`.
-- **A failed search returns ripgrep's stderr as an error result.** A filter that withholds lines it cannot attribute to a file must let error results through.
+- **A failed `grep` returns ripgrep's stderr as an error result** (`find` uses `fd`). A filter that withholds lines it cannot attribute to a file must let error results through.
+- **Pin `pi-ai`, `pi-agent-core` and `pi-coding-agent` to the same exact version.** Since 1.3.0 Pi's own dependencies between them are exact.
 
 ### cucumber-js
 
