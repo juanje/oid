@@ -91,11 +91,21 @@ export function branches(dir: string): string[] {
 
 /** Checks `ref` out in a new temporary worktree and runs cucumber-js there on the scenarios tagged `tag`. */
 export async function runScenariosAt(dir: string, ref: string, tag: string): Promise<{ exitCode: number; output: string }> {
+  return runAt(dir, ref, ["cucumber-js", "--tags", tag, "--format", "summary"]);
+}
+
+/** Checks `ref` out in a new temporary worktree and runs the type check there. */
+export async function typeCheckAt(dir: string, ref: string): Promise<{ exitCode: number; output: string }> {
+  return runAt(dir, ref, ["tsc", "--noEmit"]);
+}
+
+/** Runs `npx <args>` in a new temporary worktree of `ref`, with the real tools oid itself is tested with. */
+async function runAt(dir: string, ref: string, args: string[]): Promise<{ exitCode: number; output: string }> {
   const checkout = await mkdtemp(join(tmpdir(), "oid-checkout-"));
   git(dir, "worktree", "add", "-q", "--detach", checkout, ref);
   await linkOidNodeModules(checkout);
   try {
-    const { stdout, stderr } = await promisify(execFile)("npx", ["cucumber-js", "--tags", tag, "--format", "summary"], {
+    const { stdout, stderr } = await promisify(execFile)("npx", args, {
       cwd: checkout,
       env: { ...process.env, NODE_OPTIONS: "--import tsx" },
     });
