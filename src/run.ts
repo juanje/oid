@@ -6,8 +6,8 @@ import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
-import { EXIT_BUILT, EXIT_REFUSED } from "./exit.ts";
-import { gateRefusal, runGate } from "./gate.ts";
+import { EXIT_BUILT, EXIT_ERROR, EXIT_REFUSED } from "./exit.ts";
+import { gateError, gateRefusal, runGate } from "./gate.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolExists } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
@@ -40,19 +40,34 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
   const worktree = await createRunWorktree(projectDir, runId(fr));
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
   const run: FrRun = { executor, fr, worktreeDir: worktree.dir, out, green: [], known };
-  const refusal = (await buildScenarios(run)) ?? gateRefusal(await runGate(worktree.dir, runCommand));
-  if (refusal !== undefined) {
-    out(formatRefusal(refusal));
-    return EXIT_REFUSED;
+  const scenarios = await listScenarios(worktree.dir, fr, runCommand);
+  if (scenarios.length === 0) {
+    out(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.\n`);
+    return EXIT_ERROR;
   }
+  const builtRefusal = await buildScenarios(run, scenarios);
+  if (builtRefusal !== undefined) return refuse(builtRefusal, out);
+  const gate = await runGate(worktree.dir, runCommand);
+  const error = gateError(gate);
+  if (error !== undefined) {
+    out(`${error}\n`);
+    return EXIT_ERROR;
+  }
+  const gateFailure = gateRefusal(gate);
+  if (gateFailure !== undefined) return refuse(gateFailure, out);
   await commitRun(worktree.dir, `feat(${fr}): built by oid run`);
   out(`${fr} built on branch ${worktree.branch}\n`);
   return EXIT_BUILT;
 }
 
+function refuse(refusal: Refusal, out: (text: string) => void): number {
+  out(formatRefusal(refusal));
+  return EXIT_REFUSED;
+}
+
 /** Builds the FR's scenarios one at a time, in file order, and returns the first refusal, if any. */
-async function buildScenarios(run: FrRun): Promise<Refusal | undefined> {
-  for (const scenario of await listScenarios(run.worktreeDir, run.fr, runCommand)) {
+async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusal | undefined> {
+  for (const scenario of scenarios) {
     const refusal = await buildScenario(run, scenario);
     if (refusal !== undefined) return refusal;
     run.green.push(scenario);
