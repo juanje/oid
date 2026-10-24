@@ -1,3 +1,4 @@
+import { agentError } from "./agent-error.ts";
 import { judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
@@ -23,7 +24,8 @@ export interface AttemptRequest {
 /**
  * Runs one attempt with its tools, then judges what holds for every kind: it stayed within its turns (FR-RUN-09),
  * ended with a report (FR-AGENT-07), and its diff stays inside its boundary (FR-AGENT-04). The evidence of its kind
- * is judged after. A reached limit throws LimitReached: it ends the run, and no retry follows.
+ * is judged after. An error its executor reports throws AgentError, and a reached limit LimitReached: each ends the
+ * run, and no retry follows.
  */
 export async function runAttempt({
   executor,
@@ -50,6 +52,8 @@ export async function runAttempt({
     limits: { turns },
     ...(previous === undefined ? {} : { refusal: previous }),
   });
+  const error = agentError(kind, scenario.name, outcome);
+  if (error !== undefined) throw error;
   if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns, outcome);
   const diff = await takeAttemptDiff(worktreeDir);
   return { refusal: judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff), files: diff.files, outcome };

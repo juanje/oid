@@ -1,3 +1,4 @@
+import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
 import { isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
@@ -55,6 +56,12 @@ export async function runFr(options: RunOptions): Promise<number> {
     exitCode = await buildFr(options, worktree, record);
     return exitCode;
   } catch (error) {
+    // An agent's error ends the run at the work accepted so far, as an error no attempt can fix; its use still counts.
+    if (error instanceof AgentError) {
+      await record(attemptEvent({ kind: error.kind, scenario: error.scenario, refusal: undefined, retry: false, outcome: error.outcome, verdict: "stopped on an error" }));
+      exitCode = stop(error.message, options.out);
+      return exitCode;
+    }
     // A limit ends the run at the work accepted so far, and says which limit (FR-RUN-09).
     if (!(error instanceof LimitReached)) throw error;
     await record(

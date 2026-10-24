@@ -12,7 +12,7 @@ export interface AttemptEvent {
   event: "attempt";
   kind: AttemptKind;
   scenario: string;
-  verdict: "accepted" | "refused" | "stopped at the turn limit";
+  verdict: "accepted" | "refused" | "stopped at the turn limit" | "stopped on an error";
   /** The attempt came with the refusal of the one before it. */
   retry: boolean;
   refusal?: Refusal;
