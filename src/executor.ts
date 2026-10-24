@@ -24,6 +24,8 @@ export interface TaskContext {
   fr?: string;
   /** The scenario's steps, with their keywords. */
   steps: string[];
+  /** Where the scenario fails now, for an attempt after its steps: the step, its message, and the step's definition. */
+  failure?: { step: string; message: string; definition?: { file: string; line: number; source: string } };
 }
 
 /** What the executor reports of an attempt: its agent's turns, which the executor counts, never the model. */

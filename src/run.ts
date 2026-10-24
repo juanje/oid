@@ -6,9 +6,9 @@ import { runAttempt } from "./attempt.ts";
 import { isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import { readLimits } from "./config.ts";
-import type { Scenario } from "./cucumber-messages.ts";
+import type { Scenario, StepFailure } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
-import type { AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
+import type { AttemptKind, AttemptOutcome, Executor, TaskContext } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
 import { LimitReached } from "./limits.ts";
 import { runGate } from "./gate.ts";
@@ -19,6 +19,7 @@ import { frText as specFrText } from "./project-texts.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
+import { definitionSource } from "./step-definitions.ts";
 import { summarize } from "./summary.ts";
 import { frScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
@@ -52,6 +53,8 @@ interface FrRun {
   frText: string | undefined;
   /** Each scenario's steps, by `<uri>:<line>`. */
   steps: Map<string, string[]>;
+  /** Each scenario's latest run, by `<uri>:<line>`: where it fails now. */
+  latest: Map<string, ScenarioRun>;
 }
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
@@ -111,7 +114,7 @@ async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree,
   const { retries, turns } = await readLimits(worktree.dir);
   const frText = existsSync(join(worktree.dir, "SPEC.md")) ? specFrText(await readFile(join(worktree.dir, "SPEC.md"), "utf8"), fr) : undefined;
   const { scenarios, steps } = await frScenarios(worktree.dir, fr, runCommand);
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, frText, steps };
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, frText, steps, latest: new Map() };
   await record({ event: "start", fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
@@ -163,7 +166,11 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
       return { refusal, rollback: accepted.restore };
     });
-  const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
+  const runScenario = async (): Promise<ScenarioRun> => {
+    const result = (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
+    run.latest.set(locationOf(scenario), result);
+    return result;
+  };
   // Asked at each judgment, of the file that failed: the project changes with every attempt.
   const symbolsOf = (files: string[]) => importedSymbolsOf(worktreeDir, files);
   const accept = (judgment: Judgment): Judgment => {
@@ -190,9 +197,28 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
 }
 
 /** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
-function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
-  const context = { ...(run.frText === undefined ? {} : { fr: run.frText }), steps: run.steps.get(`${scenario.uri}:${scenario.line}`) ?? [] };
+async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
+  const context = await contextFor(run, kind, scenario);
   return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context });
+}
+
+/** What the task gives an attempt (FR-AGENT-03): the FR, its scenario's steps and, after its steps, where it fails now. */
+async function contextFor(run: FrRun, kind: AttemptKind, scenario: Scenario): Promise<TaskContext> {
+  const failure = kind === "steps" ? undefined : run.latest.get(locationOf(scenario))?.failure;
+  return {
+    ...(run.frText === undefined ? {} : { fr: run.frText }),
+    steps: run.steps.get(locationOf(scenario)) ?? [],
+    ...(failure === undefined ? {} : { failure: await failureContext(run.worktree.dir, failure) }),
+  };
+}
+
+async function failureContext(dir: string, { step, message, definedIn, definedAt }: StepFailure): Promise<NonNullable<TaskContext["failure"]>> {
+  const source = definedIn === undefined || definedAt === undefined ? undefined : definitionSource(await readFile(join(dir, definedIn), "utf8"), definedAt);
+  return { step, message, ...(source === undefined ? {} : { definition: { file: definedIn!, line: definedAt!, source } }) };
+}
+
+function locationOf(scenario: Scenario): string {
+  return `${scenario.uri}:${scenario.line}`;
 }
 
 /** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
