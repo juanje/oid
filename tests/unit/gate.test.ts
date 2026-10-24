@@ -5,27 +5,37 @@ import { gateError, gateRefusal, runGate } from "../../src/gate.ts";
 
 const TYPE_ERROR = "src/a.ts(1,7): error TS2322: Type 'string' is not assignable to type 'number'.";
 
-/** Replies as each runner would, after checking the request is the one that runner answers. */
-async function recordedRunner(command: string, args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<CommandResult> {
-  expect(options.cwd).toBe("/work");
-  switch (basename(command)) {
-    case "tsc":
-      expect(args).toEqual(["--noEmit"]);
-      return { exitCode: 2, output: TYPE_ERROR };
-    case "vitest":
-      expect(args).toEqual(["run"]);
-      return { exitCode: 0, output: "Tests  1 passed (1)" };
-    case "cucumber-js":
-      expect(options.env?.NODE_OPTIONS).toBe("--import tsx");
-      return { exitCode: 0, output: "1 scenario (1 passed)" };
-    default:
-      throw new Error(`Unexpected command ${command}`);
-  }
+// The request each runner answers: its arguments, and what it needs from the environment.
+const REQUESTS: Record<string, (args: string[], env: NodeJS.ProcessEnv | undefined) => void> = {
+  tsc: (args) => expect(args).toEqual(["--noEmit"]),
+  vitest: (args) => expect(args).toEqual(["run"]),
+  "cucumber-js": (args, env) => {
+    expect(args).toEqual([]);
+    expect(env?.NODE_OPTIONS).toBe("--import tsx");
+  },
+};
+
+/** Runners that answer with `replies`, by runner name, after checking the request is the one that runner answers. */
+function runnersAnswering(replies: Record<string, CommandResult>) {
+  return async (command: string, args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv }): Promise<CommandResult> => {
+    expect(options.cwd).toBe("/work");
+    const name = basename(command);
+    const reply = replies[name];
+    if (reply === undefined || REQUESTS[name] === undefined) throw new Error(`Unexpected command ${command}`);
+    REQUESTS[name](args, options.env);
+    return reply;
+  };
 }
 
 describe("runGate", () => {
   test("runs types, the unit suite and the scenarios over the project, each passing or failing", async () => {
-    const checks = await runGate("/work", recordedRunner);
+    const run = runnersAnswering({
+      tsc: { exitCode: 2, output: TYPE_ERROR },
+      vitest: { exitCode: 0, output: "Tests  1 passed (1)" },
+      "cucumber-js": { exitCode: 0, output: "1 scenario (1 passed)" },
+    });
+
+    const checks = await runGate("/work", run);
 
     expect(checks.map(({ name, passed }) => ({ name, passed }))).toEqual([
       { name: "types", passed: false },
@@ -51,16 +61,6 @@ describe("gateRefusal", () => {
     expect(gateRefusal([{ name: "types", passed: true, output: "" }])).toBeUndefined();
   });
 });
-
-/** Runners that answer with `replies`, by runner name, after checking the request is in the project. */
-function runnersAnswering(replies: Record<string, CommandResult>) {
-  return async (command: string, _args: string[], options: { cwd: string }): Promise<CommandResult> => {
-    expect(options.cwd).toBe("/work");
-    const reply = replies[basename(command)];
-    if (reply === undefined) throw new Error(`Unexpected command ${command}`);
-    return reply;
-  };
-}
 
 describe("runGate, a check that ran nothing", () => {
   test("fails the unit and scenario checks that ran no test, even when the runner exits 0", async () => {
