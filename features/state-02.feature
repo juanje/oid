@@ -12,6 +12,7 @@ Feature: The run log and its measures
     Then the run's log lists the attempts steps, test, code and code, in that order
     And the log gives the first code attempt the verdict refused, with its refusal
     And the log gives every other attempt the verdict accepted
+    And the run's log names the version of oid that made it
 
   Scenario: The log measures attempts and rejections per kind, and a retry that fails the same way is a blind retry
     Given the scripted code attempt is refused, and its retry fails the same way
