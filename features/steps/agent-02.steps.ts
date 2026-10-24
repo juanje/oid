@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { Then } from "@cucumber/cucumber";
 import { WRITABLE } from "../../src/boundaries.ts";
-import type { ScriptedModel } from "../support/scripted-model.ts";
+import { scriptedModel } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
 /** Each attempt's kind, and oid's part of the system prompt its agent got at its first request. */
 function promptsOf(world: RunWorld): { kind: string; prompt: string; tools: string[] }[] {
-  const model: ScriptedModel | undefined = world.model;
-  assert.ok(model !== undefined, "No scripted model");
+  const model = scriptedModel(world);
   assert.equal(model.attempts.length, model.script.length, `Expected ${model.script.length} attempts, the model saw ${model.attempts.length}`);
   return model.attempts.map((requests, index) => ({ kind: model.script[index]!.kind, prompt: requests[0]!.oidPrompt, tools: requests[0]!.tools }));
 }

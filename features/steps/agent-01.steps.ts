@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
 import { GREET_01_SCENARIO, attemptDir, git } from "../support/fixture.ts";
-import { assertOutputNames, attemptsIn, runLog } from "../support/run.ts";
+import { assertOutputNames, attemptsIn, runLog, scriptedModel } from "../support/run.ts";
 import { type ModelAttempt, ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -40,11 +40,6 @@ Given("oid runs its attempts with the Pi executor on a scripted model", async fu
 Given("the scripted model builds FR-GREET-01, writing each attempt's files and ending with a report", function (this: RunWorld) {
   scriptedModel(this).script = (["steps", "test", "code"] as const).map((kind) => ({ kind, scenario: GREET_01_SCENARIO, dir: attemptDir(kind) }));
 });
-
-function scriptedModel(world: RunWorld): ScriptedModel {
-  assert.ok(world.model !== undefined, "No scripted model");
-  return world.model;
-}
 
 Then(
   "the model saw, at each attempt, a system prompt and a task naming the attempt's kind and scenario, and nothing of the attempts before it",

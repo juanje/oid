@@ -5,6 +5,7 @@ import { branches } from "./fixture.ts";
 import type { Executor } from "../../src/executor.ts";
 import type { AttemptEvent, LogEvent } from "../../src/run-log.ts";
 import type { PreparedAttempt, Request } from "./scripted-executor.ts";
+import type { ScriptedModel } from "./scripted-model.ts";
 import type { RunWorld } from "./world.ts";
 
 /** The one branch the run created. */
@@ -68,3 +69,9 @@ export async function runLog(world: RunWorld): Promise<LogEvent[]> {
 }
 
 export const attemptsIn = (log: LogEvent[]) => log.filter((entry): entry is AttemptEvent => entry.event === "attempt");
+
+/** The scripted model the run's Pi executor answers from. */
+export function scriptedModel(world: RunWorld): ScriptedModel {
+  assert.ok(world.model !== undefined, "No scripted model");
+  return world.model;
+}
