@@ -4,6 +4,7 @@ import { cp, mkdtemp, readdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
+import { installRunners } from "./runners.ts";
 
 export const OID_ROOT = resolve(import.meta.dirname, "../..");
 const GREET = join(OID_ROOT, "fixtures/greet");
@@ -14,11 +15,11 @@ export function git(dir: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
 }
 
-/** A copy of the greet project in a new temporary git repository, with one commit and oid's node_modules linked in. */
+/** A copy of the greet project in a new temporary git repository, with one commit and the recorded runners installed. */
 export async function createGreetProject(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "oid-greet-"));
   await cp(join(GREET, "project"), dir, { recursive: true });
-  await linkOidNodeModules(dir);
+  await installRunners(dir);
   git(dir, "init", "-q", "-b", "main");
   git(dir, "config", "user.name", "Fixture");
   git(dir, "config", "user.email", "fixture@example.com");
