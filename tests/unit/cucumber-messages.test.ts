@@ -38,6 +38,18 @@ describe("scenarioResults", () => {
     expect(result?.failure).toEqual({ step: 'the greeting is "Good morning, Ada!"', kind: "Outcome", status: "UNDEFINED", message: "" });
   });
 
+  test("names the file that defines the step a scenario failed at", () => {
+    // Recorded with FR-GREET-03: its When fails because greet.ts does not export greetWith yet.
+    const [result] = scenarioResults(recorded("cucumber-greet-03-when-fails.ndjson"));
+
+    expect(result?.failure).toMatchObject({
+      step: 'I greet "Ada" with it',
+      kind: "Action",
+      status: "FAILED",
+      definedIn: "features/steps/greet-with.steps.ts",
+    });
+  });
+
   test("leaves out a scenario that never started", () => {
     const picklesOnly = RUN.split("\n").filter((line) => line.startsWith('{"pickle"')).join("\n");
 
