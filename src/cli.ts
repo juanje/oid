@@ -1,4 +1,6 @@
+import { parseArgs } from "./cli-args.ts";
 import type { Executor } from "./executor.ts";
+import { EXIT_ERROR } from "./exit.ts";
 import { runFr } from "./run.ts";
 
 export interface CliIo {
@@ -10,6 +12,10 @@ export interface CliIo {
 
 /** The `oid` command line, in-process: `run <FR>`. Returns the exit code. */
 export async function runCli(args: string[], io: CliIo): Promise<number> {
-  const fr = args[1];
-  return runFr({ projectDir: io.cwd, fr, executor: io.executor, out: io.stdout });
+  const parsed = parseArgs(args);
+  if ("error" in parsed) {
+    io.stderr(`${parsed.error}\n`);
+    return EXIT_ERROR;
+  }
+  return runFr({ projectDir: io.cwd, fr: parsed.fr, executor: io.executor, out: io.stdout });
 }

@@ -6,6 +6,7 @@ import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
+import { EXIT_BUILT, EXIT_REFUSED } from "./exit.ts";
 import { gateRefusal, runGate } from "./gate.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolExists } from "./imported-symbols.ts";
@@ -21,8 +22,6 @@ export interface RunOptions {
   out: (text: string) => void;
 }
 
-const EXIT_BUILT = 0;
-const EXIT_REFUSED = 1;
 
 /** What every scenario of one FR's run shares. */
 interface FrRun {
