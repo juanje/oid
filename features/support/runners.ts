@@ -37,7 +37,9 @@ function slug(text: string): string {
 }
 
 Before(async function ({ pickle }) {
-  const recording = join(RECORDINGS, `${slug(basename(pickle.uri, ".feature"))}--${slug(pickle.name)}.json`);
+  // The examples of a Scenario Outline share its name; the line of their row tells their recordings apart.
+  const row = pickle.astNodeIds.length > 1 ? `--row-${pickle.location?.line ?? "unknown"}` : "";
+  const recording = join(RECORDINGS, `${slug(basename(pickle.uri, ".feature"))}--${slug(pickle.name)}${row}.json`);
   const mode = REAL_RUNNERS.has(pickle.name) ? "real" : process.env.OID_RECORD_RUNNERS === "1" ? "record" : "replay";
   const state = join(await mkdtemp(join(tmpdir(), "oid-runner-")), "next");
   await writeFile(state, "0");
