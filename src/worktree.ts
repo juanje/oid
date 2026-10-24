@@ -1,5 +1,6 @@
-import { symlink } from "node:fs/promises";
+import { readFile, symlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import type { AddedLine } from "./boundaries.ts";
 import { git } from "./git.ts";
 
 // The worktree's link to the project's node_modules is a file to git, and the project's `node_modules/` pattern
@@ -25,15 +26,47 @@ export async function createRunWorktree(projectDir: string, runId: string): Prom
   return { dir, branch };
 }
 
-/** The files the last attempt changed, sorted. The index holds what earlier attempts changed, so this stages the new changes too. */
-export async function takeAttemptChanges(worktreeDir: string): Promise<string[]> {
-  const modified = await git(worktreeDir, "diff", "--name-only", "-z", "--", ...NOT_NODE_MODULES);
-  const added = await git(worktreeDir, "ls-files", "--others", "--exclude-standard", "-z", "--", ...NOT_NODE_MODULES);
-  const files = [...new Set([...modified.split("\0"), ...added.split("\0")].filter((file) => file !== ""))].sort();
+export interface AttemptDiff {
+  /** The files the attempt changed, sorted. */
+  files: string[];
+  /** The lines it added: the new lines of a changed file, every line of a new one. */
+  added: AddedLine[];
+}
+
+/** The last attempt's diff. The index holds what earlier attempts changed, so this stages the new changes too. */
+export async function takeAttemptDiff(worktreeDir: string): Promise<AttemptDiff> {
+  const modified = nulSeparated(await git(worktreeDir, "diff", "--name-only", "-z", "--", ...NOT_NODE_MODULES));
+  const created = nulSeparated(await git(worktreeDir, "ls-files", "--others", "--exclude-standard", "-z", "--", ...NOT_NODE_MODULES));
+  const added = linesAddedTo(await git(worktreeDir, "diff", "-U0", "--no-color", "--", ...NOT_NODE_MODULES));
+  for (const file of created) {
+    const content = await readFile(join(worktreeDir, file), "utf8");
+    added.push(...content.split("\n").filter((text, index, lines) => index < lines.length - 1 || text !== "").map((text) => ({ file, text })));
+  }
+  const files = [...new Set([...modified, ...created])].sort();
   // Staging only these files keeps the link out, which `git add --all` with an exclude pathspec cannot do
   // without failing when the project's .gitignore already ignores node_modules.
   if (files.length > 0) await git(worktreeDir, "add", "--all", "--", ...files);
-  return files;
+  return { files, added };
+}
+
+/** The files the last attempt changed, sorted, staged as `takeAttemptDiff` stages them. */
+export async function takeAttemptChanges(worktreeDir: string): Promise<string[]> {
+  return (await takeAttemptDiff(worktreeDir)).files;
+}
+
+function nulSeparated(text: string): string[] {
+  return text.split("\0").filter((file) => file !== "");
+}
+
+/** The `+` lines of a unified diff, with the file each belongs to. */
+function linesAddedTo(patch: string): AddedLine[] {
+  const added: AddedLine[] = [];
+  let file = "";
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("+++ ")) file = line.replace(/^\+\+\+ b\//, "");
+    else if (line.startsWith("+")) added.push({ file, text: line.slice(1) });
+  }
+  return added;
 }
 
 /** Commits every change in the worktree as one commit on the run's branch. */
