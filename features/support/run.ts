@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { branches, git } from "./fixture.ts";
 import type { Executor } from "../../src/executor.ts";
@@ -84,4 +86,10 @@ export function scriptedModel(world: RunWorld): ScriptedModel {
 export function noteBeforeRun(world: RunWorld): void {
   world.startHead = git(world.projectDir, "rev-parse", "HEAD");
   world.branchesBefore = branches(world.projectDir);
+}
+
+/** This scenario's own personal config dir, made on first use: a run in a scenario never reads the person's. */
+export function configDirOf(world: RunWorld): string {
+  world.configDir ??= mkdtempSync(join(tmpdir(), "oid-config-"));
+  return world.configDir;
 }

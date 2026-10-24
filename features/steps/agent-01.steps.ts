@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
 import { GREET_01_SCENARIO, OID_ROOT, attemptDir, git } from "../support/fixture.ts";
-import { assertOutputNames, attemptsIn, noteBeforeRun, runLog, runOid, scriptedModel } from "../support/run.ts";
+import { assertOutputNames, attemptsIn, configDirOf, noteBeforeRun, runLog, runOid, scriptedModel } from "../support/run.ts";
 import { type ModelAttempt, ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -124,11 +124,11 @@ Given("the project has a .pi\\/settings.json that would change the agent's tools
   git(this.projectDir, "commit", "-q", "-m", "chore: the project's Pi settings");
 });
 
-Given("the project's .oid.json names the real model in OID_SMOKE_MODEL", async function (this: RunWorld) {
+Given("my personal config names the real model in OID_SMOKE_MODEL", async function (this: RunWorld) {
   const name = process.env.OID_SMOKE_MODEL;
   assert.ok(name !== undefined && name !== "", 'Name the real model: OID_SMOKE_MODEL=<provider>/<model> NODE_OPTIONS="--import tsx" npx cucumber-js -p smoke');
   this.smokeModel = name;
-  await configModel(this, name);
+  await personalModel(this, name);
 });
 
 Then("the run ends without an error or a crash", function (this: RunWorld) {
@@ -147,27 +147,40 @@ Then("the run's log gives each attempt the real model's id, its turns, and token
   }
 });
 
-/** Writes `model` into the project's .oid.json, keeping the rest, or leaves the key out; committed, as the person would. */
-async function configModel(world: RunWorld, model: string | undefined): Promise<void> {
+/** Writes `model` into the project's .oid.json, keeping the rest; committed, as the person would. */
+async function projectModel(world: RunWorld, model: string): Promise<void> {
   const path = join(world.projectDir, ".oid.json");
   const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
-  if (model === undefined) delete config.model;
-  else config.model = model;
+  config.model = model;
   await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
   git(world.projectDir, "add", ".oid.json");
-  git(world.projectDir, "commit", "-q", "--allow-empty", "-m", "chore: the model oid runs on");
+  git(world.projectDir, "commit", "-q", "-m", "chore: a model in the project's config");
 }
 
-Given("the project's .oid.json names the scripted model", async function (this: RunWorld) {
-  await configModel(this, scriptedModel(this).id);
+/** Writes my personal config, in this scenario's own config dir, naming `model` or none. */
+async function personalModel(world: RunWorld, model: string | undefined): Promise<void> {
+  await writeFile(personalConfigFile(world), `${JSON.stringify(model === undefined ? {} : { model }, null, 2)}\n`);
+}
+
+/** The personal config file of this scenario's own config dir: never the person's ~/.config/oid. */
+function personalConfigFile(world: RunWorld): string {
+  return join(configDirOf(world), "config.json");
+}
+
+Given("my personal config names the scripted model", async function (this: RunWorld) {
+  await personalModel(this, scriptedModel(this).id);
 });
 
-Given("the project's .oid.json names no model", async function (this: RunWorld) {
-  await configModel(this, undefined);
+Given("my personal config names no model", async function (this: RunWorld) {
+  await personalModel(this, undefined);
+});
+
+Given("my personal config names the model {}", async function (this: RunWorld, model: string) {
+  await personalModel(this, model);
 });
 
 Given("the project's .oid.json names the model {}", async function (this: RunWorld, model: string) {
-  await configModel(this, model);
+  await projectModel(this, model);
 });
 
 When("I run {string} with the executor oid makes from its config", async function (this: RunWorld, command: string) {
@@ -177,12 +190,17 @@ When("I run {string} with the executor oid makes from its config", async functio
   const model = scriptedModel(this);
   // oid's own path from config to executor, with the scripted model's registry in place of Pi's.
   const { executorFromConfig } = await import("../../src/pi-model.ts");
-  Object.assign(this, await runOid(this.projectDir, args, () => executorFromConfig(this.projectDir, model.runtime)));
+  const configDir = configDirOf(this);
+  Object.assign(this, await runOid(this.projectDir, args, () => executorFromConfig(this.projectDir, { configDir, runtime: model.runtime })));
 });
 
-Then("the output names the model key of .oid.json", function (this: RunWorld) {
+Then("the output names my personal config's path", function (this: RunWorld) {
+  assertOutputNames(this, personalConfigFile(this));
+});
+
+Then("the output names .oid.json and my personal config's path", function (this: RunWorld) {
   assertOutputNames(this, ".oid.json");
-  assertOutputNames(this, '"model"');
+  assertOutputNames(this, personalConfigFile(this));
 });
 
 Then(/^the output names (nowhere\/no-such-model)$/, function (this: RunWorld, model: string) {

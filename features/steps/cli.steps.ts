@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Then, When } from "@cucumber/cucumber";
 import { OID_ROOT } from "../support/fixture.ts";
-import { noteBeforeRun } from "../support/run.ts";
+import { configDirOf, noteBeforeRun } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
 /** Runs `oid <args>` as the person types it: the package's bin/oid, as its own process, in the project. */
@@ -17,7 +17,8 @@ export function runOidCommand(world: RunWorld, command: string, node: { args?: s
   const result = spawnSync(process.execPath, [...(node.args ?? []), join(OID_ROOT, "bin/oid"), ...args], {
     cwd: world.projectDir,
     encoding: "utf8",
-    env: { ...process.env, NODE_OPTIONS: "", ...node.env },
+    // The scenario's own personal config dir: the oid command never reads the person's ~/.config/oid here.
+    env: { ...process.env, NODE_OPTIONS: "", OID_CONFIG_DIR: configDirOf(world), ...node.env },
   });
   world.output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
   world.exitCode = result.status ?? undefined;
