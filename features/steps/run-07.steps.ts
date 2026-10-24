@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
-import { GREET_01_SCENARIO, attemptDir, git } from "../support/fixture.ts";
+import { attemptDir, git } from "../support/fixture.ts";
 import { assertOutputNames, runBranch } from "../support/run.ts";
 import type { PreparedAttempt, Request } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -13,7 +13,7 @@ const RETRY_REFUSED = "Hey, Ada!";
 /** The script with the code attempt answered first by `first`, then by `retry`. */
 function codeTwice(script: PreparedAttempt[], first: string, retry: string): PreparedAttempt[] {
   return script.flatMap((attempt) =>
-    attempt.kind === "code" ? [{ ...attempt, dir: attemptDir(first) }, { ...attempt, scenario: GREET_01_SCENARIO, dir: attemptDir(retry) }] : [attempt],
+    attempt.kind === "code" ? [{ ...attempt, dir: attemptDir(first) }, { ...attempt, dir: attemptDir(retry) }] : [attempt],
   );
 }
 
