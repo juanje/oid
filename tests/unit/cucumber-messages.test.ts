@@ -24,6 +24,13 @@ describe("scenarioResults", () => {
     ]);
   });
 
+  test("keeps the error type in the message of a failed step", () => {
+    // Recorded with FR-GREET-02's second scenario failing on an assertion in its Then step.
+    const [result] = scenarioResults(recorded("cucumber-greet-02-assertion.ndjson"));
+
+    expect(result?.failure?.message).toMatch(/^AssertionError \[ERR_ASSERTION\]: Expected values to be strictly equal/);
+  });
+
   test("leaves out a scenario that never started", () => {
     const picklesOnly = RUN.split("\n").filter((line) => line.startsWith('{"pickle"')).join("\n");
 
