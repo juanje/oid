@@ -1,3 +1,5 @@
+import { ownerOf } from "./boundaries.ts";
+import type { AttemptKind } from "./executor.ts";
 import { type CheckResult, gateError, gateRefusal } from "./gate.ts";
 import type { Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
@@ -6,28 +8,60 @@ export type GateOutcome = { error: string } | { refusal: Refusal | undefined };
 
 const KEEP_THE_CODE = async (): Promise<void> => {};
 
+// Outside-in: the attempt the gate sends back first, when failures belong to several kinds.
+const OUTSIDE_IN: AttemptKind[] = ["steps", "test", "code"];
+
 /**
- * Runs the gate before the FR's commit. Failing tests and scenarios go back to a code attempt, with the gate's
- * refusal and its focus, and the gate runs again, up to `retries` (FR-GATE-04). That code attempt starts from the
- * code the gate refused, to fix it. In the skeleton any other failure ends the run as a refusal; an option a runner
- * does not know is an error.
+ * Runs the gate before the FR's commit (FR-GATE-04). A failure goes back to the attempt kind that can fix it, with
+ * the gate's refusal and its focus, and the gate runs again, up to `retries`: a type error to the owner of its file,
+ * failing tests and scenarios to a code attempt, one kind at a time, outside-in. That attempt starts from the code the
+ * gate refused, to fix it, and must not leave fewer tests than the gate ran before it. An option a runner does not
+ * know is an error.
  */
 export async function gateLoop(
   retries: number,
   gate: () => Promise<CheckResult[]>,
-  codeAfterGate: (refusal: Refusal) => Promise<Tried>,
+  afterGate: (kind: AttemptKind, refusal: Refusal) => Promise<Tried>,
 ): Promise<GateOutcome> {
   let error: string | undefined;
+  let kind: AttemptKind = "code";
+  let tests: number | undefined;
   const refusal = await withRetries(retries, async (previous): Promise<Tried> => {
     if (previous !== undefined) {
-      const code = await codeAfterGate(previous);
-      if (code.refusal !== undefined) return code;
+      const attempt = await afterGate(kind, previous);
+      if (attempt.refusal !== undefined) return attempt;
     }
     const results = await gate();
     error = gateError(results);
     if (error !== undefined) return { refusal: undefined, rollback: KEEP_THE_CODE };
-    const sentBack = results.every((result) => result.passed || result.name === "unit" || result.name === "scenarios");
-    return { refusal: gateRefusal(results), rollback: KEEP_THE_CODE, final: !sentBack };
+    const ran = results.find((result) => result.name === "unit")?.tests;
+    // The same kind goes back: it is the one that dropped them.
+    if (tests !== undefined && ran !== undefined && ran < tests) return { refusal: fewerTests(tests, ran), rollback: KEEP_THE_CODE };
+    tests = ran ?? tests;
+    const owner = ownerOfFailures(results);
+    if (owner !== undefined) kind = owner;
+    return { refusal: gateRefusal(results), rollback: KEEP_THE_CODE, final: owner === undefined };
   });
   return error === undefined ? { refusal } : { error };
+}
+
+/** The kind the gate's failures go back to, outside-in, or none when a failure is not one an attempt can be sent to fix. */
+function ownerOfFailures(results: CheckResult[]): AttemptKind | undefined {
+  const failed = results.filter((result) => !result.passed);
+  const kinds = failed.map((result) => {
+    if (result.name === "unit" || result.name === "scenarios") return ["code" as const];
+    if (result.name === "types" && (result.failedFiles?.length ?? 0) > 0) return result.failedFiles!.map(ownerOf);
+    return undefined;
+  });
+  if (kinds.includes(undefined)) return undefined;
+  const owners = new Set(kinds.flat());
+  return OUTSIDE_IN.find((candidate) => owners.has(candidate));
+}
+
+function fewerTests(before: number, now: number): Refusal {
+  return {
+    failed: "The attempt after the gate left fewer tests",
+    evidence: `The gate ran ${before} unit tests before this attempt, and ${now} after it`,
+    next: "Fix the error without removing tests",
+  };
 }
