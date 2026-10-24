@@ -22,7 +22,7 @@ Read a file when its trigger matches, not before.
 1. **Feature file.** Write `features/<area>-<nn>.feature`, with `@<FR>` on `Feature`. Keep scenarios few, each asserting an outcome the user sees. **Stop and ask the person to approve it.** Go on only after approval, or after the person delegates the approval in chat for this FR. Then commit the feature file alone: `spec(<FR>): …`. The committed file is the contract that the Reds are checked against.
 2. **Steps, Red.** Write the step definitions with real assertions, then run the scenario. Go on only on a valid Red (`DOMAIN.md`, Red classes). An undefined step or a load error is not one.
 3. **Unit test, Red.** Write the test for the next piece of logic and run it. Go on only on a valid Red. Commit the test alone: `test(<FR>): …`. The commit is the proof that the test failed before its code existed.
-4. **Code, Green.** Write the code, then run the test, the current scenario, the FR's scenarios already green and the full unit suite. All must pass. Commit: `feat(<FR>): …`.
+4. **Code, Green.** Write the code, then run the test, the current scenario, the FR's scenarios already green, the full unit suite and `npx tsc --noEmit`. All must pass, type check included, before the commit: `feat(<FR>): …`.
 5. **Repeat 3–4** until the scenario passes, then do step 2 for the next scenario.
 6. **Refactor**, when every scenario passes, in two passes:
    1. change source with the tests unchanged, and commit;
