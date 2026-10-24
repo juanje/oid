@@ -192,6 +192,6 @@ Do not reintroduce:
 These parts of the design came from analysis, not from runs. The first runs confirm or change them:
 - the agent choosing the next attempt kind (§2);
 - no shell for any agent (§3);
-- coverage of new lines as a gate check (§5);
+- coverage of the FR's new branches, unit tests and scenarios together, as a gate check (§5);
 - a test or steps attempt the gate sends back for a type error is not asked for a new Red, only to keep the number of tests: it can still weaken a test unseen. That risk closes in the MVP with the recorded evidence (FR-EVID-04) and the refactor's mutant (FR-REF-03);
-- the order in which the rest of the MVP is built: the mutant, shelving, several FRs, the refactor and coverage first; then budget limits, `progress.json`, `oid status` and `oid gate`; `init`, `doctor`/`setup` and `resume`/`abort` last.
+- the order in which the rest of the MVP is built: coverage first (FR-GATE-02), then the mutant, shelving, several FRs and the refactor; then budget limits, `progress.json`, `oid status` and `oid gate`; `init`, `doctor`/`setup` and `resume`/`abort` last.
