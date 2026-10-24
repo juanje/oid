@@ -1,8 +1,8 @@
-import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { WRITABLE } from "./boundaries.ts";
 import { importedModules } from "./imported-symbols.ts";
+import { typescriptFilesUnder } from "./project-files.ts";
 
 export interface RelevantCode {
   files: { path: string; content: string }[];
@@ -18,7 +18,7 @@ export async function relevantCode(dir: string, stepFiles: string[], budget: num
   const modules = new Set<string>();
   for (const file of stepFiles) for (const module of await importedModules(dir, file)) modules.add(module);
   const tests: string[] = [];
-  for (const test of await unitTestFiles(dir)) {
+  for (const test of await typescriptFilesUnder(dir, WRITABLE.test)) {
     if ((await importedModules(dir, test)).some((module) => modules.has(module))) tests.push(test);
   }
   const relevant: RelevantCode = { files: [], cut: [] };
@@ -33,17 +33,4 @@ export async function relevantCode(dir: string, stepFiles: string[], budget: num
     used += content.length;
   }
   return relevant;
-}
-
-/** The TypeScript files where unit tests live, sorted. */
-async function unitTestFiles(dir: string): Promise<string[]> {
-  const files: string[] = [];
-  for (const root of WRITABLE.test) {
-    if (!existsSync(join(dir, root))) continue;
-    const entries = await readdir(join(dir, root), { recursive: true, withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile() && entry.name.endsWith(".ts")) files.push(relative(dir, join(entry.parentPath, entry.name)));
-    }
-  }
-  return files.sort();
 }
