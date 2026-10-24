@@ -32,3 +32,17 @@ Feature: Help and version
     Then the run stops with an error, not a refusal and not a crash
     And the output names the command "shorten"
     And the output lists every command oid has, with its usage
+
+  @NFR-07
+  Scenario Outline: The help and the version load neither Pi nor the TypeScript compiler API
+    When I run "<command>" with the oid command, recording the modules Node loads
+    Then oid ends with exit code 0
+    And the modules it loaded include oid's argument parser
+    And it loaded no module of Pi, of typescript-api or of oid's run
+
+    Examples:
+      | command        |
+      | oid            |
+      | oid --version  |
+      | oid --help     |
+      | oid run --help |
