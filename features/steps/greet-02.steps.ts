@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir, createGreetProjectWith, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
-import { assertOutputNames } from "../support/run.ts";
+import { assertOutputNames, requestsOf } from "../support/run.ts";
 import { lastAttempt, type PreparedAttempt, replacedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -104,5 +104,29 @@ Then("the output names the new test that passed without its code", function (thi
 Then("the output does not name the tests that were already in the file", function (this: RunWorld) {
   for (const name of testNames(FIRST_TEST_FILE)) {
     assert.ok(!this.output.includes(name), `The output names "${name}", which was already in the file:\n${this.output}`);
+  }
+});
+
+const NODE_TEST_FILE = "tests/greet-all.test.ts";
+
+Given("the scripted test attempt for the first scenario writes its test with node:test, and its retry with vitest", function (this: RunWorld) {
+  // The node:test file fails on its missing import, a valid Red; once the code exists, vitest finds no test in it.
+  this.script = [
+    ...attempts(FIRST, ["steps", "s1-steps"], ["test", "s1-test-node-test"], ["code", "s1-code"], ["test", "s1-test"], ["code", "s1-code"]),
+    ...BUILD_SECOND,
+  ];
+});
+
+Then("the retried test attempt was told its test file defines no vitest test, naming the file", function (this: RunWorld) {
+  const refusal = requestsOf(this, "test", 3)[1]!.refusal;
+  assert.ok(refusal !== undefined, "The second test attempt came without a refusal");
+  assert.ok(`${refusal.failed}\n${refusal.evidence}`.includes(NODE_TEST_FILE), `The refusal does not name ${NODE_TEST_FILE}:\n${JSON.stringify(refusal)}`);
+  assert.match(refusal.next, /\bvitest\b/, `The refusal's next step does not point to vitest:\n${refusal.next}`);
+});
+
+Then("no code attempt was asked to fix that test file", function (this: RunWorld) {
+  for (const request of requestsOf(this, "code", 3)) {
+    const refusal = request.refusal;
+    assert.ok(refusal === undefined || !`${refusal.failed}\n${refusal.evidence}`.includes(NODE_TEST_FILE), `A code attempt was asked to fix ${NODE_TEST_FILE}:\n${JSON.stringify(refusal)}`);
   }
 });
