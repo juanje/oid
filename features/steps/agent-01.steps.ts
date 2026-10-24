@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
-import { GREET_01_SCENARIO, attemptDir } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, attemptDir, git } from "../support/fixture.ts";
 import { assertOutputNames, attemptsIn, runLog } from "../support/run.ts";
 import { ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -115,4 +116,12 @@ Given("the scripted model answers the code attempt with a provider error every t
 
 Then("the output names the provider error", function (this: RunWorld) {
   assertOutputNames(this, PROVIDER_ERROR);
+});
+
+Given("the project has a .pi\\/settings.json that would change the agent's tools", async function (this: RunWorld) {
+  // Pi gives these tools to a session that takes its tools from the settings, project ones included (DOMAIN.md, Pi SDK).
+  await mkdir(join(this.projectDir, ".pi"), { recursive: true });
+  await writeFile(join(this.projectDir, ".pi/settings.json"), `${JSON.stringify({ defaultTools: ["read", "bash"] }, null, 2)}\n`);
+  git(this.projectDir, "add", ".pi/settings.json");
+  git(this.projectDir, "commit", "-q", "-m", "chore: the project's Pi settings");
 });
