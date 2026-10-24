@@ -73,6 +73,14 @@ describe("taskFor", () => {
     expect(task).toContain("tests/huge.test.ts");
   });
 
+  test("gives the patterns of the step definitions the project has", () => {
+    const patterns = ["features/steps/greet.steps.ts: I greet {string}", "features/steps/greet.steps.ts: I get {string}"];
+
+    const task = taskFor({ kind: "steps", fr: "FR-GREET-01", scenario: SCENARIO, context: { ...CONTEXT, patterns } });
+
+    for (const pattern of patterns) expect(task).toContain(pattern);
+  });
+
   test("gives a retry the refusal of the attempt before it", () => {
     const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
 
