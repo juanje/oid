@@ -18,3 +18,9 @@ Feature: A prompt per agent, in two layers
     When I run "oid run FR-GREET-01"
     Then the steps, test and code attempts each had a system prompt with parts the others lack
     And their system prompts share a part, word for word
+
+  Scenario: The test and steps agents are told the runner their files run with, and what they import from it
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the test attempt's system prompt names vitest and what a unit test imports from it
+    And the steps attempt's system prompt names cucumber-js and what a step definition imports from it
