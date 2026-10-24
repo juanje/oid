@@ -32,3 +32,12 @@ Feature: The run log and its measures
     When I run "oid run FR-GREET-01"
     Then the run's log lists the attempts steps, test and code, in that order
     And the run's log says the run stopped at the turn limit
+
+  Scenario: Each attempt's transcript is kept next to the run's log, and the summary names where
+    Given rg and fd are installed where Pi finds them, since oid runs Pi offline
+    And oid runs its attempts with the Pi executor on a scripted model
+    And the scripted model builds FR-GREET-01, writing each attempt's files and ending with a report
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And next to the run's log is a directory with one transcript per attempt, each holding that attempt's task
+    And the run's summary names that directory
