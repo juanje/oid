@@ -105,13 +105,17 @@ export interface RunRecorder {
   end(exitCode: number): Promise<void>;
 }
 
-/** Starts run `runId`'s log, and its clock: a monotonic one, so that a suspended machine does not count. */
-export async function startRunLog(dir: string, runId: string): Promise<RunRecorder> {
+/**
+ * Starts run `runId`'s log, and its clock: a monotonic one, so that a suspended machine does not count. `onEvent` sees
+ * each event as it is recorded: the run's progress is shown from them (FR-CLI-05).
+ */
+export async function startRunLog(dir: string, runId: string, onEvent: (event: LogEvent) => void = () => {}): Promise<RunRecorder> {
   const started = performance.now();
   const log = await openRunLog(dir, runId);
   const events: LogEvent[] = [];
   const record = async (event: LogEvent): Promise<void> => {
     events.push(event);
+    onEvent(event);
     await log.append(event);
   };
   return {

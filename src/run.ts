@@ -3,7 +3,7 @@ import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
 import { isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
-import { readLimits, uncommittedProjectConfig } from "./config.ts";
+import { ConfigError, readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
@@ -16,17 +16,19 @@ import { importedSymbolsOf } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
+import { progressLine } from "./progress.ts";
 import { summarize, transcriptsOf } from "./summary.ts";
 import { oidVersion } from "./version.ts";
 import { type FrTexts, frTexts, taskContext } from "./task-context.ts";
 import { frScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
-import { acceptedWork, checkpoint, createRunWorktree, finishRun, type RunWorktree } from "./worktree.ts";
+import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, type RunWorktree } from "./worktree.ts";
 
 export interface RunOptions {
   projectDir: string;
   fr: string;
-  executor: Executor;
+  /** The executor, or how to make it once the run starts: the real one reads the person's config. */
+  executor: Executor | (() => Promise<Executor>);
   out: (text: string) => void;
 }
 
@@ -64,12 +66,29 @@ export async function runFr(options: RunOptions): Promise<number> {
   if (await uncommittedProjectConfig(options.projectDir)) {
     options.out(".oid.json has changes that are not committed: this run reads the project's config from HEAD and does not use them; commit them for them to count.\n");
   }
-  const worktree = await createRunWorktree(options.projectDir, runId(options.fr));
-  const log = await startRunLog(worktree.dir, worktree.id);
+  // The log starts before the worktree, so that every stage, the first included, is in it and shown (FR-CLI-05).
+  const id = await freeRunId(options.projectDir, runId(options.fr));
+  const log = await startRunLog(options.projectDir, id, (event) => {
+    const line = progressLine(event);
+    if (line !== undefined) options.out(`${line}\n`);
+  });
   const record = log.record;
   let exitCode: number | undefined;
+  let worktree: RunWorktree | undefined;
   try {
-    exitCode = await buildFr(options, worktree, record, transcriptsOf(log.path));
+    // The agent first: a model oid cannot use stops the run before it creates anything (NFR-08).
+    await record({ event: "stage", stage: "agent" });
+    let executor: Executor;
+    try {
+      executor = typeof options.executor === "function" ? await options.executor() : options.executor;
+    } catch (error) {
+      if (!(error instanceof ConfigError)) throw error;
+      exitCode = stop(error.message, options.out);
+      return exitCode;
+    }
+    await record({ event: "stage", stage: "worktree" });
+    worktree = await createRunWorktree(options.projectDir, id);
+    exitCode = await buildFr({ ...options, executor }, worktree, record, transcriptsOf(log.path));
     return exitCode;
   } catch (error) {
     // An agent's error ends the run at the work accepted so far, as an error no attempt can fix; its use still counts.
@@ -89,7 +108,10 @@ export async function runFr(options: RunOptions): Promise<number> {
     return exitCode;
   } finally {
     // The worktree goes however the run ends; only a built FR gets its commit and drops its checkpoints.
-    await finishRun(worktree, exitCode === EXIT_BUILT ? `feat(${options.fr}): built by oid run` : undefined);
+    if (worktree !== undefined) {
+      if (exitCode === EXIT_BUILT) await record({ event: "stage", stage: "commit" });
+      await finishRun(worktree, exitCode === EXIT_BUILT ? `feat(${options.fr}): built by oid run` : undefined);
+    }
     if (exitCode !== undefined) {
       await log.end(exitCode);
       options.out(summarize(log.events, log.path));
@@ -114,19 +136,27 @@ function attemptEvent(attempt: {
   return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cost, deniedToolCalls };
 }
 
-async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree, record: (event: LogEvent) => Promise<void>, transcripts: string): Promise<number> {
-  const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
-  const { retries, turns } = await readLimits(worktree.dir);
+async function buildFr(
+  { fr, executor, out }: RunOptions & { executor: Executor },
+  worktree: RunWorktree,
+  record: (event: LogEvent) => Promise<void>,
+  transcripts: string,
+): Promise<number> {
+  await record({ event: "stage", stage: "scenarios" });
   const { scenarios, steps } = await frScenarios(worktree.dir, fr, runCommand);
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, texts: await frTexts(worktree.dir, fr), steps, latest: new Map(), transcripts, attempts: 0 };
   await record({ event: "start", oid: oidVersion(), fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
   }
+  await record({ event: "stage", stage: "unit tests" });
+  const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
+  const { retries, turns } = await readLimits(worktree.dir);
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record, texts: await frTexts(worktree.dir, fr), steps, latest: new Map(), transcripts, attempts: 0 };
   const builtRefusal = await buildScenarios(run, scenarios);
   if (builtRefusal !== undefined) return refuse(builtRefusal, out);
   // An attempt after the gate belongs to the FR's last scenario; its refusal's evidence and focus say what to fix.
   const last = scenarios[scenarios.length - 1]!;
+  await record({ event: "stage", stage: "gate" });
   const gate = await gateLoop(retries, () => runGate(worktree.dir, runCommand), (kind, refusal) => attemptAfterGate(run, kind, last, refusal));
   if ("error" in gate) return stop(gate.error, out);
   if (gate.refusal !== undefined) return refuse(gate.refusal, out);
@@ -157,7 +187,7 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
 
 /** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping the green ones green. */
 async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
-  const { out, known, retries } = run;
+  const { known, retries } = run;
   const worktreeDir = run.worktree.dir;
   // One attempt and the judgment of its kind, from the work accepted before it.
   const once =
@@ -180,21 +210,17 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   };
   // Asked at each judgment, of the file that failed: the project changes with every attempt.
   const symbolsOf = (files: string[]) => importedSymbolsOf(worktreeDir, files);
-  const accept = (judgment: Judgment): Judgment => {
-    for (const red of judgment.reds) out(`Red: ${red}\n`);
-    return judgment;
-  };
 
   const stepsRefusal = await judged("steps", async () => {
     const result = await runScenario();
     const stepFile = result.failure?.definedIn;
     const exists = await symbolsOf(stepFile === undefined ? [] : [stepFile]);
-    return accept(judgeSteps(result, (name) => exists(name, stepFile ?? "")));
+    return judgeSteps(result, (name) => exists(name, stepFile ?? ""));
   });
   if (stepsRefusal !== undefined) return stepsRefusal;
   const testOnce = once("test", async (files) => {
     const testFiles = files.filter(isTestFile);
-    return accept(await judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known));
+    return judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known);
   });
   // A code attempt's retry; a refusal the code cannot act on goes back to a test attempt first, and the pair counts as
   // one retry (FR-RUN-03). A refused test attempt there sends the next retry to a test attempt again.
@@ -214,6 +240,7 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
 async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
   const location = locationOf(scenario);
   const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location));
+  await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined });
   run.attempts += 1;
   const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
   return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context, transcript });

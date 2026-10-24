@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile, symlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { AddedLine } from "./boundaries.ts";
 import { git, refExists } from "./git.ts";
 
@@ -26,14 +26,26 @@ export interface RunWorktree {
  * the person's checkout never holds it, and tools that skip paths containing .git still see it. The worktree's HEAD
  * is detached, so checkpoints never touch the branch. A run id another run already took gets a suffix.
  */
+/**
+ * `runId`, or `runId-<n>` when another run took it: its branch, its checkpoints, its worktree or its log. The run
+ * starts its log before its worktree, so a run that stopped before creating one still holds its id.
+ */
+export async function freeRunId(projectDir: string, runId: string): Promise<string> {
+  const root = await git(projectDir, "rev-parse", "--show-toplevel");
+  const runs = join(dirname(root), ".oid-worktrees", basename(root));
+  const logs = join(resolve(root, await git(root, "rev-parse", "--git-common-dir")), "oid", "runs");
+  const taken = async (id: string) =>
+    (await refExists(root, `refs/heads/oid/${id}`)) || (await refExists(root, `${CHECKPOINTS}${id}`)) || existsSync(join(runs, id)) || existsSync(join(logs, `${id}.jsonl`));
+  let id = runId;
+  for (let n = 2; await taken(id); n += 1) id = `${runId}-${n}`;
+  return id;
+}
+
 export async function createRunWorktree(projectDir: string, runId: string): Promise<RunWorktree> {
   const root = await git(projectDir, "rev-parse", "--show-toplevel");
   const start = await git(projectDir, "rev-parse", "HEAD");
   const runs = join(dirname(root), ".oid-worktrees", basename(root));
-  let id = runId;
-  for (let n = 2; (await refExists(root, `refs/heads/oid/${id}`)) || (await refExists(root, `${CHECKPOINTS}${id}`)) || existsSync(join(runs, id)); n += 1) {
-    id = `${runId}-${n}`;
-  }
+  const id = await freeRunId(projectDir, runId);
   const worktree = { id, dir: join(runs, id), branch: `oid/${id}`, checkpoints: `${CHECKPOINTS}${id}`, start, projectDir: root };
   await git(root, "branch", worktree.branch, start);
   await git(root, "worktree", "add", "-q", "--detach", worktree.dir, start);
