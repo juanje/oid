@@ -3,6 +3,7 @@ import { readFile, realpath, rm } from "node:fs/promises";
 import { type CommandRunner, projectBin } from "./command.ts";
 import { reportPath } from "./git.ts";
 import { failedTests, passedTests, type TestFailure, testFailures } from "./vitest-report.ts";
+import { RUNNERS } from "./runners.ts";
 
 export interface UnitRun {
   /** False when vitest wrote no report: nothing it says counts. */
@@ -18,7 +19,7 @@ export interface UnitRun {
 export async function runUnitTests(dir: string, files: string[], run: CommandRunner): Promise<UnitRun> {
   const report = await reportPath(dir, "oid-unit-tests.json");
   await rm(report, { force: true });
-  const { output } = await run(projectBin(dir, "vitest"), ["run", ...files, "--reporter=json", `--outputFile=${report}`], { cwd: dir });
+  const { output } = await run(projectBin(dir, RUNNERS.unit.bin), ["run", ...files, "--reporter=json", `--outputFile=${report}`], { cwd: dir });
   if (!existsSync(report)) return { ran: false, passed: [], failed: [], output };
   const parsed = JSON.parse(await readFile(report, "utf8"));
   // vitest reports real paths, and the worktree may sit behind a symlink such as macOS's /var.

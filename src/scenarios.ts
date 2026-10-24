@@ -3,6 +3,7 @@ import { readFile, rm } from "node:fs/promises";
 import { type CommandRunner, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
 import { type Scenario, type ScenarioResult, type StepFailure, scenarioResults, scenarioSteps, scenariosIn } from "./cucumber-messages.ts";
 import { reportPath } from "./git.ts";
+import { RUNNERS } from "./runners.ts";
 
 export interface ScenarioRun extends Scenario {
   status: "passed" | "failed" | "not run";
@@ -52,7 +53,7 @@ function location(scenario: Scenario): string {
 async function cucumber(dir: string, args: string[], run: CommandRunner): Promise<{ report: string | undefined; output: string }> {
   const reportFile = await reportPath(dir, "oid-scenarios.ndjson");
   await rm(reportFile, { force: true });
-  const { output } = await run(projectBin(dir, "cucumber-js"), [...args, "--format", `message:${reportFile}`], {
+  const { output } = await run(projectBin(dir, RUNNERS.scenarios.bin), [...args, "--format", `message:${reportFile}`], {
     cwd: dir,
     env: { ...process.env, ...TYPESCRIPT_STEPS_ENV },
   });

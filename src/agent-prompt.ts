@@ -1,5 +1,6 @@
 import { AGENT_TOOLS } from "./agent-tools.ts";
 import { WRITABLE } from "./boundaries.ts";
+import { RUNNERS, runnerText } from "./runners.ts";
 import type { Attempt, AttemptKind, TaskContext } from "./executor.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 
@@ -59,12 +60,16 @@ export function systemPromptFor(kind: AttemptKind): string {
   return [OID_FACTS, IDENTITY[kind], limitsOf(kind), procedureOf(kind)].join("\n\n");
 }
 
-/** The kind's limits, generated from the boundary and the tools that enforce them (NFR-04). */
+// The runner that runs the files each kind writes: the code agent's source is run by both, through the tests.
+const RUNS: Partial<Record<AttemptKind, (typeof RUNNERS)[keyof typeof RUNNERS]>> = { test: RUNNERS.unit, steps: RUNNERS.scenarios };
+
+/** The kind's limits, generated from the boundary, the tools and the runners that enforce them (NFR-04). */
 function limitsOf(kind: AttemptKind): string {
   const tools = AGENT_TOOLS.map((tool) => `${tool.name} ${tool.does}`).join("; ");
   return [
     `You may write only under ${WRITABLE[kind].join(", ")}. No agent writes feature files, SPEC.md, the gate's configuration or oid's state: a diff outside your paths is refused, naming the files.`,
     `Your tools: ${tools}. You have no shell.`,
+    ...(RUNS[kind] === undefined ? [] : [runnerText(RUNS[kind])]),
   ].join("\n");
 }
 
