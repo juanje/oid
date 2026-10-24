@@ -16,13 +16,18 @@ export function git(dir: string, ...args: string[]): string {
 export async function createGreetProject(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "oid-greet-"));
   await cp(join(GREET, "project"), dir, { recursive: true });
-  await symlink(join(OID_ROOT, "node_modules"), join(dir, "node_modules"));
+  await linkOidNodeModules(dir);
   git(dir, "init", "-q", "-b", "main");
   git(dir, "config", "user.name", "Fixture");
   git(dir, "config", "user.email", "fixture@example.com");
   git(dir, "add", "--all");
   git(dir, "commit", "-q", "-m", "chore: greet project");
   return dir;
+}
+
+/** Gives a fixture checkout the runners and libraries oid itself is tested with. */
+async function linkOidNodeModules(dir: string): Promise<void> {
+  await symlink(join(OID_ROOT, "node_modules"), join(dir, "node_modules"));
 }
 
 /** The directory of a prepared attempt of the greet project. */
@@ -45,7 +50,7 @@ export function branches(dir: string): string[] {
 export async function runScenariosAt(dir: string, ref: string, tag: string): Promise<{ exitCode: number; output: string }> {
   const checkout = await mkdtemp(join(tmpdir(), "oid-checkout-"));
   git(dir, "worktree", "add", "-q", "--detach", checkout, ref);
-  await symlink(join(OID_ROOT, "node_modules"), join(checkout, "node_modules"));
+  await linkOidNodeModules(checkout);
   try {
     const { stdout, stderr } = await promisify(execFile)("npx", ["cucumber-js", "--tags", tag, "--format", "summary"], {
       cwd: checkout,
