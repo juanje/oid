@@ -1,0 +1,21 @@
+{
+  "name": "oid",
+  "version": "0.0.0",
+  "private": true,
+  "description": "oid — Outside-In Development: coding agents build software from a verifiable contract",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "gate": "tsc --noEmit && vitest run && NODE_OPTIONS=\"--import tsx\" cucumber-js"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "13.3.0",
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "3.2.7"
+  }
+}
