@@ -34,6 +34,7 @@ describe("summarize", () => {
     expect(lines.join("\n")).toContain("oid/FR-GREET-02-1");
     expect(lines.join("\n")).toMatch(/attempts.*rejections.*time/s);
     expect(lines.join("\n")).toContain("/repo/.git/oid/runs/FR-GREET-02-1.jsonl");
+    expect(lines.join("\n")).toContain("/repo/.git/oid/runs/FR-GREET-02-1/");
     expect(lines.join("\n")).not.toContain("refs/oid/checkpoints/");
   });
 
