@@ -103,8 +103,8 @@ One file per FR, with the tag on `Feature`. Scenarios describe observable behavi
 
 ### What a task reads from the project
 
-- **Domain:** `DOMAIN.md`, else the `## Domain` section of `SPEC.md`, else the file `paths.domain` names in `.oid.json`. Optional.
-- **Conventions:** `CONVENTIONS.md`, else the `## Conventions` section of `SPEC.md`, else the file `paths.conventions` names. Optional.
+- **Domain:** the file `paths.domain` names in `.oid.json`, else `DOMAIN.md`, else the `## Domain` section of `SPEC.md`. Optional.
+- **Conventions:** the file `paths.conventions` names, else `CONVENTIONS.md`, else the `## Conventions` section of `SPEC.md`. Optional.
 - **Never `AGENTS.md` or `CLAUDE.md`.** They hold process instructions for other agents (how to commit, when to stop, which tools to use), which contradict oid's procedure.
 
 ### Refusal
