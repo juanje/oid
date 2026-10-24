@@ -38,9 +38,30 @@ Feature: One attempt, one agent process
     Then the run succeeds
     And the model was offered the tools read, ls, find, grep, edit, write, try and report, and no shell
 
+  Scenario: Pi runs the model the project's .oid.json names
+    Given the project's .oid.json names the scripted model
+    When I run "oid run FR-GREET-01" with the executor oid makes from its config
+    Then the run succeeds
+    And the run's log gives each attempt the scripted model's id, its turns, and tokens and cost above zero
+
+  Scenario Outline: A run with no model it can use stops with an error before any attempt
+    Given the project's .oid.json <names>
+    When I run "oid run FR-GREET-01" with the executor oid makes from its config
+    Then the run stops with an error, not a refusal and not a crash
+    And the output names <named>
+    And the run created no branch
+    And the scripted model was asked nothing
+
+    Examples:
+      | names                              | named                       |
+      | names no model                     | the model key of .oid.json  |
+      | names the model nowhere/no-such-model | nowhere/no-such-model    |
+
   @smoke
-  Scenario: On a real model, each attempt runs and its use reaches the run log
-    Given the Pi executor runs on the real model named in OID_SMOKE_MODEL, instead of the scripted one
-    When I run "oid run FR-GREET-01"
+  Scenario: On a real model, oid runs as the person types it, and each attempt's use reaches the run log
+    Given the project's .oid.json names the real model in OID_SMOKE_MODEL
+    When I run "oid run FR-GREET-01" with the oid command
     Then the run ends without an error or a crash
     And the run's log gives each attempt the real model's id, its turns, and tokens above zero
+    And the run's summary is shown: what it built or not, where it stopped, its attempts and its cost
+    And a copy of the run's log is kept outside the temporary directory, and its path is shown
