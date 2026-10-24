@@ -102,7 +102,7 @@ export async function judgeNewTests(
   worktreeDir: string,
   testFiles: string[],
   run: CommandRunner,
-  symbolExists: (name: string) => boolean,
+  symbolExists: (name: string, file: string) => boolean,
   known: Set<string>,
 ): Promise<Judgment> {
   const unit = await runUnitTests(worktreeDir, testFiles, run);
@@ -135,7 +135,11 @@ export async function judgeNewTests(
   }
   const classified = (unit.failures ?? [])
     .filter((failure) => isNew(failure.test))
-    .map((failure) => ({ ...failure, redClass: classifyFailure(failure.message, symbolExists) }));
+    .map((failure) => {
+      // A name exists or not as the failing test's own file imports it.
+      const file = failure.test.split(" > ")[0]!;
+      return { ...failure, redClass: classifyFailure(failure.message, (name) => symbolExists(name, file)) };
+    });
   const invalid = classified.filter((failure) => !isValidRed(failure.redClass));
   if (invalid.length > 0) {
     return refused({

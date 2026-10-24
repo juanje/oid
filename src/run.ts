@@ -1,10 +1,12 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { gateRefusal, runGate } from "./gate.ts";
 import { innerLoop } from "./inner-loop.ts";
-import { projectSymbols } from "./project-symbols.ts";
+import { importedSymbolExists } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
@@ -65,10 +67,11 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
     return takeAttemptChanges(worktreeDir);
   };
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
-  // Asked at each judgment: the project changes with every attempt.
-  const symbolExists = async (): Promise<(name: string) => boolean> => {
-    const symbols = await projectSymbols(worktreeDir);
-    return (name) => symbols.has(name);
+  // Asked at each judgment, of the file that failed: the project changes with every attempt.
+  const symbolsOf = async (files: string[]): Promise<(name: string, file: string) => boolean> => {
+    const present = files.filter((file) => existsSync(join(worktreeDir, file)));
+    const checks = new Map(await Promise.all(present.map(async (file) => [file, await importedSymbolExists(worktreeDir, file)] as const)));
+    return (name, file) => checks.get(file)?.(name) ?? true;
   };
   const accept = ({ refusal, reds }: Judgment): Refusal | undefined => {
     for (const red of reds) out(`Red: ${red}\n`);
@@ -76,11 +79,15 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   };
 
   await attempt("steps");
-  const stepsRefusal = accept(judgeSteps(await runScenario(), await symbolExists()));
+  const stepsResult = await runScenario();
+  const stepFile = stepsResult.failure?.definedIn;
+  const stepsExists = await symbolsOf(stepFile === undefined ? [] : [stepFile]);
+  const stepsRefusal = accept(judgeSteps(stepsResult, (name) => stepsExists(name, stepFile ?? "")));
   if (stepsRefusal !== undefined) return stepsRefusal;
   return innerLoop(
     async () => {
-      const testRefusal = accept(await judgeNewTests(worktreeDir, await attempt("test"), runCommand, await symbolExists(), known));
+      const testFiles = await attempt("test");
+      const testRefusal = accept(await judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known));
       if (testRefusal !== undefined) return testRefusal;
       await attempt("code");
       const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);

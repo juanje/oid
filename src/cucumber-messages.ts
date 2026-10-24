@@ -12,6 +12,8 @@ export interface StepFailure {
   kind: "Context" | "Action" | "Outcome" | "Unknown";
   status: string;
   message: string;
+  /** The file that defines the step, when one does. */
+  definedIn?: string;
 }
 
 export interface ScenarioResult extends Scenario {
@@ -34,8 +36,10 @@ interface Messages {
   pickleSteps: Map<string, { text: string; kind: StepFailure["kind"] }>;
   /** testCase id → pickle id, in the order cucumber selected them. */
   testCases: Map<string, string>;
-  /** test step id → pickle step id; hooks have none. */
-  testSteps: Map<string, string | undefined>;
+  /** test step id → its pickle step id (hooks have none) and the ids of its step definitions. */
+  testSteps: Map<string, { pickleStepId: string | undefined; definitionIds: string[] }>;
+  /** step definition id → the file that defines it. */
+  definitions: Map<string, string>;
   /** testCaseStarted id → testCase id. */
   started: Map<string, string>;
   /** testCaseStarted id → its steps as they finished. */
@@ -43,17 +47,21 @@ interface Messages {
 }
 
 function parse(ndjson: string): Messages {
-  const messages: Messages = { pickles: new Map(), pickleSteps: new Map(), testCases: new Map(), testSteps: new Map(), started: new Map(), finished: new Map() };
+  const messages: Messages = { pickles: new Map(), pickleSteps: new Map(), testCases: new Map(), testSteps: new Map(), definitions: new Map(), started: new Map(), finished: new Map() };
   for (const line of ndjson.split("\n")) {
     if (line.trim() === "") continue;
     const message = JSON.parse(line);
-    if (message.pickle) {
+    if (message.stepDefinition) {
+      messages.definitions.set(message.stepDefinition.id, message.stepDefinition.sourceReference?.uri);
+    } else if (message.pickle) {
       const { id, uri, location, name, steps } = message.pickle;
       messages.pickles.set(id, { uri, line: location.line, name });
       for (const step of steps ?? []) messages.pickleSteps.set(step.id, { text: step.text, kind: step.type ?? "Unknown" });
     } else if (message.testCase) {
       messages.testCases.set(message.testCase.id, message.testCase.pickleId);
-      for (const step of message.testCase.testSteps ?? []) messages.testSteps.set(step.id, step.pickleStepId);
+      for (const step of message.testCase.testSteps ?? []) {
+        messages.testSteps.set(step.id, { pickleStepId: step.pickleStepId, definitionIds: step.stepDefinitionIds ?? [] });
+      }
     } else if (message.testCaseStarted) {
       messages.started.set(message.testCaseStarted.id, message.testCaseStarted.testCaseId);
     } else if (message.testStepFinished) {
@@ -85,12 +93,16 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
       results.push({ ...scenario, status: "passed" });
       continue;
     }
-    const pickleStep = messages.pickleSteps.get(messages.testSteps.get(notPassed?.testStepId ?? "") ?? "");
+    const testStep = messages.testSteps.get(notPassed?.testStepId ?? "");
+    const pickleStep = messages.pickleSteps.get(testStep?.pickleStepId ?? "");
+    // An undefined step has no definition; an ambiguous one has several, and none of them decides.
+    const definedIn = testStep?.definitionIds.length === 1 ? messages.definitions.get(testStep.definitionIds[0]!) : undefined;
     const failure: StepFailure = {
       step: pickleStep?.text ?? "a hook",
       kind: pickleStep?.kind ?? "Unknown",
       status: notPassed?.status ?? "NOT RUN",
       message: notPassed?.message ?? "",
+      ...(definedIn === undefined ? {} : { definedIn }),
     };
     results.push({ ...scenario, status: "failed", failure });
   }
