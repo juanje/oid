@@ -67,6 +67,19 @@ describe("piExecutor", () => {
     expect(calls.reports).toEqual(["scripted code attempt"]);
   });
 
+  test("keeps its agent's whole session as JSONL where the attempt says, creating the directory", async () => {
+    const model = await scripted({ dir: attemptDir("code") });
+    const { attempt } = codeAttempt();
+    const transcript = join(worktree, "runs/run-1/01-code.jsonl");
+
+    await executorOn(model).run({ ...attempt, transcript });
+
+    expect(existsSync(transcript)).toBe(true);
+    const entries = (await readFile(transcript, "utf8")).split("\n").filter((line) => line !== "").map((line) => JSON.parse(line));
+    expect(JSON.stringify(entries)).toContain(JSON.stringify(taskFor(attempt)).slice(1, -1));
+    expect(JSON.stringify(entries)).toContain("scripted code attempt");
+  });
+
   test("ends the agent after the turn in which it reports, and reports its turns, model, tokens and cost", async () => {
     const model = await scripted({ dir: attemptDir("code") });
 
