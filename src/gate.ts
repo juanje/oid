@@ -33,21 +33,39 @@ export async function runGate(dir: string, run: CommandRunner): Promise<CheckRes
   return [await typesCheck(dir, run), await unitCheck(dir, run), await scenariosCheck(dir, run)];
 }
 
+interface Outcome {
+  /** False when the runner wrote no report: nothing it says counts. */
+  ran: boolean;
+  ranNothing: boolean;
+  output: string;
+  failures: string[];
+}
+
+/** A check passes only when its runner ran, ran something, knew every option and reported no failure (NFR-02). */
+function checkResult(name: string, outcome: Outcome, failedOnes: Partial<CheckResult> = {}): CheckResult {
+  const unknown = unknownOptionIn(outcome.output);
+  const failing = outcome.failures.length > 0;
+  return {
+    name,
+    passed: outcome.ran && !outcome.ranNothing && !failing && unknown.unknownOption === undefined,
+    output: outcome.output,
+    ...(outcome.ranNothing ? { ranNothing: true } : {}),
+    ...unknown,
+    ...(failing ? { failures: outcome.failures, ...failedOnes } : {}),
+  };
+}
+
 async function typesCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
   const { exitCode, output } = await run(projectBin(dir, "tsc"), ["--noEmit"], { cwd: dir });
   const ranNothing = /error TS18003: No inputs were found/.test(output);
-  const unknown = unknownOptionIn(output);
-  return { name: "types", passed: exitCode === 0 && !ranNothing && unknown.unknownOption === undefined, output, ...(ranNothing ? { ranNothing } : {}), ...unknown };
+  return checkResult("types", { ran: true, ranNothing, output, failures: exitCode === 0 || ranNothing ? [] : [output.trim()] });
 }
 
 async function unitCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
   const unit = await runUnitTests(dir, [], run);
   const failures = (unit.failures ?? []).map((failure) => `${failure.test}: ${failure.message}`);
   const ranNothing = unit.ran && unit.passed.length === 0 && failures.length === 0;
-  const unknown = unknownOptionIn(unit.output);
-  const passed = unit.ran && !ranNothing && failures.length === 0 && unknown.unknownOption === undefined;
-  const failedTests = (unit.failures ?? []).map((failure) => failure.test);
-  return { name: "unit", passed, output: unit.output, ...(ranNothing ? { ranNothing } : {}), ...unknown, ...(failures.length > 0 ? { failures, failedTests } : {}) };
+  return checkResult("unit", { ran: unit.ran, ranNothing, output: unit.output, failures }, { failedTests: (unit.failures ?? []).map((failure) => failure.test) });
 }
 
 async function scenariosCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
@@ -56,17 +74,7 @@ async function scenariosCheck(dir: string, run: CommandRunner): Promise<CheckRes
   const failures = failedScenarios.map(
     (scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}", step "${scenario.failure?.step ?? "?"}": ${scenario.failure?.message ?? scenario.failure?.status ?? ""}`,
   );
-  const ranNothing = ran && results.length === 0;
-  const unknown = unknownOptionIn(output);
-  const passed = ran && !ranNothing && failedScenarios.length === 0 && unknown.unknownOption === undefined;
-  return {
-    name: "scenarios",
-    passed,
-    output,
-    ...(ranNothing ? { ranNothing } : {}),
-    ...unknown,
-    ...(failedScenarios.length > 0 ? { failures, failedScenarios } : {}),
-  };
+  return checkResult("scenarios", { ran, ranNothing: ran && results.length === 0, output, failures }, { failedScenarios });
 }
 
 /** The gate's error: a check whose runner does not know an option could not run, and no attempt can fix that. */
