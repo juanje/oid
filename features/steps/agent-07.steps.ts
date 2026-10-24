@@ -1,9 +1,7 @@
 import { Given, Then } from "@cucumber/cucumber";
-import { scenarioNames } from "../support/fixture.ts";
+import { GREET_01_SCENARIO } from "../support/fixture.ts";
 import { assertOutputNames } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
-
-const [GREET_01_SCENARIO] = scenarioNames("project/features/greet-01.feature") as [string];
 
 /** The code attempt ends with `report`, and the run asks for nothing after it. */
 function codeReports(world: RunWorld, report: string | null): void {

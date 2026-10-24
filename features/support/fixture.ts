@@ -54,6 +54,9 @@ export function scenarioNames(featureFile: string): string[] {
   return [...readFileSync(join(GREET, featureFile), "utf8").matchAll(/^\s*Scenario: (.+)$/gm)].map((match) => match[1]!);
 }
 
+/** The one scenario of FR-GREET-01, which the greet project starts with. */
+export const GREET_01_SCENARIO = scenarioNames("project/features/greet-01.feature")[0]!;
+
 /** The names of the vitest tests in `file`, in file order. */
 export function testNames(file: string): string[] {
   return [...readFileSync(file, "utf8").matchAll(/\btest\("([^"]+)"/g)].map((match) => match[1]!);

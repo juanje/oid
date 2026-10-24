@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
-import { attemptDir, filesUnder, scenarioNames } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, attemptDir, filesUnder } from "../support/fixture.ts";
 import { assertOutputNames } from "../support/run.ts";
 import { lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
-
-const [GREET_01_SCENARIO] = scenarioNames("project/features/greet-01.feature") as [string];
 
 // The prepared attempt that adds each pattern of the outline's examples.
 const PATTERN_ATTEMPTS: Record<string, string> = {

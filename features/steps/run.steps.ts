@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
-import { attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, scenarioNames, testNames } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, testNames } from "../support/fixture.ts";
 import { assertOutputNames, attemptOf, runBranch } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -11,7 +11,6 @@ Given("a project with an approved feature file for FR-GREET-01", async function 
   this.projectDir = await createGreetProject();
 });
 
-const [GREET_01_SCENARIO] = scenarioNames("project/features/greet-01.feature") as [string];
 
 Given("a scripted executor whose steps, test and code attempts build FR-GREET-01", function (this: RunWorld) {
   this.script = (["steps", "test", "code"] as const).map((kind) => ({ kind, scenario: GREET_01_SCENARIO, dir: attemptDir(kind) }));

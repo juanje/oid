@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { attemptDir, scenarioNames, testNames } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, attemptDir, testNames } from "../support/fixture.ts";
 import { lastAttempt, type PreparedAttempt, replacedAttempt, type Tried } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
-const [GREET_01_SCENARIO] = scenarioNames("project/features/greet-01.feature") as [string];
 const NEW_TEST_FILE = "tests/greet.test.ts";
 
 /** The prepared attempt of `kind`, with `name`'s files and the tries it makes. */
