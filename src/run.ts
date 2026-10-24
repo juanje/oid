@@ -6,11 +6,12 @@ import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_REFUSED } from "./exit.ts";
-import { gateError, gateRefusal, runGate } from "./gate.ts";
+import { runGate } from "./gate.ts";
+import { gateLoop } from "./gate-loop.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
-import { withRetries } from "./retries.ts";
+import { type Tried, withRetries } from "./retries.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { acceptedWork, commitRun, createRunWorktree } from "./worktree.ts";
@@ -49,11 +50,11 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
   }
   const builtRefusal = await buildScenarios(run, scenarios);
   if (builtRefusal !== undefined) return refuse(builtRefusal, out);
-  const gate = await runGate(worktree.dir, runCommand);
-  const error = gateError(gate);
-  if (error !== undefined) return stop(error, out);
-  const gateFailure = gateRefusal(gate);
-  if (gateFailure !== undefined) return refuse(gateFailure, out);
+  // A code attempt after the gate belongs to the FR's last scenario; its refusal's focus says what to fix.
+  const last = scenarios[scenarios.length - 1]!;
+  const gate = await gateLoop(retries, () => runGate(worktree.dir, runCommand), (refusal) => codeAttempt(run, last, refusal));
+  if ("error" in gate) return stop(gate.error, out);
+  if (gate.refusal !== undefined) return refuse(gate.refusal, out);
   await commitRun(worktree.dir, `feat(${fr}): built by oid run`);
   out(`${fr} built on branch ${worktree.branch}\n`);
   return EXIT_BUILT;
@@ -82,7 +83,7 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
 
 /** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping the green ones green. */
 async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
-  const { executor, fr, worktreeDir, out, green, known, retries } = run;
+  const { executor, fr, worktreeDir, out, known, retries } = run;
   // An attempt and the judgment of its kind, retried from the work accepted before it while refused (FR-RUN-07).
   const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Refusal | undefined>) =>
     withRetries(retries, async (previous) => {
@@ -111,14 +112,21 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
         const testFiles = files.filter(isTestFile);
         return accept(await judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known));
       })) ??
-      (await judged("code", async () => {
-        const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
-        const unit = await runUnitTests(worktreeDir, [], runCommand);
-        for (const test of testsIn(unit)) known.add(test);
-        return judgeCode(unit, greenRuns);
-      })),
+      (await withRetries(retries, (previous) => codeAttempt(run, scenario, previous))),
     async () => (await runScenario()).status === "passed",
   );
+}
+
+/** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
+async function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
+  const { executor, fr, worktreeDir, green, known } = run;
+  const accepted = await acceptedWork(worktreeDir);
+  const attempt = await runAttempt({ executor, kind: "code", fr, scenario, worktreeDir, refusal: previous });
+  if (attempt.refusal !== undefined) return { refusal: attempt.refusal, rollback: accepted.restore };
+  const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
+  const unit = await runUnitTests(worktreeDir, [], runCommand);
+  for (const test of testsIn(unit)) known.add(test);
+  return { refusal: judgeCode(unit, greenRuns), rollback: accepted.restore };
 }
 
 function runId(fr: string): string {
