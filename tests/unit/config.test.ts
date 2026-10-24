@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { readLimits } from "../../src/config.ts";
+import { readLimits, personalConfigDir } from "../../src/config.ts";
 import { tempRepo } from "./support/repo.ts";
 
 describe("readLimits", () => {
@@ -14,5 +14,13 @@ describe("readLimits", () => {
     const none = await tempRepo({ "a.txt": "a\n" });
 
     expect({ some: await readLimits(dir), none: await readLimits(none) }).toEqual({ some: { retries: 1, turns: 40 }, none: { retries: 2, turns: 40 } });
+  });
+});
+
+describe("personalConfigDir", () => {
+  test("is $OID_CONFIG_DIR, else oid in $XDG_CONFIG_HOME, else .config/oid in the home", () => {
+    expect(personalConfigDir({ OID_CONFIG_DIR: "/c", XDG_CONFIG_HOME: "/x", HOME: "/h" })).toBe("/c");
+    expect(personalConfigDir({ XDG_CONFIG_HOME: "/x", HOME: "/h" })).toBe("/x/oid");
+    expect(personalConfigDir({ HOME: "/h" })).toBe("/h/.config/oid");
   });
 });
