@@ -30,13 +30,17 @@ describe("listScenarios", () => {
 });
 
 describe("runScenarios", () => {
-  test("runs the scenarios by location and returns each one's result", async () => {
+  test("runs the scenarios by location and returns each one's result, with the step a failed one failed at", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     const run = recordedCucumber(dir, ["features/greet-02.feature:4", "features/greet-02.feature:8"], recorded("cucumber-greet-02-run.ndjson"));
 
     expect(await runScenarios(dir, [FIRST, SECOND], run)).toEqual([
       { ...FIRST, status: "passed" },
-      { ...SECOND, status: "failed" },
+      {
+        ...SECOND,
+        status: "failed",
+        failure: { step: 'I greet "Ada", "Grace" and "Linus"', kind: "Action", status: "UNDEFINED", message: "" },
+      },
     ]);
   });
 
