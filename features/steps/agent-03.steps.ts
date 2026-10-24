@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Then } from "@cucumber/cucumber";
-import { attemptDir } from "../support/fixture.ts";
+import { Given, Then } from "@cucumber/cucumber";
+import { attemptDir, greet02AttemptDir, scenarioNames } from "../support/fixture.ts";
 import { scriptedModel } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -57,3 +57,35 @@ Then("the test and code attempts' tasks give the scenario's failure and the sour
     assert.ok(task.includes(source), `The ${kind} attempt's task does not give the source of the step definition it failed in:\n${task}`);
   }
 });
+
+const [GREET_02_FIRST, GREET_02_SECOND] = scenarioNames("greet-02/contract/features/greet-02.feature") as [string, string];
+
+Given("the scripted model builds FR-GREET-02", function (this: RunWorld) {
+  const build = (scenario: string, prefix: string) =>
+    (["steps", "test", "code"] as const).map((kind) => ({ kind, scenario, dir: greet02AttemptDir(`${prefix}-${kind}`) }));
+  scriptedModel(this).script = [...build(GREET_02_FIRST, "s1"), ...build(GREET_02_SECOND, "s2")];
+});
+
+/** The task of the attempt of `kind` for `scenario`. */
+function taskOf(world: RunWorld, kind: string, scenario: string): string {
+  const found = tasksOf(world).find((attempt) => attempt.kind === kind && attempt.scenario === scenario);
+  assert.ok(found !== undefined, `No ${kind} attempt for "${scenario}"`);
+  return found.task;
+}
+
+Then(
+  "the code attempt for FR-GREET-02's second scenario was given the source its steps import and the unit tests that import that source",
+  function (this: RunWorld) {
+    const task = taskOf(this, "code", GREET_02_SECOND);
+    // When it starts, src/greet-all.ts is as the first scenario's code left it, and two unit tests import it.
+    const given = [
+      ["src/greet-all.ts", "s1-code"],
+      ["tests/greet-all.test.ts", "s1-test"],
+      ["tests/greet-list.test.ts", "s2-test"],
+    ];
+    for (const [file, attempt] of given) {
+      assert.ok(task.includes(file!), `The code attempt's task does not name ${file}:\n${task}`);
+      assert.ok(task.includes(readFileSync(join(greet02AttemptDir(attempt!), file!), "utf8").trim()), `The code attempt's task does not give ${file}'s source:\n${task}`);
+    }
+  },
+);
