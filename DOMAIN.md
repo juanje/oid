@@ -135,17 +135,20 @@ Categories: `complexity`, `duplication`, `dead_code`, `magic_value`, `doc_drift`
 Observed on 1.1.0; the 1.4.0 code was compared and is the same unless a line says otherwise. Lines marked *(source)* come from reading the code, not from running it: check them the first time you rely on them.
 
 - **Provider errors do not reject.** `prompt()` and `classify()` resolve with `stopReason: "error"` and an `errorMessage`, on `message_end` for `prompt()`. A `prompt()` error carries usage with cost 0; `classify()`'s `usage` is optional. An empty assistant response is also possible. Neither is success.
-- **Pi retries provider errors itself** (by default 3 retries, 2 s base) *(source)*. oid's retries come on top, and one attempt's event stream can hold several error `message_end`s.
+- **Pi retries provider errors itself** (by default 3 retries, 2 s base), when the error message looks transient: "overloaded", a rate limit, status 429, 500, 502, 503, 504, 520 or 524, a network failure. `settings.retry` (`maxRetries`, `baseDelayMs`) changes it. One attempt's event stream can hold several error `message_end`s; after the last retry, `prompt()` resolves and the last assistant message keeps `stopReason: "error"`.
 - **A tool call that ignores the abort signal never settles.** `prompt()` and `session.abort()` then never resolve. To enforce a time or cost limit, race `prompt()` against the limit and abandon the session.
 - **Calling `abort()` from inside `beforeToolCall` or `afterToolCall` and awaiting it never settles.** Start it without awaiting.
-- **To end a session cleanly between turns** (a turn or cost limit), `Agent.finishTurn` can return `{ action: "end" }`. `AgentSession` wraps an existing `finishTurn`, so chain to it *(source)*.
+- **To end a session cleanly between turns** (a turn or cost limit), `Agent.finishTurn` can return `{ action: "end" }`. `AgentSession` wraps an existing `finishTurn`, so chain to it. It is called after every response, error responses included.
 - **The `tools` allowlist also filters custom tools.** A custom tool missing from it is never offered, and nothing says so.
 - **`beforeToolCall` blocks a call when it returns `{ block: true, reason }`.** The reason reaches the model as the tool result. Chain to the previous handler, because Pi's extensions use the same hook. Since 1.3.0, a call with malformed arguments fails validation before `beforeToolCall` runs.
 - **`tool_execution_end` carries no `args`.** Pair it with `tool_execution_start` by `toolCallId`.
-- **Pi reads two settings files:** `<agentDir>/settings.json`, and `<cwd>/.pi/settings.json` of the project, which is trusted by default. An explicit `agentDir` does not stop the second. Give sessions `SettingsManager.inMemory(...)` so they read neither *(source)*.
+- **Pi reads two settings files:** `<agentDir>/settings.json`, and `<cwd>/.pi/settings.json` of the project, which is trusted by default. An explicit `agentDir` does not stop the second. Give sessions `SettingsManager.inMemory(...)` so they read neither. A project's `defaultTools` sets the tools of a session created without a `tools` list.
 - **Run oid's sessions with `PI_OFFLINE=1` and `PI_TELEMETRY=0`.** Without them, `grep` and `find` download `rg` and `fd` from GitHub when they are missing, and requests to some providers (OpenRouter, NVIDIA, OpenCode) carry attribution headers *(source)*.
 - **With `PI_OFFLINE=1`, `rg` and `fd` must already be installed.** Pi looks for them in `<agent dir>/bin` first (`$PI_CODING_AGENT_DIR`, else `~/.pi/agent`; a session's `agentDir` option does not change it), then on the `PATH` (`fd` or `fdfind`, and `rg`). When one is missing, `find` or `grep` fails with "fd is not available and could not be downloaded" or its ripgrep equivalent *(source, 1.4.0)*.
-- **Pi's faux provider drives a real Pi session on scripted model replies.** `fauxProvider()` in `pi-ai` returns a `Provider`; register it on the session's `ModelRuntime` with `registerNativeProvider`. Its replies are `fauxAssistantMessage(...)`, with `fauxToolCall` and `fauxText`, or a function that gets each request's context (system prompt, messages, tools) *(source, 1.4.0)*.
+- **Pi's faux provider drives a real Pi session on scripted model replies.** `fauxProvider()` in `pi-ai` returns a `Provider`; register it on the session's `ModelRuntime` with `registerNativeProvider`. Its replies are `fauxAssistantMessage(...)`, with `fauxToolCall` and `fauxText`, or a function of each request's context and options (`options.sessionId` tells sessions apart).
+  - **The context holds only `messages`.** The system prompt is the leading `system` message: `content`, then its `sections` (a custom prompt is `sections.preamble`). The tools offered are its `toolsAdded`, changed by later system messages.
+  - **Faux reports tokens but always cost 0.** A real provider fills `usage.cost` with `calculateCost(model, usage)`; wrap faux's stream to do the same.
+- **`ModelRuntime.create()` reads a credential store even for a provider that needs none.** Its default is `<agent dir>/auth.json`. Tests pass `credentials`, a `CredentialStore` that holds nothing, so that the person's is never read.
 - **`SessionManager.create(cwd, dir)` writes the transcript only from the first message.** It creates the directory itself.
 - **Usage** is on each assistant `message_end`: `message.usage.totalTokens` and `message.usage.cost.total`.
 - **A failed `grep` returns ripgrep's stderr as an error result** (`find` uses `fd`). A filter that withholds lines it cannot attribute to a file must let error results through.
@@ -160,6 +163,7 @@ Observed on 1.1.0; the 1.4.0 code was compared and is the same unless a line say
   - The messages give each step's definition file and line.
 - **A step file that statically imports a missing module stops cucumber before any scenario runs:** `ERR_MODULE_NOT_FOUND` on stderr, exit 1, and no message file. A dynamic import of a missing module fails only its step.
 - **Select a scenario by location:** `features/x.feature:12`.
+- **In a Cucumber expression, `/` separates alternatives.** Escape a literal slash: `"a .pi\\/settings.json"` in a TypeScript string.
 - **TypeScript steps need `NODE_OPTIONS="--import tsx"`.**
 - **A regex step pattern inside a TypeScript string loses its backslashes unless they are doubled.** Use Cucumber expressions or regex literals.
 
