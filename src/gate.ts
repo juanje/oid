@@ -14,6 +14,8 @@ export interface CheckResult {
   unknownOption?: string;
   /** Each failing test or scenario with its message, from the runner's report. */
   failures?: string[];
+  /** The failing tests, as `<file> > <full name>`. */
+  failedTests?: string[];
   /** The scenarios that fail, with where they are: what a code attempt after the gate must look at first. */
   failedScenarios?: ScenarioResult[];
 }
@@ -44,7 +46,8 @@ async function unitCheck(dir: string, run: CommandRunner): Promise<CheckResult> 
   const ranNothing = unit.ran && unit.passed.length === 0 && failures.length === 0;
   const unknown = unknownOptionIn(unit.output);
   const passed = unit.ran && !ranNothing && failures.length === 0 && unknown.unknownOption === undefined;
-  return { name: "unit", passed, output: unit.output, ...(ranNothing ? { ranNothing } : {}), ...unknown, ...(failures.length > 0 ? { failures } : {}) };
+  const failedTests = (unit.failures ?? []).map((failure) => failure.test);
+  return { name: "unit", passed, output: unit.output, ...(ranNothing ? { ranNothing } : {}), ...unknown, ...(failures.length > 0 ? { failures, failedTests } : {}) };
 }
 
 async function scenariosCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
@@ -79,9 +82,12 @@ export function gateError(results: CheckResult[]): string | undefined {
 export function gateRefusal(results: CheckResult[]): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);
   if (failed.length === 0) return undefined;
+  const scenarios = failed.flatMap((result) => result.failedScenarios ?? []).map(({ uri, line, name }) => ({ uri, line, name }));
+  const tests = failed.flatMap((result) => result.failedTests ?? []);
   return {
     failed: `The gate failed: ${failed.map((result) => `${result.name}: ${result.ranNothing === true ? "FAIL, ran no test" : "FAIL"}`).join(", ")}`,
     evidence: failed.map((result) => `${result.name}:\n${result.failures?.join("\n") ?? result.output}`).join("\n"),
     next: "Fix the code so that every check passes, without changing the tests or the scenarios",
+    ...(scenarios.length > 0 || tests.length > 0 ? { focus: { scenarios, tests } } : {}),
   };
 }
