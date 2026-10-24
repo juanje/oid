@@ -58,6 +58,7 @@ Before reporting an FR:
    - Add to `DECISIONS.md` only a decision that is expensive to reverse, and only once the person agrees.
    - Keep `docs/design.md` near ten pages.
    - Ask before you create a new document.
+   - Rewrite `README.md` in place when a command changes. It points to `oid --help` for the options instead of copying them.
 6. **Scenarios assert outcomes the user sees.** Never internal names, message wording, or where a run ends, which break on every later change. Write unit tests where there is logic. A recorded runner reply checks the request it answers.
 7. **Port a piece from `~/git/outside-in-dev` only through steps 2–4, with new tests.** Never copy its tests. Never bring back what `docs/design.md` §8 leaves behind.
 8. **When a check or an agent fails, fix the tool output, a boundary or a helper first.** Propose new rules, here or in a prompt, to the person; do not add them yourself.
