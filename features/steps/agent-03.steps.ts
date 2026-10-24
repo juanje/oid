@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { attemptDir, greet02AttemptDir, scenarioNames } from "../support/fixture.ts";
+import type { AttemptKind } from "../../src/executor.ts";
+import { attemptDir, greet02AttemptDir, greet03AttemptDir, scenarioNames } from "../support/fixture.ts";
 import { scriptedModel } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -106,4 +107,25 @@ Then("each steps attempt was given the patterns of the step definitions the proj
     const task = taskOf(this, "steps", scenario);
     for (const pattern of patterns) assert.ok(task.includes(pattern), `The steps attempt for "${scenario}" was not given the pattern "${pattern}":\n${task}`);
   }
+});
+
+Given(
+  "the scripted model builds FR-GREET-03, its code attempt breaking a scenario of FR-GREET-02 that no unit test covers, and its attempt after the gate fixing it",
+  function (this: RunWorld) {
+    const scenario = scenarioNames("greet-03/contract/features/greet-03.feature")[0]!;
+    const attempt = (kind: AttemptKind, dir: string) => ({ kind, scenario, dir: greet03AttemptDir(dir) });
+    scriptedModel(this).script = [attempt("steps", "steps"), attempt("test", "test"), attempt("code", "code-breaks-pair"), attempt("code", "code-fixes-pair")];
+  },
+);
+
+Then("the code attempt after the gate was given the broken scenario of FR-GREET-02, its steps and its failure", function (this: RunWorld) {
+  // FR-GREET-03's code breaks greetPair, which only the first scenario of FR-GREET-02 serves.
+  const codeTasks = tasksOf(this).filter(({ kind }) => kind === "code");
+  assert.equal(codeTasks.length, 2, "Expected a code attempt and one after the gate");
+  const task = codeTasks[1]!.task;
+  assert.ok(task.includes(GREET_02_FIRST), `The task does not name the broken scenario:\n${task}`);
+  for (const step of ['When I greet "Ada" and "Grace"', 'Then I get "Hello, Ada and Grace!"']) {
+    assert.ok(task.includes(step), `The task does not give the broken scenario's step "${step}":\n${task}`);
+  }
+  assert.match(task, /AssertionError/, `The task does not give the broken scenario's failure:\n${task}`);
 });
