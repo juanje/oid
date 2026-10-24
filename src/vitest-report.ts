@@ -4,15 +4,27 @@ import { relative } from "node:path";
 export interface VitestReport {
   testResults: {
     name: string;
+    status: string;
+    message?: string;
     assertionResults: { fullName: string; status: string }[];
   }[];
 }
 
 /** Each passed test as `<file relative to root> > <full name>`. */
 export function passedTests(report: VitestReport, root: string): string[] {
+  return testsWithStatus(report, root, "passed");
+}
+
+/** Each failed test as `<file> > <full name>`, and each test file that failed without running a test as `<file>: <message>`. */
+export function failedTests(report: VitestReport, root: string): string[] {
+  const unloaded = report.testResults
+    .filter((file) => file.status === "failed" && file.assertionResults.length === 0)
+    .map((file) => `${relative(root, file.name)}: ${file.message ?? ""}`);
+  return [...testsWithStatus(report, root, "failed"), ...unloaded];
+}
+
+function testsWithStatus(report: VitestReport, root: string, status: string): string[] {
   return report.testResults.flatMap((file) =>
-    file.assertionResults
-      .filter((test) => test.status === "passed")
-      .map((test) => `${relative(root, file.name)} > ${test.fullName}`),
+    file.assertionResults.filter((test) => test.status === status).map((test) => `${relative(root, file.name)} > ${test.fullName}`),
   );
 }
