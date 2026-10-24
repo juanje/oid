@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
+import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import { attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt } from "../support/fixture.ts";
@@ -80,4 +80,38 @@ Then("every scenario of FR-GREET-01 passes on the run's branch", async function 
 Then("the feature file of FR-GREET-01 is unchanged on the run's branch", function (this: RunWorld) {
   const diff = git(this.projectDir, "diff", "--name-only", this.startHead, runBranch(this), "--", "features/greet-01.feature");
   assert.equal(diff, "", "The run changed the feature file of FR-GREET-01");
+});
+
+const MY_CHANGES = { tracked: "SPEC.md", untracked: "notes.txt" };
+
+Given("I have an uncommitted change in my working copy", async function (this: RunWorld) {
+  await appendFile(join(this.projectDir, MY_CHANGES.tracked), "\nA line I have not committed.\n");
+  await writeFile(join(this.projectDir, MY_CHANGES.untracked), "My notes.\n");
+  this.workingCopyBefore = await workingCopy(this.projectDir);
+});
+
+/** What the person sees of their working copy: status, branch, HEAD and the content of the files they changed. */
+async function workingCopy(dir: string): Promise<Record<string, string>> {
+  return {
+    status: git(dir, "status", "--porcelain"),
+    branch: git(dir, "branch", "--show-current"),
+    head: git(dir, "rev-parse", "HEAD"),
+    tracked: await readFile(join(dir, MY_CHANGES.tracked), "utf8"),
+    untracked: await readFile(join(dir, MY_CHANGES.untracked), "utf8"),
+  };
+}
+
+Then("my working copy, its current branch and its HEAD are as they were", async function (this: RunWorld) {
+  assert.deepEqual(await workingCopy(this.projectDir), this.workingCopyBefore);
+});
+
+Then("the run's commit does not contain my uncommitted change", function (this: RunWorld) {
+  const branch = runBranch(this);
+  assert.equal(
+    git(this.projectDir, "show", `${branch}:${MY_CHANGES.tracked}`),
+    git(this.projectDir, "show", `${this.startHead}:${MY_CHANGES.tracked}`),
+    `The run's commit holds my uncommitted change to ${MY_CHANGES.tracked}`,
+  );
+  const files = git(this.projectDir, "ls-tree", "-r", "--name-only", branch).split("\n");
+  assert.ok(!files.includes(MY_CHANGES.untracked), `The run's commit holds my untracked ${MY_CHANGES.untracked}`);
 });

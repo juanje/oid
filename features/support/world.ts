@@ -10,6 +10,7 @@ export class RunWorld extends World {
   output = "";
   exitCode: number | undefined;
   crash: unknown;
+  workingCopyBefore: Record<string, string> = {};
 }
 
 setWorldConstructor(RunWorld);
