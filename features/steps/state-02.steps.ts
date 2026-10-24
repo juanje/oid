@@ -3,31 +3,9 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { attemptDir } from "../support/fixture.ts";
+import type { AttemptEvent, EndEvent, LogEvent, Measures } from "../../src/run-log.ts";
 import type { Usage } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
-
-/** One line of the run's log, as far as these steps read it. */
-interface LogEvent {
-  event: string;
-  kind?: string;
-  verdict?: string;
-  refusal?: { failed: string; evidence: string; next: string };
-  model?: string;
-  tokens?: number;
-  cost?: number;
-  turns?: number;
-  deniedToolCalls?: number;
-  limit?: string;
-  measures?: {
-    attempts: Record<string, number>;
-    rejections: Record<string, number>;
-    blindRetries: number;
-    tokens: number;
-    cost: number;
-    deniedToolCalls: number;
-    timeMs: number;
-  };
-}
 
 /** The run's log: the one file in the repository's .git/oid/runs. */
 async function runLog(world: RunWorld): Promise<LogEvent[]> {
@@ -40,11 +18,11 @@ async function runLog(world: RunWorld): Promise<LogEvent[]> {
     .map((line) => JSON.parse(line) as LogEvent);
 }
 
-const attemptsIn = (log: LogEvent[]) => log.filter((entry) => entry.event === "attempt");
+const attemptsIn = (log: LogEvent[]) => log.filter((entry): entry is AttemptEvent => entry.event === "attempt");
 
-async function measuresOf(world: RunWorld): Promise<NonNullable<LogEvent["measures"]>> {
-  const end = (await runLog(world)).find((entry) => entry.event === "end");
-  assert.ok(end?.measures !== undefined, "The run's log has no measures at its end");
+async function measuresOf(world: RunWorld): Promise<Measures> {
+  const end = (await runLog(world)).find((entry): entry is EndEvent => entry.event === "end");
+  assert.ok(end !== undefined, "The run's log has no measures at its end");
   return end.measures;
 }
 
