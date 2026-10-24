@@ -1,7 +1,7 @@
 import { AGENT_TOOLS } from "./agent-tools.ts";
 import { WRITABLE } from "./boundaries.ts";
 import type { Attempt, AttemptKind, TaskContext } from "./executor.ts";
-import { formatRefusal } from "./refusal.ts";
+import { formatRefusal, type Refusal } from "./refusal.ts";
 
 // A system prompt is parts separated by blank lines: the common facts, then the kind's identity, its limits and its
 // procedure (D-09). Tests check how they are put together, never their wording: runs judge the wording (NFR-05).
@@ -85,6 +85,17 @@ function codeText({ files, cut }: NonNullable<TaskContext["code"]>): string {
   return ["The code relevant to the scenario: the step definitions, the modules they import, and the unit tests that import those.", ...shown, ...left].join("\n");
 }
 
+/** What the gate found failing, which the attempt after it must fix first, whatever FR it belongs to (FR-GATE-04). */
+function focusText({ scenarios, tests }: NonNullable<Refusal["focus"]>): string {
+  const lines = ["Fix these first: the gate found them failing."];
+  for (const { uri, line, name, steps, failure } of scenarios) {
+    lines.push(`Scenario ${uri}:${line} "${name}"`, ...(steps ?? []).map((step) => `  ${step}`));
+    if (failure !== undefined) lines.push(`  fails at the step "${failure.step}":`, failure.message);
+  }
+  for (const test of tests) lines.push(`Unit test ${test}`);
+  return lines.join("\n");
+}
+
 function failureText({ step, message, definition }: NonNullable<TaskContext["failure"]>): string {
   const where = definition === undefined ? "" : `\nIts step is defined at ${definition.file}:${definition.line}:\n${definition.source}`;
   return `The scenario fails at the step "${step}":\n${message}${where}`;
@@ -101,5 +112,6 @@ export function taskFor({ kind, fr, scenario, refusal, context }: Pick<Attempt, 
     parts.push(`The step definitions the project has: reuse a step that matches instead of defining it again, which cucumber-js reports as ambiguous.\n${context.patterns.join("\n")}`);
   }
   if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
+  if (refusal?.focus !== undefined) parts.push(focusText(refusal.focus));
   return parts.join("\n\n");
 }
