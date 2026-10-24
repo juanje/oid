@@ -26,3 +26,12 @@ Feature: Retries
     When I run "oid run FR-GREET-01"
     Then the run stops with an error, not a refusal and not a crash
     And the executor was asked for every prepared attempt, in order
+
+  @NFR-08
+  Scenario: The project's config comes from the run's HEAD, not from my uncommitted changes
+    Given my working copy's .oid.json allows no retries, not committed
+    And the scripted code attempt is first refused, after writing a file that its retry does not write
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the retried code attempt was given the refusal of the attempt before it
+    And the output says the uncommitted .oid.json was not used
