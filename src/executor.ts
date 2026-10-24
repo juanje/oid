@@ -28,6 +28,8 @@ export interface TaskContext {
   failure?: { step: string; message: string; definition?: { file: string; line: number; source: string } };
   /** The code relevant to the scenario, chosen by imports, and the relevant files left out of the budget. */
   code?: { files: { path: string; content: string }[]; cut: string[] };
+  /** For a steps attempt, the patterns of the step definitions the project has, as `<file>: <pattern>`. */
+  patterns?: string[];
 }
 
 /** What the executor reports of an attempt: its agent's turns, which the executor counts, never the model. */

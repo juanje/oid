@@ -97,6 +97,9 @@ export function taskFor({ kind, fr, scenario, refusal, context }: Pick<Attempt, 
   if (context !== undefined && context.steps.length > 0) parts.push(`The scenario's steps:\n${context.steps.join("\n")}`);
   if (context?.failure !== undefined) parts.push(failureText(context.failure));
   if (context?.code !== undefined) parts.push(codeText(context.code));
+  if (context?.patterns !== undefined && context.patterns.length > 0) {
+    parts.push(`The step definitions the project has: reuse a step that matches instead of defining it again, which cucumber-js reports as ambiguous.\n${context.patterns.join("\n")}`);
+  }
   if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
   return parts.join("\n\n");
 }
