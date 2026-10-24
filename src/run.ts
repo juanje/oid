@@ -42,22 +42,24 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
   const run: FrRun = { executor, fr, worktreeDir: worktree.dir, out, green: [], known };
   const scenarios = await listScenarios(worktree.dir, fr, runCommand);
   if (scenarios.length === 0) {
-    out(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.\n`);
-    return EXIT_ERROR;
+    return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
   }
   const builtRefusal = await buildScenarios(run, scenarios);
   if (builtRefusal !== undefined) return refuse(builtRefusal, out);
   const gate = await runGate(worktree.dir, runCommand);
   const error = gateError(gate);
-  if (error !== undefined) {
-    out(`${error}\n`);
-    return EXIT_ERROR;
-  }
+  if (error !== undefined) return stop(error, out);
   const gateFailure = gateRefusal(gate);
   if (gateFailure !== undefined) return refuse(gateFailure, out);
   await commitRun(worktree.dir, `feat(${fr}): built by oid run`);
   out(`${fr} built on branch ${worktree.branch}\n`);
   return EXIT_BUILT;
+}
+
+/** Stops the run on an error no attempt can fix. */
+function stop(error: string, out: (text: string) => void): number {
+  out(`${error}\n`);
+  return EXIT_ERROR;
 }
 
 function refuse(refusal: Refusal, out: (text: string) => void): number {
