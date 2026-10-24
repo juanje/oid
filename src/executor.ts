@@ -21,6 +21,11 @@ export interface AttemptOutcome {
   turns: number;
   /** The executor ended the agent at the turn limit, before it finished. */
   stoppedAtLimit: boolean;
+  /** The agent's model and use, as the executor measured them (FR-STATE-02). */
+  model?: string;
+  tokens?: number;
+  cost?: number;
+  deniedToolCalls?: number;
 }
 
 /** One test file, or the attempt's own scenario. */

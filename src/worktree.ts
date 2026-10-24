@@ -9,6 +9,8 @@ import { git, refExists } from "./git.ts";
 const NOT_NODE_MODULES = [".", ":(exclude)node_modules"];
 
 export interface RunWorktree {
+  /** The run's id, with the suffix it got if another run had taken it. */
+  id: string;
   dir: string;
   /** The run's branch: the FR's commit lands on it when the FR is built, and nothing else does (FR-RUN-01). */
   branch: string;
@@ -32,7 +34,7 @@ export async function createRunWorktree(projectDir: string, runId: string): Prom
   for (let n = 2; (await refExists(root, `refs/heads/oid/${id}`)) || (await refExists(root, `${CHECKPOINTS}${id}`)) || existsSync(join(runs, id)); n += 1) {
     id = `${runId}-${n}`;
   }
-  const worktree = { dir: join(runs, id), branch: `oid/${id}`, checkpoints: `${CHECKPOINTS}${id}`, start, projectDir: root };
+  const worktree = { id, dir: join(runs, id), branch: `oid/${id}`, checkpoints: `${CHECKPOINTS}${id}`, start, projectDir: root };
   await git(root, "branch", worktree.branch, start);
   await git(root, "worktree", "add", "-q", "--detach", worktree.dir, start);
   // Worktrees do not share node_modules.

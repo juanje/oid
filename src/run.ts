@@ -4,7 +4,7 @@ import { runCommand } from "./command.ts";
 import { readLimits } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
-import type { AttemptKind, Executor } from "./executor.ts";
+import type { AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
 import { LimitReached } from "./limits.ts";
 import { runGate } from "./gate.ts";
@@ -13,6 +13,7 @@ import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
+import { type AttemptEvent, type LogEvent, measuresOf, openRunLog } from "./run-log.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { acceptedWork, checkpoint, createRunWorktree, finishRun, type RunWorktree } from "./worktree.ts";
@@ -39,30 +40,57 @@ interface FrRun {
   retries: number;
   /** How many turns an attempt's agent may take. */
   turns: number;
+  /** Appends to the run log. */
+  record: (event: LogEvent) => Promise<void>;
 }
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr(options: RunOptions): Promise<number> {
+  // A monotonic clock: a suspended machine does not count in the run's time (DOMAIN.md, Node child processes).
+  const started = performance.now();
   const worktree = await createRunWorktree(options.projectDir, runId(options.fr));
+  const log = await openRunLog(worktree.dir, worktree.id);
+  const events: LogEvent[] = [];
+  const record = async (event: LogEvent): Promise<void> => {
+    events.push(event);
+    await log.append(event);
+  };
   let exitCode: number | undefined;
   try {
-    exitCode = await buildFr(options, worktree);
+    exitCode = await buildFr(options, worktree, record);
     return exitCode;
   } catch (error) {
     // A limit ends the run at the work accepted so far, and says which limit (FR-RUN-09).
     if (!(error instanceof LimitReached)) throw error;
+    await record(attemptEvent(error.kind, error.scenario, undefined, false, error.outcome, "stopped at the turn limit"));
+    await record({ event: "stop", limit: "turns" });
     options.out(`${error.message}\n`);
-    return EXIT_LIMIT;
+    exitCode = EXIT_LIMIT;
+    return exitCode;
   } finally {
     // The worktree goes however the run ends; only a built FR gets its commit and drops its checkpoints.
     await finishRun(worktree, exitCode === EXIT_BUILT ? `feat(${options.fr}): built by oid run` : undefined);
+    if (exitCode !== undefined) await record({ event: "end", exitCode, measures: measuresOf(events, performance.now() - started) });
   }
 }
 
-async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree): Promise<number> {
+/** An attempt as the run log keeps it: its verdict, and what the executor reported of it. */
+function attemptEvent(
+  kind: AttemptKind,
+  scenario: string,
+  refusal: Refusal | undefined,
+  retry: boolean,
+  outcome: AttemptOutcome,
+  verdict: AttemptEvent["verdict"] = refusal === undefined ? "accepted" : "refused",
+): AttemptEvent {
+  const { turns, model, tokens, cost, deniedToolCalls } = outcome;
+  return { event: "attempt", kind, scenario, verdict, retry, ...(refusal === undefined ? {} : { refusal }), turns, model, tokens, cost, deniedToolCalls };
+}
+
+async function buildFr({ fr, executor, out }: RunOptions, worktree: RunWorktree, record: (event: LogEvent) => Promise<void>): Promise<number> {
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
   const { retries, turns } = await readLimits(worktree.dir);
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns };
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, record };
   const scenarios = await listScenarios(worktree.dir, fr, runCommand);
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
@@ -109,6 +137,7 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
       const accepted = await acceptedWork(worktreeDir);
       const attempt = await attemptFor(run, kind, scenario, previous);
       const refusal = attempt.refusal ?? (await judge(attempt.files));
+      await run.record(attemptEvent(kind, scenario.name, refusal, previous !== undefined, attempt.outcome));
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
       return { refusal, rollback: accepted.restore };
     });
@@ -145,17 +174,20 @@ function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous:
 
 /** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
 async function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
-  const { green, known } = run;
-  const worktreeDir = run.worktree.dir;
-  const accepted = await acceptedWork(worktreeDir);
+  const accepted = await acceptedWork(run.worktree.dir);
   const attempt = await attemptFor(run, "code", scenario, previous);
-  if (attempt.refusal !== undefined) return { refusal: attempt.refusal, rollback: accepted.restore };
-  const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
-  const unit = await runUnitTests(worktreeDir, [], runCommand);
-  for (const test of testsIn(unit)) known.add(test);
-  const refusal = judgeCode(unit, greenRuns);
+  const refusal = attempt.refusal ?? (await judgeCodeAttempt(run));
+  await run.record(attemptEvent("code", scenario.name, refusal, previous !== undefined, attempt.outcome));
   if (refusal === undefined) await checkpoint(run.worktree, `code attempt for "${scenario.name}"`);
   return { refusal, rollback: accepted.restore };
+}
+
+/** A code attempt's judgment: the whole unit suite, and the scenarios built so far. */
+async function judgeCodeAttempt({ worktree, green, known }: FrRun): Promise<Refusal | undefined> {
+  const greenRuns = green.length === 0 ? [] : await runScenarios(worktree.dir, green, runCommand);
+  const unit = await runUnitTests(worktree.dir, [], runCommand);
+  for (const test of testsIn(unit)) known.add(test);
+  return judgeCode(unit, greenRuns);
 }
 
 function runId(fr: string): string {

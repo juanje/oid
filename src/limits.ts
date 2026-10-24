@@ -7,7 +7,14 @@ export function turnLimitReached(outcome: AttemptOutcome, limit: number): boolea
 
 /** A limit ends the run at the work accepted so far (FR-RUN-09); no attempt is retried after it. */
 export class LimitReached extends Error {
-  constructor(kind: AttemptKind, scenario: string, turns: number) {
+  readonly kind: AttemptKind;
+  readonly scenario: string;
+  readonly outcome: AttemptOutcome;
+
+  constructor(kind: AttemptKind, scenario: string, turns: number, outcome: AttemptOutcome) {
     super(`Stopped at the turn limit: the ${kind} attempt for "${scenario}" reached its ${turns} turns. Raise limits.turns in .oid.json, or look at what the attempt was doing.`);
+    this.kind = kind;
+    this.scenario = scenario;
+    this.outcome = outcome;
   }
 }

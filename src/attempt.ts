@@ -1,7 +1,7 @@
 import { judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { AttemptKind, Executor, TryTarget } from "./executor.ts";
+import type { AttemptKind, AttemptOutcome, Executor, TryTarget } from "./executor.ts";
 import { LimitReached, turnLimitReached } from "./limits.ts";
 import type { Refusal } from "./refusal.ts";
 import { judgeReport } from "./report.ts";
@@ -25,7 +25,15 @@ export interface AttemptRequest {
  * ended with a report (FR-AGENT-07), and its diff stays inside its boundary (FR-AGENT-04). The evidence of its kind
  * is judged after. A reached limit throws LimitReached: it ends the run, and no retry follows.
  */
-export async function runAttempt({ executor, kind, fr, scenario, worktreeDir, refusal: previous, turns }: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[] }> {
+export async function runAttempt({
+  executor,
+  kind,
+  fr,
+  scenario,
+  worktreeDir,
+  refusal: previous,
+  turns,
+}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome }> {
   let reported: string | undefined;
   const tools = {
     try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand),
@@ -42,7 +50,7 @@ export async function runAttempt({ executor, kind, fr, scenario, worktreeDir, re
     limits: { turns },
     ...(previous === undefined ? {} : { refusal: previous }),
   });
-  if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns);
+  if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns, outcome);
   const diff = await takeAttemptDiff(worktreeDir);
-  return { refusal: judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff), files: diff.files };
+  return { refusal: judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff), files: diff.files, outcome };
 }
