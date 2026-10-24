@@ -1,7 +1,8 @@
+import { existsSync } from "node:fs";
 import { readFile, symlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { AddedLine } from "./boundaries.ts";
-import { git } from "./git.ts";
+import { git, refExists } from "./git.ts";
 
 // The worktree's link to the project's node_modules is a file to git, and the project's `node_modules/` pattern
 // does not ignore it. The run's own git commands leave it out, so neither info/exclude nor .gitignore is touched.
@@ -9,21 +10,57 @@ const NOT_NODE_MODULES = [".", ":(exclude)node_modules"];
 
 export interface RunWorktree {
   dir: string;
+  /** The run's branch: the FR's commit lands on it when the FR is built, and nothing else does (FR-RUN-01). */
   branch: string;
+  /** The ref that follows the run's last checkpoint, kept for a later resume when the run stops before the end. */
+  checkpoints: string;
+  /** The commit the run started from. */
+  start: string;
+  projectDir: string;
 }
 
 /**
- * Checks out a new branch from HEAD in a worktree beside the repository, in ../.oid-worktrees/<repository>/<run id>:
- * the person's checkout never holds it, and tools that skip paths containing .git still see it.
+ * Starts a run on a new branch from HEAD, in a worktree beside the repository, in ../.oid-worktrees/<repository>/<run id>:
+ * the person's checkout never holds it, and tools that skip paths containing .git still see it. The worktree's HEAD
+ * is detached, so checkpoints never touch the branch. A run id another run already took gets a suffix.
  */
 export async function createRunWorktree(projectDir: string, runId: string): Promise<RunWorktree> {
   const root = await git(projectDir, "rev-parse", "--show-toplevel");
-  const dir = join(dirname(root), ".oid-worktrees", basename(root), runId);
-  const branch = `oid/${runId}`;
-  await git(projectDir, "worktree", "add", "-q", "-b", branch, dir, "HEAD");
+  const start = await git(projectDir, "rev-parse", "HEAD");
+  const runs = join(dirname(root), ".oid-worktrees", basename(root));
+  let id = runId;
+  for (let n = 2; (await refExists(root, `refs/heads/oid/${id}`)) || (await refExists(root, `${CHECKPOINTS}${id}`)) || existsSync(join(runs, id)); n += 1) {
+    id = `${runId}-${n}`;
+  }
+  const worktree = { dir: join(runs, id), branch: `oid/${id}`, checkpoints: `${CHECKPOINTS}${id}`, start, projectDir: root };
+  await git(root, "branch", worktree.branch, start);
+  await git(root, "worktree", "add", "-q", "--detach", worktree.dir, start);
   // Worktrees do not share node_modules.
-  await symlink(join(projectDir, "node_modules"), join(dir, "node_modules"));
-  return { dir, branch };
+  await symlink(join(projectDir, "node_modules"), join(worktree.dir, "node_modules"));
+  return worktree;
+}
+
+const CHECKPOINTS = "refs/oid/checkpoints/";
+
+/** Commits an accepted attempt, staged by takeAttemptDiff, as the run's next checkpoint (FR-STATE-01). */
+export async function checkpoint(worktree: RunWorktree, message: string): Promise<void> {
+  await git(worktree.dir, "commit", "-q", "--no-verify", "--allow-empty", "-m", message);
+  await git(worktree.dir, "update-ref", worktree.checkpoints, "HEAD");
+}
+
+/**
+ * Ends a run. A built run gets the squash of its checkpoints, with `builtMessage`, as one commit on its branch, and
+ * its checkpoints go; a run that stops before the end keeps them for a later resume. Either way the worktree goes.
+ */
+export async function finishRun(worktree: RunWorktree, builtMessage: string | undefined): Promise<void> {
+  if (builtMessage !== undefined) {
+    await takeAttemptChanges(worktree.dir);
+    await git(worktree.dir, "reset", "-q", "--soft", worktree.start);
+    await git(worktree.dir, "commit", "-q", "--no-verify", "--allow-empty", "-m", builtMessage);
+    await git(worktree.dir, "update-ref", `refs/heads/${worktree.branch}`, "HEAD");
+    if (await refExists(worktree.dir, worktree.checkpoints)) await git(worktree.dir, "update-ref", "-d", worktree.checkpoints);
+  }
+  await git(worktree.projectDir, "worktree", "remove", "--force", worktree.dir);
 }
 
 export interface AttemptDiff {
@@ -93,10 +130,4 @@ function linesAddedTo(patch: string): AddedLine[] {
     else if (line.startsWith("+")) added.push({ file, text: line.slice(1) });
   }
   return added;
-}
-
-/** Commits every change in the worktree as one commit on the run's branch. */
-export async function commitRun(worktreeDir: string, message: string): Promise<void> {
-  await takeAttemptChanges(worktreeDir);
-  await git(worktreeDir, "commit", "-q", "-m", message);
 }
