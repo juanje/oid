@@ -33,6 +33,16 @@ describe("withRetries", () => {
     expect({ result, tries: attempt.given.length }).toEqual({ result: refusal(2), tries: 2 });
   });
 
+  test("does not retry a refusal marked final, whatever the limit", async () => {
+    let tries = 0;
+    const once = async () => {
+      tries += 1;
+      return { refusal: refusal(tries), rollback: async () => {}, final: true };
+    };
+
+    expect({ result: await withRetries(3, once), tries }).toEqual({ result: refusal(1), tries: 1 });
+  });
+
   test("does not retry when no retry is allowed", async () => {
     const attempt = attemptRefused(5);
 
