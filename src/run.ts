@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { isTestFile, judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
@@ -10,7 +11,7 @@ import { importedSymbolExists } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
-import { commitRun, createRunWorktree, takeAttemptChanges } from "./worktree.ts";
+import { commitRun, createRunWorktree, takeAttemptDiff } from "./worktree.ts";
 
 export interface RunOptions {
   projectDir: string;
@@ -62,9 +63,11 @@ async function buildScenarios(run: FrRun): Promise<Refusal | undefined> {
 /** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping the green ones green. */
 async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
   const { executor, fr, worktreeDir, out, green, known } = run;
-  const attempt = async (kind: AttemptKind): Promise<string[]> => {
+  // Every attempt's diff must stay inside its boundary before any other judgment (FR-AGENT-04).
+  const attempt = async (kind: AttemptKind): Promise<{ refusal: Refusal | undefined; files: string[] }> => {
     await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir });
-    return takeAttemptChanges(worktreeDir);
+    const diff = await takeAttemptDiff(worktreeDir);
+    return { refusal: judgeBoundary(kind, diff), files: diff.files };
   };
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
   // Asked at each judgment, of the file that failed: the project changes with every attempt.
@@ -78,7 +81,8 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
     return refusal;
   };
 
-  await attempt("steps");
+  const steps = await attempt("steps");
+  if (steps.refusal !== undefined) return steps.refusal;
   const stepsResult = await runScenario();
   const stepFile = stepsResult.failure?.definedIn;
   const stepsExists = await symbolsOf(stepFile === undefined ? [] : [stepFile]);
@@ -86,10 +90,13 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   if (stepsRefusal !== undefined) return stepsRefusal;
   return innerLoop(
     async () => {
-      const testFiles = await attempt("test");
+      const test = await attempt("test");
+      if (test.refusal !== undefined) return test.refusal;
+      const testFiles = test.files.filter(isTestFile);
       const testRefusal = accept(await judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known));
       if (testRefusal !== undefined) return testRefusal;
-      await attempt("code");
+      const code = await attempt("code");
+      if (code.refusal !== undefined) return code.refusal;
       const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
       const unit = await runUnitTests(worktreeDir, [], runCommand);
       for (const test of testsIn(unit)) known.add(test);
