@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { CommandOptions, CommandResult } from "../../src/command.ts";
-import { listScenarios, runScenarios } from "../../src/scenarios.ts";
+import { frScenarios, listScenarios, runScenarios } from "../../src/scenarios.ts";
 import { GREET_02_FIRST as FIRST, GREET_02_SECOND as SECOND, recorded } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
 
@@ -26,6 +26,15 @@ describe("listScenarios", () => {
     const run = recordedCucumber(dir, ["--dry-run", "--tags", "@FR-GREET-02"], recorded("cucumber-greet-02-dry.ndjson"));
 
     expect(await listScenarios(dir, "FR-GREET-02", run)).toEqual([FIRST, SECOND]);
+  });
+  test("gives each scenario's steps from the same dry run, by where the scenario is", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const run = recordedCucumber(dir, ["--dry-run", "--tags", "@FR-GREET-02"], recorded("cucumber-greet-02-dry.ndjson"));
+
+    const { scenarios, steps } = await frScenarios(dir, "FR-GREET-02", run);
+
+    expect(scenarios).toEqual([FIRST, SECOND]);
+    expect(steps.get(`${SECOND.uri}:${SECOND.line}`)).toEqual(['When I greet "Ada", "Grace" and "Linus"', 'Then I get "Hello, Ada, Grace and Linus!"']);
   });
 });
 
