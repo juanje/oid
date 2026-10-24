@@ -4,15 +4,17 @@ import type { Refusal } from "./refusal.ts";
 export interface Tried {
   refusal: Refusal | undefined;
   rollback: () => Promise<void>;
+  /** A refusal no retry of this kind can act on: it ends the retries. */
+  final?: boolean;
 }
 
 /**
  * Runs an attempt and, while it is refused and `limit` allows, goes back and retries it with the refusal (FR-RUN-07).
- * Returns the last refusal when the retries run out.
+ * Returns the last refusal when the retries run out, or at a refusal marked final.
  */
 export async function withRetries(limit: number, once: (previous: Refusal | undefined) => Promise<Tried>): Promise<Refusal | undefined> {
   let tried = await once(undefined);
-  for (let retry = 0; tried.refusal !== undefined && retry < limit; retry += 1) {
+  for (let retry = 0; tried.refusal !== undefined && tried.final !== true && retry < limit; retry += 1) {
     await tried.rollback();
     tried = await once(tried.refusal);
   }
