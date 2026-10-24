@@ -9,6 +9,7 @@ import { gateRefusal, runGate } from "./gate.ts";
 import { innerLoop } from "./inner-loop.ts";
 import { importedSymbolExists } from "./imported-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
+import { judgeReport } from "./report.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { tryAttempt } from "./try.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
@@ -66,10 +67,16 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   const { executor, fr, worktreeDir, out, green, known } = run;
   // Every attempt's diff must stay inside its boundary before any other judgment (FR-AGENT-04).
   const attempt = async (kind: AttemptKind): Promise<{ refusal: Refusal | undefined; files: string[] }> => {
-    const tools = { try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand) };
+    let reported: string | undefined;
+    const tools = {
+      try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand),
+      report: (result: string) => {
+        reported = result;
+      },
+    };
     await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir, tools });
     const diff = await takeAttemptDiff(worktreeDir);
-    return { refusal: judgeBoundary(kind, diff), files: diff.files };
+    return { refusal: judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff), files: diff.files };
   };
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
   // Asked at each judgment, of the file that failed: the project changes with every attempt.

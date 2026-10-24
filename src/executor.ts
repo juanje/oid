@@ -22,14 +22,11 @@ export type TryResult = { passed: true } | ({ passed: false } & Refusal);
 export interface AttemptTools {
   /** Runs the target, then the type check on the files the attempt changed. It records nothing. */
   try(target: TryTarget): Promise<TryResult>;
-}
-
-/** The structured end of an attempt. */
-export interface Report {
-  result: string;
+  /** Ends the attempt with its result in a few words. An attempt that never calls it is refused. */
+  report(result: string): void;
 }
 
 /** Runs one attempt's agent: Pi, or the scripted executor of oid's own tests. oid judges the diff the same way for both. */
 export interface Executor {
-  run(attempt: Attempt): Promise<Report>;
+  run(attempt: Attempt): Promise<void>;
 }
