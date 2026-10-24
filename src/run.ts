@@ -157,7 +157,13 @@ async function buildFr(
   // An attempt after the gate belongs to the FR's last scenario; its refusal's evidence and focus say what to fix.
   const last = scenarios[scenarios.length - 1]!;
   await record({ event: "stage", stage: "gate" });
-  const gate = await gateLoop(retries, () => runGate(worktree.dir, runCommand), (kind, refusal) => attemptAfterGate(run, kind, last, refusal));
+  const gate = await gateLoop(
+    retries,
+    () => runGate(worktree.dir, runCommand),
+    (kind, refusal) => attemptAfterGate(run, kind, last, refusal),
+    (refusal, sendTo) =>
+      record({ event: "gate", verdict: refusal === undefined ? "passed" : "refused", ...(refusal === undefined ? {} : { refusal }), ...(sendTo === undefined ? {} : { sendTo }) }),
+  );
   if ("error" in gate) return stop(gate.error, out);
   if (gate.refusal !== undefined) return refuse(gate.refusal, out);
   return EXIT_BUILT;

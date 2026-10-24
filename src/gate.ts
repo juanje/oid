@@ -1,5 +1,6 @@
 import { type CommandRunner, projectBin } from "./command.ts";
 import type { ScenarioResult } from "./cucumber-messages.ts";
+import type { AttemptKind } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
 import { runAllScenarios } from "./scenarios.ts";
 import { runUnitTests } from "./unit-tests.ts";
@@ -102,8 +103,15 @@ export function gateError(results: CheckResult[]): string | undefined {
     .join("\n");
 }
 
-/** The gate's refusal: every failed check, with its failures, or its output when it has none, as the evidence. */
-export function gateRefusal(results: CheckResult[]): Refusal | undefined {
+// What the attempt the gate sends back is told to do: its own kind's part, never another's (FR-GATE-04).
+const NEXT_STEP: Record<AttemptKind, string> = {
+  code: "Fix the code so that every check passes, without changing the tests or the scenarios",
+  test: "Fix these errors in the unit tests, keeping what each test asserts",
+  steps: "Fix these errors in the step definitions, keeping what each step asserts",
+};
+
+/** The gate's refusal: every failed check, with its failures, or its output when it has none, as the evidence; its next step is for the kind of attempt it goes back to. */
+export function gateRefusal(results: CheckResult[], sendTo: AttemptKind = "code"): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);
   if (failed.length === 0) return undefined;
   const scenarios = failed
@@ -113,7 +121,7 @@ export function gateRefusal(results: CheckResult[]): Refusal | undefined {
   return {
     failed: `The gate failed: ${failed.map((result) => `${result.name}: ${result.ranNothing === true ? "FAIL, ran no test" : "FAIL"}`).join(", ")}`,
     evidence: failed.map((result) => `${result.name}:\n${result.failures?.join("\n") ?? result.output}`).join("\n"),
-    next: "Fix the code so that every check passes, without changing the tests or the scenarios",
+    next: NEXT_STEP[sendTo],
     ...(scenarios.length > 0 || tests.length > 0 ? { focus: { scenarios, tests } } : {}),
   };
 }

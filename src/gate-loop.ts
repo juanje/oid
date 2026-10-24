@@ -22,6 +22,7 @@ export async function gateLoop(
   retries: number,
   gate: () => Promise<CheckResult[]>,
   afterGate: (kind: AttemptKind, refusal: Refusal) => Promise<Tried>,
+  onGate: (refusal: Refusal | undefined, sendTo: AttemptKind | undefined) => Promise<void> = async () => {},
 ): Promise<GateOutcome> {
   let error: string | undefined;
   let kind: AttemptKind = "code";
@@ -36,11 +37,17 @@ export async function gateLoop(
     if (error !== undefined) return { refusal: undefined, rollback: KEEP_THE_CODE };
     const ran = results.find((result) => result.name === "unit")?.tests;
     // The same kind goes back: it is the one that dropped them.
-    if (tests !== undefined && ran !== undefined && ran < tests) return { refusal: fewerTests(tests, ran), rollback: KEEP_THE_CODE };
+    if (tests !== undefined && ran !== undefined && ran < tests) {
+      const fewer = fewerTests(tests, ran);
+      await onGate(fewer, kind);
+      return { refusal: fewer, rollback: KEEP_THE_CODE };
+    }
     tests = ran ?? tests;
     const owner = ownerOfFailures(results);
     if (owner !== undefined) kind = owner;
-    return { refusal: gateRefusal(results), rollback: KEEP_THE_CODE, final: owner === undefined };
+    const refusal = gateRefusal(results, owner);
+    await onGate(refusal, refusal === undefined ? undefined : owner);
+    return { refusal, rollback: KEEP_THE_CODE, final: owner === undefined };
   });
   return error === undefined ? { refusal } : { error };
 }

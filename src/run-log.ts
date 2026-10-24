@@ -59,6 +59,14 @@ export interface AttemptingEvent {
   retry: boolean;
 }
 
+/** A run of the gate, and when it refuses, the kind of attempt the refusal goes back to, if any (FR-GATE-04). */
+export interface GateEvent {
+  event: "gate";
+  verdict: "passed" | "refused";
+  refusal?: Refusal;
+  sendTo?: AttemptKind;
+}
+
 export interface StopEvent {
   event: "stop";
   limit: "turns";
@@ -84,7 +92,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | ScenarioEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;
@@ -133,6 +141,7 @@ export async function startRunLog(dir: string, runId: string, onEvent: (event: L
 /** The run's measures, from its attempt events, and its time. */
 export function measuresOf(events: LogEvent[], timeMs: number): Measures {
   const attempts = events.filter((event): event is AttemptEvent => event.event === "attempt");
+  const gateRejections = events.flatMap((event) => (event.event === "gate" && event.verdict === "refused" && event.sendTo !== undefined ? [event.sendTo] : []));
   const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, timeMs };
   const last = new Map<AttemptKind, AttemptEvent>();
   for (const attempt of attempts) {
@@ -146,6 +155,8 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
     measures.deniedToolCalls += attempt.deniedToolCalls ?? 0;
     last.set(attempt.kind, attempt);
   }
+  // A refusal of the gate rejects the work of the attempt kind it goes back to.
+  for (const kind of gateRejections) measures.rejections[kind] = (measures.rejections[kind] ?? 0) + 1;
   return measures;
 }
 
