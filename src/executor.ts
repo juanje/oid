@@ -12,6 +12,15 @@ export interface Attempt {
   tools: AttemptTools;
   /** The refusal that led to this attempt, when it is a retry: the most useful part of its task (FR-AGENT-03). */
   refusal?: Refusal;
+  /** The executor ends its agent between turns when it reaches `turns` (with Pi, finishTurn returning { action: "end" }). */
+  limits: { turns: number };
+}
+
+/** What the executor reports of an attempt: its agent's turns, which the executor counts, never the model. */
+export interface AttemptOutcome {
+  turns: number;
+  /** The executor ended the agent at the turn limit, before it finished. */
+  stoppedAtLimit: boolean;
 }
 
 /** One test file, or the attempt's own scenario. */
@@ -30,5 +39,5 @@ export interface AttemptTools {
 
 /** Runs one attempt's agent: Pi, or the scripted executor of oid's own tests. oid judges the diff the same way for both. */
 export interface Executor {
-  run(attempt: Attempt): Promise<void>;
+  run(attempt: Attempt): Promise<AttemptOutcome>;
 }

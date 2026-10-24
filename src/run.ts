@@ -5,7 +5,8 @@ import { readLimits } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
-import { EXIT_BUILT, EXIT_ERROR, EXIT_REFUSED } from "./exit.ts";
+import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
+import { LimitReached } from "./limits.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
 import { innerLoop } from "./inner-loop.ts";
@@ -36,14 +37,27 @@ interface FrRun {
   known: Set<string>;
   /** How many times a refused attempt is retried. */
   retries: number;
+  /** How many turns an attempt's agent may take. */
+  turns: number;
 }
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
-export async function runFr({ projectDir, fr, executor, out }: RunOptions): Promise<number> {
+export async function runFr(options: RunOptions): Promise<number> {
+  try {
+    return await buildFr(options);
+  } catch (error) {
+    // A limit ends the run at the work accepted so far, and says which limit (FR-RUN-09).
+    if (!(error instanceof LimitReached)) throw error;
+    options.out(`${error.message}\n`);
+    return EXIT_LIMIT;
+  }
+}
+
+async function buildFr({ projectDir, fr, executor, out }: RunOptions): Promise<number> {
   const worktree = await createRunWorktree(projectDir, runId(fr));
   const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
-  const { retries } = await readLimits(worktree.dir);
-  const run: FrRun = { executor, fr, worktreeDir: worktree.dir, out, green: [], known, retries };
+  const { retries, turns } = await readLimits(worktree.dir);
+  const run: FrRun = { executor, fr, worktreeDir: worktree.dir, out, green: [], known, retries, turns };
   const scenarios = await listScenarios(worktree.dir, fr, runCommand);
   if (scenarios.length === 0) {
     return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
@@ -88,7 +102,7 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Refusal | undefined>) =>
     withRetries(retries, async (previous) => {
       const accepted = await acceptedWork(worktreeDir);
-      const attempt = await runAttempt({ executor, kind, fr, scenario, worktreeDir, refusal: previous });
+      const attempt = await runAttempt({ executor, kind, fr, scenario, worktreeDir, refusal: previous, turns: run.turns });
       return { refusal: attempt.refusal ?? (await judge(attempt.files)), rollback: accepted.restore };
     });
   const runScenario = async (): Promise<ScenarioRun> => (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
@@ -121,7 +135,7 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
 async function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
   const { executor, fr, worktreeDir, green, known } = run;
   const accepted = await acceptedWork(worktreeDir);
-  const attempt = await runAttempt({ executor, kind: "code", fr, scenario, worktreeDir, refusal: previous });
+  const attempt = await runAttempt({ executor, kind: "code", fr, scenario, worktreeDir, refusal: previous, turns: run.turns });
   if (attempt.refusal !== undefined) return { refusal: attempt.refusal, rollback: accepted.restore };
   const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
   const unit = await runUnitTests(worktreeDir, [], runCommand);

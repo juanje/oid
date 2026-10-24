@@ -4,3 +4,5 @@ export const EXIT_BUILT = 0;
 export const EXIT_REFUSED = 1;
 /** An error no attempt can fix. */
 export const EXIT_ERROR = 2;
+/** The run reached a limit, such as the turns of an attempt. */
+export const EXIT_LIMIT = 3;
