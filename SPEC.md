@@ -28,6 +28,18 @@ The rest of the MVP adds what the target and the first runs ask for:
 
 Each FR below says which of the two it belongs to.
 
+**Skeleton build order.** FR-RUN-01 comes first, as the thinnest end-to-end slice: `oid run` on a tiny fixture project, with the scripted executor (FR-AGENT-01), ending in one commit. Its scenarios drive minimal versions of the worktree, the evidence check and the gate. Each FR after it deepens one piece:
+1. FR-RUN-01
+2. FR-RUN-02, FR-RUN-03: the outer and inner loops
+3. FR-EVID-01, FR-EVID-02: classification and evidence
+4. FR-AGENT-04, FR-AGENT-06, FR-AGENT-07: write boundaries, `try`, `report`
+5. FR-GATE-01, FR-GATE-04: the gate and its refusals
+6. FR-RUN-07, FR-RUN-09: retries and the turn limit
+7. FR-STATE-01, FR-STATE-02, FR-CLI-01: checkpoints, the run log, the end-of-run summary
+8. FR-AGENT-01, FR-AGENT-02, FR-AGENT-03, FR-AGENT-05: the real Pi executor, its prompts, its context, no shell
+
+The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with the real Pi executor.
+
 **Target for the MVP:** a URL shortener as a TypeScript library with an in-memory store. Its FRs are shorten, resolve, reject invalid URLs, idempotency, and collisions with an injected code generator. Its behaviour is pure code, with no server, network or database, so that the runs test the loop and not the environment. Its own `SPEC.md` and feature files are written and approved separately.
 
 **The MVP is done when:**
@@ -48,8 +60,8 @@ Each FR below says which of the two it belongs to.
 
 ## Stack and tools
 
-- **oid itself:** TypeScript on Node.js ≥ 22.19. Agents run on the Pi SDK 1.4.0 (`@earendil-works/pi-coding-agent`, `pi-ai`, `pi-agent-core`), pinned to that exact version. Move to a newer 1.x only on purpose, and re-check the Pi behaviour in `DOMAIN.md` when you do. Tests use vitest (unit) and cucumber-js (BDD); types are checked with `tsc --noEmit`.
-- **Target projects:** TypeScript with vitest and cucumber-js. Detectors are bundled with oid; the candidates are `knip`, `jscpd` and analyses on the TypeScript compiler API.
+- **oid itself:** TypeScript on Node.js ≥ 22.19. Agents run on the Pi SDK 1.4.0 (`@earendil-works/pi-coding-agent`, `pi-ai`, `pi-agent-core`), pinned to that exact version. Move to a newer 1.x only on purpose, and re-check the Pi behaviour in `DOMAIN.md` when you do. Tests use vitest 3 (unit) and cucumber-js 13 (BDD), pinned to exact versions; types are checked with `tsc --noEmit`. Stay on vitest 3: oid parses its JSON report, and `DOMAIN.md` describes vitest 3.
+- **Target projects:** TypeScript with vitest 3 and cucumber-js 13. Detectors are bundled with oid; the candidates are `knip`, `jscpd` and analyses on the TypeScript compiler API.
 
 ## Functional requirements
 
@@ -105,7 +117,7 @@ Each FR below says which of the two it belongs to.
 ### Agents
 
 #### FR-AGENT-01: One attempt, one agent process
-**Skeleton.** Each attempt starts a fresh Pi agent in the run's worktree with four inputs: its system prompt, the task, its write boundary, and its tools. It ends with a diff and a report. oid judges the result the same way whichever agent produced it. The agent never advances the run. *Why:* a fresh agent per attempt keeps context small. A judgment that ignores who wrote the diff lets another executor come in later as an adapter.
+**Skeleton.** Each attempt starts a fresh Pi agent in the run's worktree with four inputs: its system prompt, the task, its write boundary, and its tools. It ends with a diff and a report. oid judges the result the same way whichever agent produced it. The agent never advances the run. Two executors sit behind that seam: Pi, and a scripted executor that returns prepared diffs and reports. oid's own scenarios use the scripted one. *Why:* a fresh agent per attempt keeps context small. A judgment that ignores who wrote the diff lets another executor come in later as an adapter.
 
 #### FR-AGENT-02: A prompt per agent, in two layers
 **Skeleton.** Each kind of agent has its own system prompt. Its identity says what it is, does and is not, with a few traits stated as values with their why. Its limits are generated from its write boundary and tools, so the text and the enforcement cannot differ. The task is a procedure: Step 0 (the input), numbered steps with the reason for any non-obvious order, the success criterion in plain words, negative constraints at the step they apply to, and a short checklist. Facts every agent needs (what oid is, the goal of the whole system, what oid checks) come from one source. *Why:* each agent has its own objective, focus and limits; values carry to cases a rule does not foresee.

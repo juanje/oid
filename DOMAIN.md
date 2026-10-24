@@ -36,7 +36,7 @@ Each term has one meaning. The last column names what it must not be confused wi
 | **Intervention** | Any input from the person during or after a run that changes its course or output. Counted by kind: contract, stuck, other. | — |
 | **Finding / item** | A finding is one result of a detector: category, location, detail. An item is a group of findings fixed and checkpointed together. | — |
 | **Wiring** | Code that connects parts that already exist. It is the missing piece when every unit test of a scenario is green and the scenario is still red. It is legal once the scenario has at least one unit test. | — |
-| **Executor** | What runs an attempt's agent. Pi is the first executor. | — |
+| **Executor** | What runs an attempt's agent: Pi, or the scripted executor that returns prepared diffs and reports for oid's own tests. | A fake Pi SDK. Tests replace the executor, not Pi. |
 | **D-NN** | A decision in `DECISIONS.md`. | — |
 
 ### Reading `~/git/outside-in-dev`
@@ -205,6 +205,8 @@ With `--reporter=json --outputFile=<file>`:
 - **An unknown option that is silently ignored makes a check lie.** Every command rejects unknown options.
 
 ## Testing oid itself
+
+- **Scenarios and unit tests drive attempts with the scripted executor.** Each attempt is given a prepared diff and report. Real Pi runs only in one smoke scenario and in real runs.
 
 - **Scenarios assert milestones.** Never where a run ends, or a message word for word.
 - **A recorded runner reply checks the request it answers,** not only its position in the call order.

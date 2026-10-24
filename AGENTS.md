@@ -18,7 +18,7 @@ Read a file when its trigger matches, not before.
 
 ## Procedure: build one FR
 
-0. **Input.** Take the FR id the person gives. With none, take the first Skeleton FR in `SPEC.md` that has no line in `docs/build-log.md`.
+0. **Input.** Take the FR id the person gives. With none, take the next FR in the skeleton build order (`SPEC.md`, MVP) that has no line in `docs/build-log.md`.
 1. **Feature file.** Write `features/<area>-<nn>.feature`, with `@<FR>` on `Feature`. Keep scenarios few, each asserting an outcome the user sees. **Stop and ask the person to approve it.** Go on only after approval, or after the person delegates the approval in chat for this FR.
 2. **Steps, Red.** Write the step definitions with real assertions, then run the scenario. Go on only on a valid Red (`DOMAIN.md`, Red classes). An undefined step or a load error is not one.
 3. **Unit test, Red.** Write the test for the next piece of logic and run it. Go on only on a valid Red. Commit the test alone: `test(<FR>): …`. The commit is the proof that the test failed before its code existed.

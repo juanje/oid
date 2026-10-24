@@ -71,7 +71,7 @@ An attempt is the unit of work (D-04):
 | Part | What it is |
 |:--|:--|
 | Input | The agent's system prompt, the task, the write boundary, the tools (`read`, `edit`, `write`, `try`, `report`) |
-| Process | One fresh Pi agent in the run's worktree, with a turn limit |
+| Process | One fresh agent in the run's worktree, with a turn limit. The executor is Pi, or the scripted executor in oid's own tests (prepared diffs and reports) |
 | Output | The diff, and the report |
 | Judgment | Write boundary on the diff; forbidden patterns in added lines; the evidence check of its kind |
 
