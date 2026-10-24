@@ -3,21 +3,27 @@ import { judgeCode, judgeNewTests, judgeSteps } from "../../src/evidence.ts";
 import { recorded, recordedVitest } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
 
-const SCENARIO = { uri: "features/greet-02.feature", line: 4, name: "Two people are greeted together" };
+const SCENARIO = { uri: "features/greet-03.feature", line: 4, name: "A person is greeted with the chosen salutation" };
+const nothingExists = (): boolean => false;
 
 describe("judgeSteps", () => {
-  test("accepts step definitions whose scenario fails before its code", () => {
-    expect(judgeSteps({ ...SCENARIO, status: "failed" })).toBeUndefined();
+  test("accepts step definitions whose scenario fails with a valid Red, giving its class", () => {
+    const failure = { step: 'I greet "Ada" with it', kind: "Action" as const, status: "FAILED", message: "TypeError: greetWith is not a function" };
+
+    const judgment = judgeSteps({ ...SCENARIO, status: "failed", failure }, nothingExists);
+
+    expect(judgment.refusal).toBeUndefined();
+    expect(judgment.reds).toEqual([`${SCENARIO.uri}:${SCENARIO.line} "${SCENARIO.name}": missing_implementation`]);
   });
 
   test("refuses step definitions whose scenario passes before its code, naming the scenario", () => {
-    const refusal = judgeSteps({ ...SCENARIO, status: "passed" });
+    const { refusal } = judgeSteps({ ...SCENARIO, status: "passed" }, nothingExists);
 
     expect(refusal?.evidence).toContain(SCENARIO.name);
   });
 
   test("refuses step definitions whose scenario did not run, naming the scenario", () => {
-    const refusal = judgeSteps({ ...SCENARIO, status: "not run" });
+    const { refusal } = judgeSteps({ ...SCENARIO, status: "not run" }, nothingExists);
 
     expect(refusal?.evidence).toContain(SCENARIO.name);
   });
@@ -54,20 +60,25 @@ describe("judgeNewTests", () => {
     // In the recording, tests/greet.test.ts passes: here it stands for a new test that passes without its code.
     const run = recordedVitest(dir, ["tests/greet.test.ts"], recorded("vitest-greet-02-load.json"));
 
-    expect((await judgeNewTests(dir, ["tests/greet.test.ts"], run))?.evidence).toContain("tests/greet.test.ts > greets a person by name");
+    const { refusal } = await judgeNewTests(dir, ["tests/greet.test.ts"], run, nothingExists);
+
+    expect(refusal?.evidence).toContain("tests/greet.test.ts > greets a person by name");
   });
 
-  test("accepts new tests that all fail, whatever other files of the report did", async () => {
+  test("accepts new tests that all fail with a valid Red, giving each one's class, whatever other files of the report did", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     const run = recordedVitest(dir, ["tests/greet-all.test.ts"], recorded("vitest-greet-02-assert.json"));
 
-    expect(await judgeNewTests(dir, ["tests/greet-all.test.ts"], run)).toBeUndefined();
+    const judgment = await judgeNewTests(dir, ["tests/greet-all.test.ts"], run, nothingExists);
+
+    expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: business_assertion"] });
   });
 
   test("refuses new tests that did not run, never reading an earlier report", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
-    await judgeNewTests(dir, ["tests/greet-all.test.ts"], recordedVitest(dir, ["tests/greet-all.test.ts"], recorded("vitest-greet-02-assert.json")));
+    const files = ["tests/greet-all.test.ts"];
+    await judgeNewTests(dir, files, recordedVitest(dir, files, recorded("vitest-greet-02-assert.json")), nothingExists);
 
-    expect(await judgeNewTests(dir, ["tests/greet-all.test.ts"], recordedVitest(dir, ["tests/greet-all.test.ts"], undefined))).toBeDefined();
+    expect((await judgeNewTests(dir, files, recordedVitest(dir, files, undefined), nothingExists)).refusal).toBeDefined();
   });
 });
