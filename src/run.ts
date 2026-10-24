@@ -34,15 +34,17 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
 
 /** Builds the FR's scenarios one at a time, in file order, and returns the first refusal, if any. */
 async function buildScenarios(executor: Executor, fr: string, worktreeDir: string): Promise<Refusal | undefined> {
+  const green: Scenario[] = [];
   for (const scenario of await listScenarios(worktreeDir, fr, runCommand)) {
-    const refusal = await buildScenario(executor, fr, scenario, worktreeDir);
+    const refusal = await buildScenario(executor, fr, scenario, green, worktreeDir);
     if (refusal !== undefined) return refusal;
+    green.push(scenario);
   }
   return undefined;
 }
 
-/** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes. */
-async function buildScenario(executor: Executor, fr: string, scenario: Scenario, worktreeDir: string): Promise<Refusal | undefined> {
+/** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping `green` green. */
+async function buildScenario(executor: Executor, fr: string, scenario: Scenario, green: Scenario[], worktreeDir: string): Promise<Refusal | undefined> {
   const attempt = async (kind: AttemptKind): Promise<string[]> => {
     await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir });
     return takeAttemptChanges(worktreeDir);
@@ -57,7 +59,8 @@ async function buildScenario(executor: Executor, fr: string, scenario: Scenario,
       const testRefusal = await judgeNewTests(worktreeDir, await attempt("test"));
       if (testRefusal !== undefined) return testRefusal;
       await attempt("code");
-      return judgeCode(await runUnitTests(worktreeDir, [], runCommand), []);
+      const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
+      return judgeCode(await runUnitTests(worktreeDir, [], runCommand), greenRuns);
     },
     async () => (await runScenario()).status === "passed",
   );
