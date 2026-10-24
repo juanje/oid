@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { type CommandRunner, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
-import { type Scenario, type StepFailure, scenarioResults, scenariosIn } from "./cucumber-messages.ts";
+import { type Scenario, type ScenarioResult, type StepFailure, scenarioResults, scenariosIn } from "./cucumber-messages.ts";
 import { reportPath } from "./git.ts";
 
 export interface ScenarioRun extends Scenario {
@@ -24,6 +24,12 @@ export async function runScenarios(dir: string, scenarios: Scenario[], run: Comm
     const result = results.find((ran) => location(ran) === location(scenario));
     return result === undefined ? { ...scenario, status: "not run" } : { ...scenario, status: result.status, failure: result.failure };
   });
+}
+
+/** Runs every scenario the project's cucumber-js config finds, as the gate does. `ran` is false when cucumber wrote no report. */
+export async function runAllScenarios(dir: string, run: CommandRunner): Promise<{ ran: boolean; results: ScenarioResult[]; output: string }> {
+  const { report, output } = await cucumber(dir, [], run);
+  return { ran: report !== undefined, results: report === undefined ? [] : scenarioResults(report), output };
 }
 
 function location(scenario: Scenario): string {

@@ -1,5 +1,8 @@
-import { type CommandRunner, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
+import { type CommandRunner, projectBin } from "./command.ts";
+import type { ScenarioResult } from "./cucumber-messages.ts";
 import type { Refusal } from "./refusal.ts";
+import { runAllScenarios } from "./scenarios.ts";
+import { runUnitTests } from "./unit-tests.ts";
 
 export interface CheckResult {
   name: string;
@@ -9,43 +12,58 @@ export interface CheckResult {
   ranNothing?: boolean;
   /** An option the runner does not know: the check could not run, which no attempt can fix. */
   unknownOption?: string;
+  /** Each failing test or scenario with its message, from the runner's report. */
+  failures?: string[];
+  /** The scenarios that fail, with where they are: what a code attempt after the gate must look at first. */
+  failedScenarios?: ScenarioResult[];
 }
-
-interface Check {
-  name: string;
-  bin: string;
-  args: string[];
-  env?: NodeJS.ProcessEnv;
-  /** What the runner says when it ran nothing, as the pinned versions word it. */
-  ranNothing: RegExp;
-}
-
-const CHECKS: Check[] = [
-  { name: "types", bin: "tsc", args: ["--noEmit"], ranNothing: /error TS18003: No inputs were found/ },
-  { name: "unit", bin: "vitest", args: ["run"], ranNothing: /No test files found/ },
-  { name: "scenarios", bin: "cucumber-js", args: [], env: TYPESCRIPT_STEPS_ENV, ranNothing: /^0 scenarios$/m },
-];
 
 // How the runners name an option they do not know: tsc's TS5023, and the usual "unknown option" of CLIs.
 const UNKNOWN_OPTION = [/error TS5023: Unknown compiler option '([^']+)'/, /unknown option:? ['"`]?(-{1,2}[\w-]+)/i];
 
+function unknownOptionIn(output: string): { unknownOption?: string } {
+  const option = UNKNOWN_OPTION.map((pattern) => pattern.exec(output)?.[1]).find((found) => found !== undefined);
+  return option === undefined ? {} : { unknownOption: option };
+}
+
 /** Runs every check of the gate over the whole project in `dir`, with the project's own runners. */
 export async function runGate(dir: string, run: CommandRunner): Promise<CheckResult[]> {
-  const results: CheckResult[] = [];
-  for (const check of CHECKS) {
-    const env = check.env === undefined ? undefined : { ...process.env, ...check.env };
-    const { exitCode, output } = await run(projectBin(dir, check.bin), check.args, { cwd: dir, env });
-    const ranNothing = check.ranNothing.test(output);
-    const unknownOption = UNKNOWN_OPTION.map((pattern) => pattern.exec(output)?.[1]).find((option) => option !== undefined);
-    results.push({
-      name: check.name,
-      passed: exitCode === 0 && !ranNothing && unknownOption === undefined,
-      output,
-      ...(ranNothing ? { ranNothing } : {}),
-      ...(unknownOption === undefined ? {} : { unknownOption }),
-    });
-  }
-  return results;
+  return [await typesCheck(dir, run), await unitCheck(dir, run), await scenariosCheck(dir, run)];
+}
+
+async function typesCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
+  const { exitCode, output } = await run(projectBin(dir, "tsc"), ["--noEmit"], { cwd: dir });
+  const ranNothing = /error TS18003: No inputs were found/.test(output);
+  const unknown = unknownOptionIn(output);
+  return { name: "types", passed: exitCode === 0 && !ranNothing && unknown.unknownOption === undefined, output, ...(ranNothing ? { ranNothing } : {}), ...unknown };
+}
+
+async function unitCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
+  const unit = await runUnitTests(dir, [], run);
+  const failures = (unit.failures ?? []).map((failure) => `${failure.test}: ${failure.message}`);
+  const ranNothing = unit.ran && unit.passed.length === 0 && failures.length === 0;
+  const unknown = unknownOptionIn(unit.output);
+  const passed = unit.ran && !ranNothing && failures.length === 0 && unknown.unknownOption === undefined;
+  return { name: "unit", passed, output: unit.output, ...(ranNothing ? { ranNothing } : {}), ...unknown, ...(failures.length > 0 ? { failures } : {}) };
+}
+
+async function scenariosCheck(dir: string, run: CommandRunner): Promise<CheckResult> {
+  const { ran, results, output } = await runAllScenarios(dir, run);
+  const failedScenarios = results.filter((result) => result.status !== "passed");
+  const failures = failedScenarios.map(
+    (scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}", step "${scenario.failure?.step ?? "?"}": ${scenario.failure?.message ?? scenario.failure?.status ?? ""}`,
+  );
+  const ranNothing = ran && results.length === 0;
+  const unknown = unknownOptionIn(output);
+  const passed = ran && !ranNothing && failedScenarios.length === 0 && unknown.unknownOption === undefined;
+  return {
+    name: "scenarios",
+    passed,
+    output,
+    ...(ranNothing ? { ranNothing } : {}),
+    ...unknown,
+    ...(failedScenarios.length > 0 ? { failures, failedScenarios } : {}),
+  };
 }
 
 /** The gate's error: a check whose runner does not know an option could not run, and no attempt can fix that. */
@@ -57,13 +75,13 @@ export function gateError(results: CheckResult[]): string | undefined {
     .join("\n");
 }
 
-/** The gate's refusal: every failed check, with its output as the evidence. */
+/** The gate's refusal: every failed check, with its failures, or its output when it has none, as the evidence. */
 export function gateRefusal(results: CheckResult[]): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);
   if (failed.length === 0) return undefined;
   return {
     failed: `The gate failed: ${failed.map((result) => `${result.name}: ${result.ranNothing === true ? "FAIL, ran no test" : "FAIL"}`).join(", ")}`,
-    evidence: failed.map((result) => `${result.name}:\n${result.output}`).join("\n"),
+    evidence: failed.map((result) => `${result.name}:\n${result.failures?.join("\n") ?? result.output}`).join("\n"),
     next: "Fix the code so that every check passes, without changing the tests or the scenarios",
   };
 }
