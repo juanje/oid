@@ -60,6 +60,11 @@ export async function projectNamesModel(projectDir: string): Promise<boolean> {
   return committed !== undefined && (JSON.parse(committed) as { model?: unknown }).model !== undefined;
 }
 
+/** Whether the working copy's .oid.json has changes HEAD does not: a run reads the project's config from HEAD only (NFR-08). */
+export async function uncommittedProjectConfig(projectDir: string): Promise<boolean> {
+  return (await git(projectDir, "status", "--porcelain", "--", CONFIG_FILE)) !== "";
+}
+
 async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; paths?: Paths }> {
   const path = join(dir, CONFIG_FILE);
   return existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};

@@ -3,7 +3,7 @@ import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
 import { isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
-import { readLimits } from "./config.ts";
+import { readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
@@ -60,6 +60,10 @@ interface FrRun {
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr(options: RunOptions): Promise<number> {
+  // A silently ignored edit would be a check that does not tell the truth (NFR-02, NFR-08).
+  if (await uncommittedProjectConfig(options.projectDir)) {
+    options.out(".oid.json has changes that are not committed: this run reads the project's config from HEAD and does not use them; commit them for them to count.\n");
+  }
   const worktree = await createRunWorktree(options.projectDir, runId(options.fr));
   const log = await startRunLog(worktree.dir, worktree.id);
   const record = log.record;
