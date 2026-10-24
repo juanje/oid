@@ -1,15 +1,10 @@
-import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { CommandOptions, CommandResult } from "../../src/command.ts";
 import { listScenarios, runScenarios } from "../../src/scenarios.ts";
+import { GREET_02_FIRST as FIRST, GREET_02_SECOND as SECOND, recorded } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
-
-const recorded = (name: string): string => readFileSync(join(import.meta.dirname, "recorded", name), "utf8");
-
-const FIRST = { uri: "features/greet-02.feature", line: 4, name: "Two people are greeted together" };
-const SECOND = { uri: "features/greet-02.feature", line: 8, name: "Three people are greeted as a list" };
 
 /** A cucumber-js that checks it was asked for `expected` arguments in `dir`, then writes `ndjson` as its message report. */
 function recordedCucumber(dir: string, expected: string[], ndjson: string) {
