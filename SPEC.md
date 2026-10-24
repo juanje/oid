@@ -48,7 +48,7 @@ Each FR below says which of the two it belongs to.
 
 ## Stack and tools
 
-- **oid itself:** TypeScript on Node.js ≥ 22.19. Agents run on the Pi SDK, pinned to one exact version, which is checked when the repository starts. Tests use vitest (unit) and cucumber-js (BDD); types are checked with `tsc --noEmit`.
+- **oid itself:** TypeScript on Node.js ≥ 22.19. Agents run on the Pi SDK 1.4.0 (`@earendil-works/pi-coding-agent`, `pi-ai`, `pi-agent-core`), pinned to that exact version. Move to a newer 1.x only on purpose, and re-check the Pi behaviour in `DOMAIN.md` when you do. Tests use vitest (unit) and cucumber-js (BDD); types are checked with `tsc --noEmit`.
 - **Target projects:** TypeScript with vitest and cucumber-js. Detectors are bundled with oid; the candidates are `knip`, `jscpd` and analyses on the TypeScript compiler API.
 
 ## Functional requirements

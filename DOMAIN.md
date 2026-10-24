@@ -2,7 +2,7 @@
 
 What the words mean here, the formats oid reads and writes, and how the tools oid drives behave.
 
-The tool behaviour below was observed on Pi 1.1.0, cucumber-js 13 and vitest 3. If the pinned version differs, check a behaviour before you rely on it, and update this file when it changed.
+The tool behaviour below was observed on Pi 1.1.0, cucumber-js 13 and vitest 3. oid pins Pi 1.4.0, so check each Pi behaviour on 1.4.0 the first time you rely on it. Do the same for any other tool whose pinned version differs. Update this file when a behaviour changed.
 
 ## Terms
 
