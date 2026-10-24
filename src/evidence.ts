@@ -1,10 +1,7 @@
-import { readFile, realpath } from "node:fs/promises";
-import { projectBin, runCommand } from "./command.ts";
-import { reportPath } from "./git.ts";
+import type { CommandRunner } from "./command.ts";
 import type { Refusal } from "./refusal.ts";
 import type { ScenarioRun } from "./scenarios.ts";
-import type { UnitRun } from "./unit-tests.ts";
-import { passedTests } from "./vitest-report.ts";
+import { runUnitTests, type UnitRun } from "./unit-tests.ts";
 
 /** Refuses a steps attempt unless its scenario ran and failed: a scenario that passes before its code proves nothing (D-02). */
 export function judgeSteps(result: ScenarioRun): Refusal | undefined {
@@ -52,20 +49,20 @@ export function judgeCode(unit: UnitRun, greenScenarios: ScenarioRun[]): Refusal
 }
 
 /** Refuses a test attempt whose new tests pass on the code they were written against: such a test proves nothing (D-02). */
-export async function judgeNewTests(worktreeDir: string, testFiles: string[]): Promise<Refusal | undefined> {
-  const passing = await testsThatPass(worktreeDir, testFiles);
+export async function judgeNewTests(worktreeDir: string, testFiles: string[], run: CommandRunner): Promise<Refusal | undefined> {
+  const unit = await runUnitTests(worktreeDir, testFiles, run);
+  if (!unit.ran) {
+    return {
+      failed: "The new tests did not run",
+      evidence: unit.output,
+      next: "Fix what stops vitest from loading these test files, such as a syntax error",
+    };
+  }
+  const passing = unit.passed.filter((test) => testFiles.some((file) => test.startsWith(`${file} > `)));
   if (passing.length === 0) return undefined;
   return {
     failed: "New tests pass before their code exists",
     evidence: passing.join("\n"),
     next: "Make each of these tests assert behaviour the code does not have yet",
   };
-}
-
-async function testsThatPass(worktreeDir: string, testFiles: string[]): Promise<string[]> {
-  const report = await reportPath(worktreeDir, "oid-new-tests.json");
-  const vitest = projectBin(worktreeDir, "vitest");
-  await runCommand(vitest, ["run", ...testFiles, "--reporter=json", `--outputFile=${report}`], { cwd: worktreeDir });
-  // vitest reports real paths, and the worktree may sit behind a symlink such as macOS's /var.
-  return passedTests(JSON.parse(await readFile(report, "utf8")), await realpath(worktreeDir));
 }

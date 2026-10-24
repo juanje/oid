@@ -56,7 +56,7 @@ async function buildScenario(executor: Executor, fr: string, scenario: Scenario,
   if (stepsRefusal !== undefined) return stepsRefusal;
   return innerLoop(
     async () => {
-      const testRefusal = await judgeNewTests(worktreeDir, await attempt("test"));
+      const testRefusal = await judgeNewTests(worktreeDir, await attempt("test"), runCommand);
       if (testRefusal !== undefined) return testRefusal;
       await attempt("code");
       const greenRuns = green.length === 0 ? [] : await runScenarios(worktreeDir, green, runCommand);
