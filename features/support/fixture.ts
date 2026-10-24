@@ -20,7 +20,7 @@ export async function createGreetProject(): Promise<string> {
   git(dir, "init", "-q", "-b", "main");
   git(dir, "config", "user.name", "Fixture");
   git(dir, "config", "user.email", "fixture@example.com");
-  git(dir, "add", "--all", ":!node_modules");
+  git(dir, "add", "--all");
   git(dir, "commit", "-q", "-m", "chore: greet project");
   return dir;
 }
