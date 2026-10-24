@@ -38,14 +38,14 @@ Feature: One attempt, one agent process
     Then the run succeeds
     And the model was offered the tools read, ls, find, grep, edit, write, try and report, and no shell
 
-  Scenario: Pi runs the model the project's .oid.json names
-    Given the project's .oid.json names the scripted model
+  Scenario: Pi runs the model my personal config names
+    Given my personal config names the scripted model
     When I run "oid run FR-GREET-01" with the executor oid makes from its config
     Then the run succeeds
     And the run's log gives each attempt the scripted model's id, its turns, and tokens and cost above zero
 
   Scenario Outline: A run with no model it can use stops with an error before any attempt
-    Given the project's .oid.json <names>
+    Given my personal config <names>
     When I run "oid run FR-GREET-01" with the executor oid makes from its config
     Then the run stops with an error, not a refusal and not a crash
     And the output names <named>
@@ -53,13 +53,23 @@ Feature: One attempt, one agent process
     And the scripted model was asked nothing
 
     Examples:
-      | names                              | named                       |
-      | names no model                     | the model key of .oid.json  |
-      | names the model nowhere/no-such-model | nowhere/no-such-model    |
+      | names                                 | named                     |
+      | names no model                        | my personal config's path |
+      | names the model nowhere/no-such-model | nowhere/no-such-model     |
+
+  @NFR-08
+  Scenario: A model in the project's .oid.json is an error that says where the model belongs
+    Given my personal config names the scripted model
+    And the project's .oid.json names the model scripted/scripted-model
+    When I run "oid run FR-GREET-01" with the executor oid makes from its config
+    Then the run stops with an error, not a refusal and not a crash
+    And the output names .oid.json and my personal config's path
+    And the run created no branch
+    And the scripted model was asked nothing
 
   @smoke
   Scenario: On a real model, oid runs as the person types it, and each attempt's use reaches the run log
-    Given the project's .oid.json names the real model in OID_SMOKE_MODEL
+    Given my personal config names the real model in OID_SMOKE_MODEL
     And the run uses oid's default limits, as a real run does
     When I run "oid run FR-GREET-01" with the oid command
     Then the run ends without an error or a crash
