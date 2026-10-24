@@ -13,6 +13,15 @@ export function outsideBoundary(kind: AttemptKind, files: string[]): string[] {
   return files.filter((file) => file.endsWith(".feature") || !WRITABLE[kind].some((path) => file.startsWith(path)));
 }
 
+/**
+ * The attempt kind that owns `file`: the one that may write it. No kind writes a feature file or the gate's
+ * configuration, so an error in one goes to a code attempt: its cause is almost always in the source (FR-GATE-04).
+ */
+export function ownerOf(file: string): AttemptKind {
+  const kinds = Object.keys(WRITABLE) as AttemptKind[];
+  return kinds.find((kind) => outsideBoundary(kind, [file]).length === 0) ?? "code";
+}
+
 /** Whether `file` is a unit test, by where tests live. */
 export function isTestFile(file: string): boolean {
   return WRITABLE.test.some((path) => file.startsWith(path));
