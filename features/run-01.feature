@@ -35,3 +35,11 @@ Feature: Run one FR on approved features
     Then the run stops with a refusal, not a crash
     And the output names the type check and the file with the error
     And the run's branch has no commit on top of the starting HEAD
+
+  @NFR-02
+  Scenario: oid run with an option it does not know is an error and runs nothing
+    When I run "oid run FR-GREET-01 --retries 3"
+    Then the run stops with an error, not a refusal and not a crash
+    And the output names the option "--retries"
+    And the run created no branch
+    And the executor was asked for no attempt
