@@ -45,6 +45,16 @@ describe("runScenarios", () => {
     ]);
   });
 
+  test("never reads a report left by an earlier run when cucumber stops before writing one", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const location = ["features/greet-02.feature:4"];
+    await runScenarios(dir, [FIRST], recordedCucumber(dir, location, recorded("cucumber-greet-02-run.ndjson")));
+    // A step file that imports a missing module stops cucumber-js before any scenario runs, and it writes no report.
+    const stopsOnLoad = async (): Promise<CommandResult> => ({ exitCode: 1, output: "Error [ERR_MODULE_NOT_FOUND]" });
+
+    expect(await runScenarios(dir, [FIRST], stopsOnLoad)).toEqual([{ ...FIRST, status: "not run" }]);
+  });
+
   test("reports a scenario it asked for that did not run as not run", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     const missing = { uri: "features/greet-02.feature", line: 12, name: "A scenario that is not there" };
