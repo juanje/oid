@@ -43,6 +43,20 @@ export interface ScenarioEvent extends Scenario {
   verdict: "built";
 }
 
+/** A stage of the run starts (FR-CLI-05). */
+export interface StageEvent {
+  event: "stage";
+  stage: "agent" | "worktree" | "scenarios" | "unit tests" | "gate" | "commit";
+}
+
+/** An attempt starts; its end is its attempt event (FR-CLI-05). */
+export interface AttemptingEvent {
+  event: "attempting";
+  kind: AttemptKind;
+  scenario: string;
+  retry: boolean;
+}
+
 export interface StopEvent {
   event: "stop";
   limit: "turns";
@@ -66,7 +80,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StartEvent | AttemptEvent | ScenarioEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | ScenarioEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;
