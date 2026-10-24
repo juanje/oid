@@ -13,10 +13,14 @@ describe("scenariosIn", () => {
 });
 
 describe("scenarioResults", () => {
-  test("passes a scenario whose every step passed, and fails one with an undefined step", () => {
+  test("passes a scenario whose every step passed, and fails one at its first step that did not pass", () => {
     expect(scenarioResults(RUN)).toEqual([
       { ...FIRST, status: "passed" },
-      { ...SECOND, status: "failed" },
+      {
+        ...SECOND,
+        status: "failed",
+        failure: { step: 'I greet "Ada", "Grace" and "Linus"', kind: "Action", status: "UNDEFINED", message: "" },
+      },
     ]);
   });
 
