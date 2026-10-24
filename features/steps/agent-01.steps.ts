@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
 import { GREET_01_SCENARIO, attemptDir } from "../support/fixture.ts";
-import { attemptsIn, runLog } from "../support/run.ts";
+import { assertOutputNames, attemptsIn, runLog } from "../support/run.ts";
 import { ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -103,4 +103,16 @@ Given("the scripted model keeps calling tools in the code attempt without ending
 Then("the scripted model was asked for {int} turns in the code attempt", function (this: RunWorld, turns: number) {
   const model = scriptedModel(this);
   assert.equal(model.attempts[modelAttemptOf(model, "code")]?.length, turns, "The code attempt's agent was not ended at its turn limit");
+});
+
+const PROVIDER_ERROR = "529 overloaded_error: the scripted provider is overloaded";
+
+Given("the scripted model answers the code attempt with a provider error every time", function (this: RunWorld) {
+  const model = scriptedModel(this);
+  const index = modelAttemptOf(model, "code");
+  model.script[index] = { ...model.script[index]!, dir: undefined, error: PROVIDER_ERROR };
+});
+
+Then("the output names the provider error", function (this: RunWorld) {
+  assertOutputNames(this, PROVIDER_ERROR);
 });
