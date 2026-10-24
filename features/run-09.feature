@@ -1,0 +1,22 @@
+@FR-RUN-09
+Feature: Limits
+
+  Background:
+    Given a project with an approved feature file for FR-GREET-01
+    And a scripted executor whose steps, test and code attempts build FR-GREET-01
+    And the run allows 1 retry
+    And the run allows 3 turns per attempt
+
+  Scenario: An attempt that reaches the turn limit ends the run, which says which limit
+    Given the scripted code attempt would take 5 turns
+    When I run "oid run FR-GREET-01"
+    Then the run stops at a limit, not a refusal, an error or a crash
+    And the code attempt was stopped after its third turn
+    And the code attempt was not retried
+    And the output names the turn limit and the code attempt
+    And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: An attempt that uses exactly its turns is not stopped
+    Given the scripted code attempt takes 3 turns
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
