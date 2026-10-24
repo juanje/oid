@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { CommandRunner } from "./command.ts";
 import { type Scenario, scenarioResults, scenariosIn } from "./cucumber-messages.ts";
@@ -34,6 +34,7 @@ function location(scenario: Scenario): string {
 async function cucumber(dir: string, args: string[], run: CommandRunner): Promise<{ report: string | undefined; output: string }> {
   // The report goes to the worktree's own git directory, out of the project's files.
   const reportFile = join(await git(dir, "rev-parse", "--absolute-git-dir"), "oid-scenarios.ndjson");
+  await rm(reportFile, { force: true });
   const { output } = await run(join(dir, "node_modules/.bin/cucumber-js"), [...args, "--format", `message:${reportFile}`], {
     cwd: dir,
     // cucumber-js loads TypeScript step definitions only through tsx.
