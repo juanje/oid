@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { scenarioResults, scenariosIn } from "../../src/cucumber-messages.ts";
+import { scenarioResults, scenarioSteps, scenariosIn } from "../../src/cucumber-messages.ts";
 import { GREET_02_FIRST as FIRST, GREET_02_SECOND as SECOND, recorded } from "./support/recorded.ts";
 
 // Recorded from cucumber-js 13.3.0 on FR-GREET-02 after its first scenario's code: the second scenario's steps are undefined.
@@ -9,6 +9,15 @@ const RUN = recorded("cucumber-greet-02-run.ndjson");
 describe("scenariosIn", () => {
   test("lists the scenarios of a run in file order, with where they are", () => {
     expect(scenariosIn(DRY_RUN)).toEqual([FIRST, SECOND]);
+  });
+});
+
+describe("scenarioSteps", () => {
+  test("gives each scenario's steps, with the keyword of their kind, by where the scenario is", () => {
+    const steps = scenarioSteps(DRY_RUN);
+
+    expect(steps.get(`${FIRST.uri}:${FIRST.line}`)).toEqual(['When I greet "Ada" and "Grace"', 'Then I get "Hello, Ada and Grace!"']);
+    expect(steps.get(`${SECOND.uri}:${SECOND.line}`)).toEqual(['When I greet "Ada", "Grace" and "Linus"', 'Then I get "Hello, Ada, Grace and Linus!"']);
   });
 });
 
