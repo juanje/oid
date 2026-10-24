@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { createGreet02Project, greet02AttemptDir, scenarioNames } from "../support/fixture.ts";
+import { createGreet02Project, greet02AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
 import { lastAttempt, type PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -47,4 +48,13 @@ Given("the first scenario of FR-GREET-02 still fails after its first test and co
     ["code", "s1-code-uses-names"],
   );
   this.script = [...twoRounds, ...BUILD_SECOND];
+});
+
+Given("the scripted code attempt for the first scenario leaves its new test failing", function (this: RunWorld) {
+  this.script = lastAttempt(this.script, "code", FIRST, greet02AttemptDir("s1-code-wrong"));
+});
+
+Then("the output names the test that still fails", function (this: RunWorld) {
+  const [name] = testNames(join(greet02AttemptDir("s1-test"), "tests/greet-all.test.ts"));
+  assert.ok(name !== undefined && this.output.includes(name), `The output does not name "${name}":\n${this.output}`);
 });
