@@ -196,7 +196,7 @@ No agent writes feature files, `SPEC.md`, the gate's configuration or oid's stat
 - **the model** of each agent;
 - **the instruction count** of each prompt.
 
-Next to the log, a directory keeps each attempt's transcript, its agent's whole session, one JSONL file per attempt; the end-of-run summary names it.
+The log starts by naming the version of oid that made it, so that runs can be compared by version. Next to the log, a directory keeps each attempt's transcript, its agent's whole session, one JSONL file per attempt; the end-of-run summary names it.
 
 *Why:* the runs are the evidence for changing prompts, rules and the theory. Measures an agent computes or estimates are plausible and wrong. A verdict without the session that led to it cannot be explained.
 
