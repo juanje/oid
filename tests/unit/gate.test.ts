@@ -133,6 +133,17 @@ describe("gateRefusal", () => {
     expect(refusal?.evidence).toContain(TYPE_ERROR);
   });
 
+  test("puts the failing scenarios and tests in focus, whatever scenario the next attempt belongs to", () => {
+    const broken = { ...GREET_02_SECOND, status: "failed" as const };
+
+    const refusal = gateRefusal([
+      { name: "unit", passed: false, output: "", failures: ["tests/greet.test.ts > greets: AssertionError"], failedTests: ["tests/greet.test.ts > greets"] },
+      { name: "scenarios", passed: false, output: "", failures: ["…"], failedScenarios: [broken] },
+    ]);
+
+    expect(refusal?.focus).toEqual({ scenarios: [GREET_02_SECOND], tests: ["tests/greet.test.ts > greets"] });
+  });
+
   test("refuses nothing when every check passes", () => {
     expect(gateRefusal([{ name: "types", passed: true, output: "" }])).toBeUndefined();
   });
