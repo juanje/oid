@@ -2,7 +2,7 @@
   "name": "oid",
   "version": "0.1.4",
   "private": true,
-  "description": "oid \u2014 Outside-In Development: coding agents build software from a verifiable contract",
+  "description": "oid — Outside-In Development: coding agents build software from a verifiable contract",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -14,6 +14,7 @@
   "devDependencies": {
     "@cucumber/cucumber": "13.3.0",
     "@types/node": "22.20.5",
+    "@vitest/coverage-v8": "3.2.7",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "3.2.7"
@@ -22,7 +23,8 @@
     "@earendil-works/pi-agent-core": "1.4.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
-    "typescript-api": "npm:typescript@6.0.3"
+    "typescript-api": "npm:typescript@6.0.3",
+    "v8-to-istanbul": "9.3.0"
   },
   "bin": {
     "oid": "bin/oid"
