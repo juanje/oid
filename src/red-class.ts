@@ -11,6 +11,8 @@ export function isValidRed(redClass: RedClass): boolean {
 /** The class of a failure, from its message. `symbolExists` asks the project whether a name is declared in it. */
 export function classifyFailure(message: string, symbolExists: (name: string) => boolean): RedClass {
   if (/^AssertionError\b/m.test(message)) return "business_assertion";
+  // vitest says this of a test file it cannot parse, such as one with a syntax error.
+  if (/^Transform failed\b/m.test(message)) return "test_bug";
   // A relative or absolute path is a module of the project; a bare name would be a package.
   if (/Cannot find module '[./]/.test(message)) return "missing_implementation";
   const notAFunction = /(?:\(0 , )?([A-Za-z_$][\w$]*)\)?(?:\(\.\.\.\))? is not a function/.exec(message);
