@@ -1,9 +1,9 @@
 import type { CommandRunner } from "./command.ts";
-import type { Scenario } from "./cucumber-messages.ts";
+import { NO_DEFINITION, type Scenario } from "./cucumber-messages.ts";
 import { classifyFailure, classifyScenario, isValidRed, type RedClass } from "./red-class.ts";
 import type { Refusal } from "./refusal.ts";
 import type { ScenarioRun } from "./scenarios.ts";
-import { runUnitTests, type UnitRun } from "./unit-tests.ts";
+import { isInFile, runUnitTests, testsIn, type UnitRun } from "./unit-tests.ts";
 
 /** An attempt's evidence: a refusal, or the valid Reds it showed, each as `<what failed>: <class>`. */
 export interface Judgment {
@@ -53,7 +53,7 @@ export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => 
       next: "Set the scenario up without code that does not exist yet, or move that behaviour into a When or Then step",
     });
   }
-  if (failure !== undefined && failure.message === "") {
+  if (failure !== undefined && NO_DEFINITION.has(failure.status)) {
     return refused({
       failed: `A step of the scenario has no usable definition: ${redClass}`,
       evidence: `${where}: ${failure.status}`,
@@ -113,10 +113,10 @@ export async function judgeNewTests(
       next: "Fix what stops vitest from loading these test files, such as a syntax error",
     });
   }
-  const inFiles = (test: string): boolean => testFiles.some((file) => test === file || test.startsWith(`${file} > `));
+  const inFiles = (test: string): boolean => testFiles.some((file) => isInFile(test, file));
   // A file counts as run only when one of its tests passed or failed, or the file itself failed to load.
-  const reported = [...unit.passed, ...(unit.failures ?? []).map((failure) => failure.test)];
-  const notRun = testFiles.filter((file) => !reported.some((test) => test === file || test.startsWith(`${file} > `)));
+  const reported = [...testsIn(unit)];
+  const notRun = testFiles.filter((file) => !reported.some((test) => isInFile(test, file)));
   if (notRun.length > 0) {
     return refused({
       failed: "New test files ran no test: not_run",

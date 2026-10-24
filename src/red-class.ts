@@ -1,3 +1,4 @@
+import { NO_DEFINITION } from "./cucumber-messages.ts";
 import type { ScenarioRun } from "./scenarios.ts";
 
 // The Red classes of DOMAIN.md. One function decides them, for every runner (NFR-03).
@@ -28,7 +29,7 @@ export function classifyScenario(result: ScenarioRun, symbolExists: (name: strin
   if (result.status === "passed") return "test_bug";
   const failure = result.failure;
   if (failure === undefined) return "undecided";
-  if (["UNDEFINED", "PENDING", "AMBIGUOUS"].includes(failure.status)) return "test_bug";
+  if (NO_DEFINITION.has(failure.status)) return "test_bug";
   // The scenario failed while being set up: never a Red, whatever the message says (DOMAIN.md, Red classes).
   if (failure.kind === "Context") return "test_bug";
   return classifyFailure(failure.message, symbolExists);

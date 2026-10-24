@@ -19,7 +19,8 @@ export interface ScenarioResult extends Scenario {
   failure?: StepFailure;
 }
 
-const NO_DEFINITION = new Set(["UNDEFINED", "PENDING", "AMBIGUOUS"]);
+/** Step statuses that mean the step has no usable definition. */
+export const NO_DEFINITION = new Set(["UNDEFINED", "PENDING", "AMBIGUOUS"]);
 
 interface FinishedStep {
   testStepId: string;

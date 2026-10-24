@@ -3,11 +3,11 @@ import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { gateRefusal, runGate } from "./gate.ts";
+import { innerLoop } from "./inner-loop.ts";
 import { projectSymbols } from "./project-symbols.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
-import { innerLoop } from "./inner-loop.ts";
 import { listScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
-import { runUnitTests, type UnitRun } from "./unit-tests.ts";
+import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { commitRun, createRunWorktree, takeAttemptChanges } from "./worktree.ts";
 
 export interface RunOptions {
@@ -20,10 +20,24 @@ export interface RunOptions {
 const EXIT_BUILT = 0;
 const EXIT_REFUSED = 1;
 
+/** What every scenario of one FR's run shares. */
+interface FrRun {
+  executor: Executor;
+  fr: string;
+  worktreeDir: string;
+  out: (text: string) => void;
+  /** The scenarios already built, which every code attempt must keep green. */
+  green: Scenario[];
+  /** The tests there are, so that a test attempt is judged on its new tests only. */
+  known: Set<string>;
+}
+
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr({ projectDir, fr, executor, out }: RunOptions): Promise<number> {
   const worktree = await createRunWorktree(projectDir, runId(fr));
-  const refusal = (await buildScenarios(executor, fr, worktree.dir, out)) ?? gateRefusal(await runGate(worktree.dir, runCommand));
+  const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
+  const run: FrRun = { executor, fr, worktreeDir: worktree.dir, out, green: [], known };
+  const refusal = (await buildScenarios(run)) ?? gateRefusal(await runGate(worktree.dir, runCommand));
   if (refusal !== undefined) {
     out(formatRefusal(refusal));
     return EXIT_REFUSED;
@@ -34,27 +48,18 @@ export async function runFr({ projectDir, fr, executor, out }: RunOptions): Prom
 }
 
 /** Builds the FR's scenarios one at a time, in file order, and returns the first refusal, if any. */
-async function buildScenarios(executor: Executor, fr: string, worktreeDir: string, out: (text: string) => void): Promise<Refusal | undefined> {
-  const green: Scenario[] = [];
-  const known = testsIn(await runUnitTests(worktreeDir, [], runCommand));
-  for (const scenario of await listScenarios(worktreeDir, fr, runCommand)) {
-    const refusal = await buildScenario(executor, fr, scenario, green, known, worktreeDir, out);
+async function buildScenarios(run: FrRun): Promise<Refusal | undefined> {
+  for (const scenario of await listScenarios(run.worktreeDir, run.fr, runCommand)) {
+    const refusal = await buildScenario(run, scenario);
     if (refusal !== undefined) return refusal;
-    green.push(scenario);
+    run.green.push(scenario);
   }
   return undefined;
 }
 
-/** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping `green` green. */
-async function buildScenario(
-  executor: Executor,
-  fr: string,
-  scenario: Scenario,
-  green: Scenario[],
-  known: Set<string>,
-  worktreeDir: string,
-  out: (text: string) => void,
-): Promise<Refusal | undefined> {
+/** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping the green ones green. */
+async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
+  const { executor, fr, worktreeDir, out, green, known } = run;
   const attempt = async (kind: AttemptKind): Promise<string[]> => {
     await executor.run({ kind, fr, scenario: scenario.name, worktree: worktreeDir });
     return takeAttemptChanges(worktreeDir);
@@ -85,11 +90,6 @@ async function buildScenario(
     },
     async () => (await runScenario()).status === "passed",
   );
-}
-
-/** Every test and test file a unit run reported on: what a later test attempt finds already there. */
-function testsIn(unit: UnitRun): Set<string> {
-  return new Set([...unit.passed, ...(unit.failures ?? []).map((failure) => failure.test)]);
 }
 
 function runId(fr: string): string {

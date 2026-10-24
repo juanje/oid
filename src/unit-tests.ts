@@ -25,3 +25,13 @@ export async function runUnitTests(dir: string, files: string[], run: CommandRun
   const root = await realpath(dir);
   return { ran: true, passed: passedTests(parsed, root), failed: failedTests(parsed, root), failures: testFailures(parsed, root), output };
 }
+
+/** Every test and test file a unit run reported on. */
+export function testsIn(unit: UnitRun): Set<string> {
+  return new Set([...unit.passed, ...(unit.failures ?? []).map((failure) => failure.test)]);
+}
+
+/** Whether `test` (`<file> > <name>`, or a file alone) is in `file`. */
+export function isInFile(test: string, file: string): boolean {
+  return test === file || test.startsWith(`${file} > `);
+}
