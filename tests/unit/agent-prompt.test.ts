@@ -63,6 +63,16 @@ describe("taskFor", () => {
     expect(task).toContain(failure.definition.source);
   });
 
+  test("gives the relevant files with their paths, and names the ones left out", () => {
+    const code = { files: [{ path: "src/greet.ts", content: "export const greet = () => 'Hello';\n" }], cut: ["tests/huge.test.ts"] };
+
+    const task = taskFor({ kind: "code", fr: "FR-GREET-01", scenario: SCENARIO, context: { ...CONTEXT, code } });
+
+    expect(task).toContain("src/greet.ts");
+    expect(task).toContain(code.files[0]!.content.trim());
+    expect(task).toContain("tests/huge.test.ts");
+  });
+
   test("gives a retry the refusal of the attempt before it", () => {
     const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
 
