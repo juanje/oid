@@ -101,6 +101,17 @@ Feature: Shorten a URL
 
 One file per FR, with the tag on `Feature`. Scenarios describe observable behaviour: no internal function names, and no file layouts the user does not see.
 
+### Progress lines
+
+What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenarios rely on these fixed words, never on the rest of the line:
+
+| Event | Line starts with | Then |
+|:--|:--|:--|
+| A stage starts | `stage <name>:` | `agent`, `worktree`, `scenarios`, `unit tests`, `gate`, `commit`, in that order |
+| An attempt starts | `attempt <kind> for "<scenario>"` | `, a retry …` when it is one |
+| An attempt ends | `attempt <kind> for "<scenario>": <verdict>` | `accepted`, `refused: <what failed>`, `stopped …` |
+| A Red | `  Red of the scenario` or `  Red of a unit test` | the scenario or test, then `: <class>` |
+
 ### Configuration
 
 | File | Whose | Holds | Read from |
