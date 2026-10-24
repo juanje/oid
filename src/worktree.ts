@@ -1,5 +1,5 @@
 import { symlink } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { git } from "./git.ts";
 
 // The worktree's link to the project's node_modules is a file to git, and the project's `node_modules/` pattern
@@ -11,10 +11,13 @@ export interface RunWorktree {
   branch: string;
 }
 
-/** Checks out a new branch from HEAD in a worktree inside the repository's git directory, where the person's working copy never sees it. */
+/**
+ * Checks out a new branch from HEAD in a worktree beside the repository, in ../.oid-worktrees/<repository>/<run id>:
+ * the person's checkout never holds it, and tools that skip paths containing .git still see it.
+ */
 export async function createRunWorktree(projectDir: string, runId: string): Promise<RunWorktree> {
-  const gitDir = resolve(projectDir, await git(projectDir, "rev-parse", "--git-common-dir"));
-  const dir = join(gitDir, "oid", "worktrees", runId);
+  const root = await git(projectDir, "rev-parse", "--show-toplevel");
+  const dir = join(dirname(root), ".oid-worktrees", basename(root), runId);
   const branch = `oid/${runId}`;
   await git(projectDir, "worktree", "add", "-q", "-b", branch, dir, "HEAD");
   // Worktrees do not share node_modules.

@@ -1,4 +1,5 @@
 import { rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { After, BeforeAll, World, setWorldConstructor } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
 
@@ -22,5 +23,8 @@ BeforeAll(() => {
 });
 
 After(async function (this: RunWorld) {
-  if (this.projectDir !== "") await rm(this.projectDir, { recursive: true, force: true });
+  if (this.projectDir === "") return;
+  await rm(this.projectDir, { recursive: true, force: true });
+  // The run's worktrees live beside the project (docs/design.md §7).
+  await rm(join(dirname(this.projectDir), ".oid-worktrees", basename(this.projectDir)), { recursive: true, force: true });
 });
