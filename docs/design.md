@@ -62,6 +62,7 @@ INPUT: SPEC.md and approved feature files
 - **Inner loop.** A test attempt is accepted when every new test fails with a valid Red against the previous checkpoint. A code attempt is accepted when those tests pass and nothing that was green turns red. That is checked on the current scenario, the feature's green scenarios and the full unit suite; the gate checks the whole project. How many tests, and how small, is guidance.
 - **The next attempt** (D-03). By default the inner loop alternates test and code. An agent may ask in its report for another kind next (fix a step, another test, more code) with its reason. The evidence and the write boundary judge whatever comes.
 - **Retries.** A refused attempt goes back to the last checkpoint and is retried with the refusal in its task, up to the limit: `limits.retries` in the project's `.oid.json`, 2 when the file does not set it. The limits of FR-RUN-09 cap what retries cost. An error (exit code 2) is never retried: no attempt can fix it. When the retries run out, oid asks the person: retry with a note, shelve the scenario, or stop.
+- **Limits.** Turns per attempt: `limits.turns` in `.oid.json`, 40 when the file does not set it. The executor counts its agent's turns and ends the agent between turns at the limit (with Pi, `finishTurn` returning `{ action: "end" }`); it reports the turns to oid in the attempt's outcome, never through a tool the model calls, which it could forget. Reaching a limit ends the run at the work accepted so far, with exit code 3, and says which limit. It is not retried.
 - **Wiring.** When every unit test of a scenario is green and the scenario is still red, the next attempt is code that connects the parts. That is legal once the scenario has at least one unit test.
 
 ## 3. An attempt
@@ -153,7 +154,7 @@ A change that needs both passes (a rename the tests import) takes three items: t
 - **`progress.json`** (D-08), written only by oid and validated against its schema. It holds the status of each FR and, for each scenario and test, its evidence and whether it is shelved, with the proposal.
 - **The run log.** Append-only. It holds attempts, verdicts, refusals, questions, and the measures of `SPEC.md` FR-STATE-02, computed by oid.
 - **`oid status`** reads both: what is done with its evidence, what is shelved and why, and where the last run stopped.
-- **Exit codes.** 0: the FR was built. 1: the run stopped on a refusal, which an attempt could act on. 2: an error no attempt can fix, such as an unknown option, a runner that does not know an option the project's configuration gives it, or an FR for which cucumber-js finds no scenario.
+- **Exit codes.** 0: the FR was built. 1: the run stopped on a refusal, which an attempt could act on. 2: an error no attempt can fix, such as an unknown option, a runner that does not know an option the project's configuration gives it, or an FR for which cucumber-js finds no scenario. 3: the run reached a limit (§2, Limits).
 
 ## 8. Reusable pieces in `~/git/outside-in-dev`
 
