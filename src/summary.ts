@@ -26,6 +26,7 @@ export function summarize(events: LogEvent[], logPath: string): string {
   }
   if (end !== undefined) lines.push(`  ${measures(end.measures)}`);
   lines.push(`  Log: ${logPath}`);
+  lines.push(`  Transcripts: ${transcriptsOf(logPath)}/`);
   return `${lines.join("\n")}\n`;
 }
 
@@ -57,4 +58,9 @@ function describe(scenario: Scenario): string {
 /** The class at the end of a Red, as `<what failed>: <class>`. */
 function redClass(red: string): string {
   return red.slice(red.lastIndexOf(": ") + 2);
+}
+
+/** The directory beside a run's log that keeps its attempts' transcripts (FR-STATE-02). */
+export function transcriptsOf(logPath: string): string {
+  return logPath.replace(/\.jsonl$/, "");
 }
