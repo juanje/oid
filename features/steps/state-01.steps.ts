@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { chmod, readdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
+import { withFixedClock } from "../support/clock.ts";
 import { GREET_01_SCENARIO, attemptDir, branches, filesUnder, git } from "../support/fixture.ts";
 import { type OidRun, runBranch, runOid } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
@@ -50,23 +51,9 @@ When("I run {string} twice, one after the other, with the clock fixed", async fu
   assert.equal(program, "oid");
   this.startHead = git(this.projectDir, "rev-parse", "HEAD");
   this.branchesBefore = branches(this.projectDir);
-  const RealDate = Date;
-  const fixed = new RealDate("2026-10-24T12:00:00Z").getTime();
-  // Every run reads the same time, as two runs started in the same second would.
-  globalThis.Date = class extends RealDate {
-    constructor(...time: unknown[]) {
-      if (time.length === 0) super(fixed);
-      else super(...(time as [number]));
-    }
-    static override now(): number {
-      return fixed;
-    }
-  } as DateConstructor;
-  try {
+  await withFixedClock("2026-10-24T12:00:00Z", async () => {
     for (let run = 0; run < 2; run += 1) this.runs.push(await runOid(this.projectDir, args, new ScriptedExecutor(this.projectDir, this.script)));
-  } finally {
-    globalThis.Date = RealDate;
-  }
+  });
 });
 
 Then("both runs succeed", function (this: RunWorld) {
