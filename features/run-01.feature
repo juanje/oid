@@ -38,8 +38,8 @@ Feature: Run one FR on approved features
 
   @NFR-02
   Scenario: oid run with an option it does not know is an error and runs nothing
-    When I run "oid run FR-GREET-01 --retries 3"
+    When I run "oid run FR-GREET-01 --no-such-option"
     Then the run stops with an error, not a refusal and not a crash
-    And the output names the option "--retries"
+    And the output names the option "--no-such-option"
     And the run created no branch
     And the executor was asked for no attempt
