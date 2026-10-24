@@ -7,6 +7,8 @@ import { reportPath } from "./git.ts";
 export interface ScenarioRun extends Scenario {
   status: "passed" | "failed" | "not run";
   failure?: StepFailure;
+  /** The files that define its steps, when it ran and any step has a definition. */
+  stepFiles?: string[];
 }
 
 /** The scenarios tagged with the FR, in cucumber's order, from a dry run with the project's own cucumber config. */
@@ -27,7 +29,8 @@ export async function runScenarios(dir: string, scenarios: Scenario[], run: Comm
   const results = report === undefined ? [] : scenarioResults(report);
   return scenarios.map((scenario) => {
     const result = results.find((ran) => location(ran) === location(scenario));
-    return result === undefined ? { ...scenario, status: "not run" } : { ...scenario, status: result.status, failure: result.failure };
+    if (result === undefined) return { ...scenario, status: "not run" };
+    return { ...scenario, status: result.status, failure: result.failure, ...(result.stepFiles === undefined ? {} : { stepFiles: result.stepFiles }) };
   });
 }
 

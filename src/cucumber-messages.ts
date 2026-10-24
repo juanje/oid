@@ -20,6 +20,8 @@ export interface StepFailure {
 export interface ScenarioResult extends Scenario {
   status: "passed" | "failed";
   failure?: StepFailure;
+  /** The files that define its steps, in step order, when any step has a definition. */
+  stepFiles?: string[];
 }
 
 /** Step statuses that mean the step has no usable definition. */
@@ -39,6 +41,8 @@ interface Messages {
   pickleSteps: Map<string, { text: string; kind: StepFailure["kind"] }>;
   /** testCase id → pickle id, in the order cucumber selected them. */
   testCases: Map<string, string>;
+  /** testCase id → its test steps' ids, in order. */
+  testCaseSteps: Map<string, string[]>;
   /** test step id → its pickle step id (hooks have none) and the ids of its step definitions. */
   testSteps: Map<string, { pickleStepId: string | undefined; definitionIds: string[] }>;
   /** step definition id → where it is defined. */
@@ -50,7 +54,7 @@ interface Messages {
 }
 
 function parse(ndjson: string): Messages {
-  const messages: Messages = { pickles: new Map(), pickleStepIds: new Map(), pickleSteps: new Map(), testCases: new Map(), testSteps: new Map(), definitions: new Map(), started: new Map(), finished: new Map() };
+  const messages: Messages = { pickles: new Map(), pickleStepIds: new Map(), pickleSteps: new Map(), testCases: new Map(), testCaseSteps: new Map(), testSteps: new Map(), definitions: new Map(), started: new Map(), finished: new Map() };
   for (const line of ndjson.split("\n")) {
     if (line.trim() === "") continue;
     const message = JSON.parse(line);
@@ -64,6 +68,7 @@ function parse(ndjson: string): Messages {
       for (const step of steps ?? []) messages.pickleSteps.set(step.id, { text: step.text, kind: step.type ?? "Unknown" });
     } else if (message.testCase) {
       messages.testCases.set(message.testCase.id, message.testCase.pickleId);
+      messages.testCaseSteps.set(message.testCase.id, (message.testCase.testSteps ?? []).map((step: { id: string }) => step.id));
       for (const step of message.testCase.testSteps ?? []) {
         messages.testSteps.set(step.id, { pickleStepId: step.pickleStepId, definitionIds: step.stepDefinitionIds ?? [] });
       }
@@ -105,10 +110,16 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
     const scenario = messages.pickles.get(messages.testCases.get(testCaseId) ?? "");
     if (scenario === undefined) continue;
     const steps = messages.finished.get(startedId) ?? [];
+    const stepFiles = [
+      ...new Set(
+        (messages.testCaseSteps.get(testCaseId) ?? []).flatMap((id) => (messages.testSteps.get(id)?.definitionIds ?? []).map((definition) => messages.definitions.get(definition)?.uri)),
+      ),
+    ].filter((uri) => uri !== undefined);
+    const defined = stepFiles.length === 0 ? {} : { stepFiles };
     // A step with no usable definition decides the class wherever it is, so it is the failure to report.
     const notPassed = steps.find((step) => NO_DEFINITION.has(step.status)) ?? steps.find((step) => step.status !== "PASSED");
     if (steps.length > 0 && notPassed === undefined) {
-      results.push({ ...scenario, status: "passed" });
+      results.push({ ...scenario, status: "passed", ...defined });
       continue;
     }
     const testStep = messages.testSteps.get(notPassed?.testStepId ?? "");
@@ -123,7 +134,7 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
       ...(definition?.uri === undefined ? {} : { definedIn: definition.uri }),
       ...(definition?.line === undefined ? {} : { definedAt: definition.line }),
     };
-    results.push({ ...scenario, status: "failed", failure });
+    results.push({ ...scenario, status: "failed", failure, ...defined });
   }
   return results;
 }
