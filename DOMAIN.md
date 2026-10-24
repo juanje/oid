@@ -170,12 +170,14 @@ With `--reporter=json --outputFile=<file>`:
 - **Pass the test name as one argument: `--testNamePattern=<escaped name>`.** As two arguments, a name that starts with `-` is read as an option.
 - **`passWithNoTests` makes a run where nothing ran pass.** Check that the test asked for ran.
 - **`--exclude` on the command line is added to the configured excludes.** Use it to keep oid's own files out of a project's run.
+- **On macOS the JSON report gives real paths** (`/private/var/…` for `/var/…`). Resolve both sides with `realpath` before you compute relative paths.
 
 ### git
 
 - **`git checkout -- .` does not remove untracked files.** Roll back with `git reset --hard <checkpoint>`, then `git clean -fd` on the writable paths.
 - **Worktrees share the project's hooks.** A `pre-commit` hook can refuse a checkpoint. Commit checkpoints with `-c core.hooksPath=/dev/null --no-verify`.
-- **Worktrees do not share `node_modules`.** A symlinked `node_modules` is a file to git, so `node_modules/` (with the slash) does not ignore it. Add `/node_modules` to the file named by `git rev-parse --git-path info/exclude`, and leave the project's `.gitignore` alone.
+- **Worktrees do not share `node_modules`.** A symlinked `node_modules` is a file to git, so `node_modules/` (with the slash) does not ignore it.
+- **`info/exclude` is shared by every worktree of a repository.** Writing to it changes the person's `git status`. Keep a symlinked `node_modules` out of oid's own git commands with a pathspec (`':(exclude)node_modules'`), and touch neither `info/exclude` nor `.gitignore`.
 - **A test fixture's git inherits the global config and hooks.** Isolate it.
 
 ### Node child processes
@@ -185,6 +187,10 @@ With `--reporter=json --outputFile=<file>`:
 - **A hung runner holds every lock taken around it.** A refusal about a lock names the holder's PID.
 - **A check can time out on a slow machine.** Give limits slack. A timeout is an `environment` failure, not a verdict on the code.
 - **Wall time includes suspends.** Measure active time.
+
+### TypeScript
+
+- **TypeScript 7's `typescript` package has no JavaScript compiler API:** no `createProgram` and no `createSourceFile`; it ships the native `tsc`. For the compiler API (symbol checks, detectors), add TypeScript 6 under an alias, `"typescript-api": "npm:typescript@6.0.3"`, and import from `typescript-api`. Keep `typescript` 7 for `tsc --noEmit`.
 
 ### Paths and secrets
 
