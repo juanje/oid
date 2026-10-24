@@ -16,11 +16,11 @@ const SCENARIO_FAILS: CheckResult[] = [
   { name: "scenarios", passed: false, output: "", failures: ["broken"], failedScenarios: [{ ...GREET_02_FIRST, status: "failed" }] },
 ];
 /** The gate failing on type errors in `files` only, with `tests` unit tests run. */
-const typesFail = (files: string[], tests = 3): CheckResult[] => [
-  { name: "types", passed: false, output: files.map((file) => `${file}(1,1): error TS2322`).join("\n"), failures: ["…"], failedFiles: files },
-  { name: "unit", passed: true, output: "", tests },
-  { name: "scenarios", passed: true, output: "" },
-];
+const typesFail = (files: string[], tests = 3): CheckResult[] => {
+  // As the gate's types check gives them: tsc's output is the failure.
+  const output = files.map((file) => `${file}(1,1): error TS2322`).join("\n");
+  return [{ name: "types", passed: false, output, failures: [output], failedFiles: files }, { name: "unit", passed: true, output: "", tests }, { name: "scenarios", passed: true, output: "" }];
+};
 const passingWith = (tests: number): CheckResult[] => [PASSING[0]!, { ...PASSING[1]!, tests }, PASSING[2]!];
 const UNKNOWN_OPTION: CheckResult[] = [{ name: "types", passed: false, output: "", unknownOption: "noSuchCompilerOption" }, ...PASSING.slice(1)];
 
