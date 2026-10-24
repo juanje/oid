@@ -143,3 +143,21 @@ Then("the output names the type check and the file with the error", async functi
   }
 });
 
+
+Then("the run stops with an error, not a refusal and not a crash", function (this: RunWorld) {
+  // In-process, a crash is a thrown error; an error no attempt can fix is a returned exit code of 2.
+  assert.equal(this.crash, undefined, `The run crashed:\n${String(this.crash)}`);
+  assert.equal(this.exitCode, 2, `The run did not stop with an error. Output:\n${this.output}`);
+});
+
+Then("the output names the option {string}", function (this: RunWorld, option: string) {
+  assertOutputNames(this, option);
+});
+
+Then("the run created no branch", function (this: RunWorld) {
+  assert.deepEqual(branches(this.projectDir), this.branchesBefore, "The run created a branch");
+});
+
+Then("the executor was asked for no attempt", function (this: RunWorld) {
+  assert.equal(this.executor?.asked ?? 0, 0, `The executor was asked for ${this.executor?.asked} attempts`);
+});
