@@ -10,11 +10,10 @@ import {
   defineTool,
 } from "@earendil-works/pi-coding-agent";
 import { systemPromptFor, taskFor } from "./agent-prompt.ts";
+import { AGENT_TOOLS } from "./agent-tools.ts";
 import type { Attempt, AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
 import { formatRefusal } from "./refusal.ts";
 
-/** Pi's read-only tools, its edit and write, and oid's try and report; no shell (D-05). The list also filters custom tools. */
-const AGENT_TOOLS = ["read", "ls", "find", "grep", "edit", "write", "try", "report"];
 
 export interface PiExecutorOptions {
   /** Pi's models and their credentials: Pi reads those itself, oid never does. */
@@ -42,7 +41,8 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
     cwd: attempt.worktree,
     modelRuntime: runtime,
     model,
-    tools: AGENT_TOOLS,
+    // The allowlist also filters custom tools, so try and report are in it.
+    tools: AGENT_TOOLS.map((tool) => tool.name),
     customTools: oidTools(attempt, () => {
       reported = true;
     }),
