@@ -3,15 +3,16 @@ import { readLimits } from "../../src/config.ts";
 import { tempRepo } from "./support/repo.ts";
 
 describe("readLimits", () => {
-  test("takes the retries the project's .oid.json sets", async () => {
-    const dir = await tempRepo({ ".oid.json": JSON.stringify({ limits: { retries: 1 } }) });
+  test("takes the limits the project's .oid.json sets", async () => {
+    const dir = await tempRepo({ ".oid.json": JSON.stringify({ limits: { retries: 1, turns: 3 } }) });
 
-    expect(await readLimits(dir)).toEqual({ retries: 1 });
+    expect(await readLimits(dir)).toEqual({ retries: 1, turns: 3 });
   });
 
-  test("allows 2 retries when the project has no .oid.json", async () => {
-    const dir = await tempRepo({ "a.txt": "a\n" });
+  test("allows 2 retries and 40 turns per attempt when the project does not say", async () => {
+    const dir = await tempRepo({ ".oid.json": JSON.stringify({ limits: { retries: 1 } }) });
+    const none = await tempRepo({ "a.txt": "a\n" });
 
-    expect(await readLimits(dir)).toEqual({ retries: 2 });
+    expect({ some: await readLimits(dir), none: await readLimits(none) }).toEqual({ some: { retries: 1, turns: 40 }, none: { retries: 2, turns: 40 } });
   });
 });
