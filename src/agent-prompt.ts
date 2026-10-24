@@ -79,6 +79,12 @@ function procedureOf(kind: AttemptKind): string {
   ].join("\n");
 }
 
+function codeText({ files, cut }: NonNullable<TaskContext["code"]>): string {
+  const shown = files.map(({ path, content }) => `--- ${path}\n${content.trimEnd()}`);
+  const left = cut.length === 0 ? [] : [`Also relevant, left out for length: ${cut.join(", ")}`];
+  return ["The code relevant to the scenario: the step definitions, the modules they import, and the unit tests that import those.", ...shown, ...left].join("\n");
+}
+
 function failureText({ step, message, definition }: NonNullable<TaskContext["failure"]>): string {
   const where = definition === undefined ? "" : `\nIts step is defined at ${definition.file}:${definition.line}:\n${definition.source}`;
   return `The scenario fails at the step "${step}":\n${message}${where}`;
@@ -90,6 +96,7 @@ export function taskFor({ kind, fr, scenario, refusal, context }: Pick<Attempt, 
   if (context?.fr !== undefined) parts.push(`The FR, from the spec:\n${context.fr}`);
   if (context !== undefined && context.steps.length > 0) parts.push(`The scenario's steps:\n${context.steps.join("\n")}`);
   if (context?.failure !== undefined) parts.push(failureText(context.failure));
+  if (context?.code !== undefined) parts.push(codeText(context.code));
   if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
   return parts.join("\n\n");
 }

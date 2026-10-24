@@ -19,6 +19,7 @@ import { frText as specFrText } from "./project-texts.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
+import { relevantCode } from "./relevant-code.ts";
 import { definitionSource } from "./step-definitions.ts";
 import { summarize } from "./summary.ts";
 import { frScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
@@ -202,15 +203,24 @@ async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, pre
   return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context });
 }
 
-/** What the task gives an attempt (FR-AGENT-03): the FR, its scenario's steps and, after its steps, where it fails now. */
+/**
+ * What the task gives an attempt (FR-AGENT-03): the FR and its scenario's steps and, once its steps have run, where
+ * the scenario fails now and the code relevant to it.
+ */
 async function contextFor(run: FrRun, kind: AttemptKind, scenario: Scenario): Promise<TaskContext> {
-  const failure = kind === "steps" ? undefined : run.latest.get(locationOf(scenario))?.failure;
+  const latest = kind === "steps" ? undefined : run.latest.get(locationOf(scenario));
+  const failure = latest?.failure;
+  const stepFiles = latest?.stepFiles ?? [];
   return {
     ...(run.frText === undefined ? {} : { fr: run.frText }),
     steps: run.steps.get(locationOf(scenario)) ?? [],
     ...(failure === undefined ? {} : { failure: await failureContext(run.worktree.dir, failure) }),
+    ...(stepFiles.length === 0 ? {} : { code: await relevantCode(run.worktree.dir, stepFiles, CODE_BUDGET) }),
   };
 }
+
+/** How much relevant code a task gives, in characters (FR-AGENT-03). */
+const CODE_BUDGET = 40_000;
 
 async function failureContext(dir: string, { step, message, definedIn, definedAt }: StepFailure): Promise<NonNullable<TaskContext["failure"]>> {
   const source = definedIn === undefined || definedAt === undefined ? undefined : definitionSource(await readFile(join(dir, definedIn), "utf8"), definedAt);
