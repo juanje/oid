@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { frText } from "../../src/project-texts.ts";
+import { frText, projectTexts } from "../../src/project-texts.ts";
+import { tempRepo } from "./support/repo.ts";
 
 const SPEC = `# greet — Specification
 
@@ -29,5 +30,34 @@ describe("frText", () => {
 
   test("gives nothing for an FR the spec does not have", () => {
     expect(frText(SPEC, "FR-GREET-09")).toBeUndefined();
+  });
+});
+
+describe("projectTexts", () => {
+  const SPEC_WITH_SECTIONS = "# x\n\n#### FR-X-01: X\nText.\n\n## Domain\n\nSpec domain.\n\n## Conventions\n\nSpec conventions.\n";
+
+  test("takes the domain and the conventions from DOMAIN.md and CONVENTIONS.md", async () => {
+    const dir = await tempRepo({ "DOMAIN.md": "File domain.\n", "CONVENTIONS.md": "File conventions.\n", "SPEC.md": SPEC_WITH_SECTIONS });
+
+    expect(await projectTexts(dir)).toEqual({ domain: "File domain.", conventions: "File conventions." });
+  });
+
+  test("takes them from the spec's Domain and Conventions sections when there is no file", async () => {
+    const dir = await tempRepo({ "SPEC.md": SPEC_WITH_SECTIONS });
+
+    expect(await projectTexts(dir)).toEqual({ domain: "## Domain\n\nSpec domain.", conventions: "## Conventions\n\nSpec conventions." });
+  });
+
+  test("takes them first from the files .oid.json names", async () => {
+    const config = JSON.stringify({ paths: { domain: "docs/glossary.md", conventions: "docs/style.md" } });
+    const dir = await tempRepo({ ".oid.json": config, "docs/glossary.md": "Named domain.\n", "docs/style.md": "Named conventions.\n", "DOMAIN.md": "File domain.\n" });
+
+    expect(await projectTexts(dir)).toEqual({ domain: "Named domain.", conventions: "Named conventions." });
+  });
+
+  test("never takes them from AGENTS.md or CLAUDE.md, and gives none when the project has none", async () => {
+    const dir = await tempRepo({ "AGENTS.md": "## Domain\n\nAgents domain.\n", "CLAUDE.md": "## Conventions\n\nClaude conventions.\n" });
+
+    expect(await projectTexts(dir)).toEqual({});
   });
 });
