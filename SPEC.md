@@ -194,7 +194,9 @@ No agent writes feature files, `SPEC.md`, the gate's configuration or oid's stat
 - **the model** of each agent;
 - **the instruction count** of each prompt.
 
-*Why:* the runs are the evidence for changing prompts, rules and the theory. Measures an agent computes or estimates are plausible and wrong.
+Next to the log, a directory keeps each attempt's transcript, its agent's whole session, one JSONL file per attempt; the end-of-run summary names it.
+
+*Why:* the runs are the evidence for changing prompts, rules and the theory. Measures an agent computes or estimates are plausible and wrong. A verdict without the session that led to it cannot be explained.
 
 #### FR-STATE-03: `progress.json`
 **MVP.** oid writes `progress.json`, validated against its schema, and no agent writes it. For each FR it holds the status. For each scenario and test it holds the evidence (FR-EVID-04) and whether it is shelved, with the proposal. It holds no position in a cycle. *Why:* the person and the next run must know where things stand without guessing. A schema keeps the file a record, not a narrative.
