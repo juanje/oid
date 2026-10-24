@@ -1,7 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
-import { join } from "node:path";
-import { runCommand } from "./command.ts";
-import { git } from "./git.ts";
+import { projectBin, runCommand } from "./command.ts";
+import { reportPath } from "./git.ts";
 import type { Refusal } from "./refusal.ts";
 import type { ScenarioRun } from "./scenarios.ts";
 import { passedTests } from "./vitest-report.ts";
@@ -36,9 +35,8 @@ export async function judgeNewTests(worktreeDir: string, testFiles: string[]): P
 }
 
 async function testsThatPass(worktreeDir: string, testFiles: string[]): Promise<string[]> {
-  // The report goes to the worktree's own git directory, out of the project's files.
-  const report = join(await git(worktreeDir, "rev-parse", "--absolute-git-dir"), "oid-new-tests.json");
-  const vitest = join(worktreeDir, "node_modules/.bin/vitest");
+  const report = await reportPath(worktreeDir, "oid-new-tests.json");
+  const vitest = projectBin(worktreeDir, "vitest");
   await runCommand(vitest, ["run", ...testFiles, "--reporter=json", `--outputFile=${report}`], { cwd: worktreeDir });
   // vitest reports real paths, and the worktree may sit behind a symlink such as macOS's /var.
   return passedTests(JSON.parse(await readFile(report, "utf8")), await realpath(worktreeDir));

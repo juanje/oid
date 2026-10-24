@@ -1,9 +1,8 @@
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
-import type { CommandRunner } from "./command.ts";
+import { type CommandRunner, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
 import { type Scenario, scenarioResults, scenariosIn } from "./cucumber-messages.ts";
-import { git } from "./git.ts";
+import { reportPath } from "./git.ts";
 
 export interface ScenarioRun extends Scenario {
   status: "passed" | "failed" | "not run";
@@ -32,13 +31,11 @@ function location(scenario: Scenario): string {
 
 /** Runs the project's cucumber-js and reads its message report; a load error stops cucumber before it writes one. */
 async function cucumber(dir: string, args: string[], run: CommandRunner): Promise<{ report: string | undefined; output: string }> {
-  // The report goes to the worktree's own git directory, out of the project's files.
-  const reportFile = join(await git(dir, "rev-parse", "--absolute-git-dir"), "oid-scenarios.ndjson");
+  const reportFile = await reportPath(dir, "oid-scenarios.ndjson");
   await rm(reportFile, { force: true });
-  const { output } = await run(join(dir, "node_modules/.bin/cucumber-js"), [...args, "--format", `message:${reportFile}`], {
+  const { output } = await run(projectBin(dir, "cucumber-js"), [...args, "--format", `message:${reportFile}`], {
     cwd: dir,
-    // cucumber-js loads TypeScript step definitions only through tsx.
-    env: { ...process.env, NODE_OPTIONS: "--import tsx" },
+    env: { ...process.env, ...TYPESCRIPT_STEPS_ENV },
   });
   return { report: existsSync(reportFile) ? await readFile(reportFile, "utf8") : undefined, output };
 }
