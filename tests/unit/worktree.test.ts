@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { commitRun, createRunWorktree, takeAttemptChanges } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
@@ -27,6 +27,15 @@ describe("createRunWorktree", () => {
 
     expect({ status: git(repo, "status", "--porcelain"), branch: git(repo, "branch", "--show-current") }).toEqual(before);
     expect(await readFile(join(repo, "a.txt"), "utf8")).toBe("uncommitted\n");
+  });
+
+  test("lives outside the repository, in ../.oid-worktrees/<repository>/<run id>", async () => {
+    const repo = await tempRepo({ "a.txt": "committed\n" });
+
+    const worktree = await createRunWorktree(repo, "r1");
+
+    const real = await realpath(repo);
+    expect(await realpath(worktree.dir)).toBe(join(dirname(real), ".oid-worktrees", basename(real), "r1"));
   });
 
   test("shares the project's node_modules", async () => {
