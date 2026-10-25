@@ -6,8 +6,8 @@ import { isInFile, runUnitTests } from "./unit-tests.ts";
 import { attemptFiles } from "./worktree.ts";
 
 /**
- * The try tool (FR-AGENT-06): runs one test file or the attempt's scenario, then the type check, and answers with
- * the errors in the files the attempt changed. It records nothing: oid's own judgment comes after and does not trust it.
+ * The try tool (FR-AGENT-06): runs one test file or the attempt's scenario, and only when it passes, the type check,
+ * answering with the errors in the files the attempt changed; a failing target is answered with its failure alone. It records nothing: oid's own judgment comes after and does not trust it.
  */
 export async function tryAttempt(dir: string, scenario: Scenario, target: TryTarget, run: CommandRunner): Promise<TryResult> {
   const targetFailure = "test" in target ? await tryTest(dir, target.test, run) : await tryScenario(dir, scenario, run);

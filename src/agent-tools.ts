@@ -9,7 +9,10 @@ export const AGENT_TOOLS = [
   { name: "grep", does: "searches the contents of files" },
   { name: "edit", does: "changes part of a file" },
   { name: "write", does: "writes a whole file" },
-  { name: "try", does: "runs one unit test file (test: its path) or your scenario (scenario: true), then the type check on the files you changed; it records nothing" },
+  {
+    name: "try",
+    does: "runs one unit test file (test: its path) or your scenario (scenario: true); only when it passes, the type check on the files you changed; it records nothing",
+  },
   {
     name: "report",
     does: "ends the attempt with its result in a few words; when the cause of a failure lies in paths another kind of attempt writes, it asks for that kind next (next: steps, test or code, with the reason)",
