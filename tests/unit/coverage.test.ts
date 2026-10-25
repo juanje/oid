@@ -73,6 +73,16 @@ describe("untaken", () => {
   test("leaves out the functions a transform adds, which are not in the source", () => {
     expect(untaken([report("/w/src/a.ts", [], [["__name", 1, 0]])], "/w")).toEqual([]);
   });
+
+  test("takes vitest's placeholder for a file no unit test loads as the whole file: taken when another report ran any part of it", () => {
+    const placeholder = report("/w/src/list.ts", [], [["(empty-report)", 1, 0]]);
+    const scenarios = report("/w/src/list.ts", [], [["greetList", 3, 1]]);
+
+    expect(untaken([placeholder, scenarios], "/w")).toEqual([]);
+    expect(untaken([placeholder, report("/w/src/other.ts", [], [["other", 1, 1]])], "/w")).toEqual([
+      { file: "src/list.ts", line: 1, column: 0, what: "the function (empty-report), which no test calls" },
+    ]);
+  });
 });
 
 describe("uncoveredNew", () => {
