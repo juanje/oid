@@ -40,3 +40,23 @@ Feature: A mutant where a Red is impossible
     Then the run stops with a refusal, not a crash
     And the output says the scenario still passes under the mutant
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A refused mutant is retried, and the retry's mutant is judged before its request: accepted, the scenario is built and the request is not followed
+    Given the run allows 1 retry
+    And the scripted steps attempt for the second scenario submits a mutant that changes code the scenario does not run
+    And its retry submits a mutant that joins every name with and, and asks for a code attempt
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the executor was asked for every prepared attempt, in order
+    And the output gives the second scenario's Red the class business_assertion, through a mutant
+    And the output says the steps attempt's request for the second scenario was not followed
+
+  Scenario: A test attempt in a round after a code attempt submits a mutant and asks for a code attempt: the mutant is judged first, and the request is followed while the scenario fails
+    Given the scripted steps attempt for the second scenario asks for a function that does not exist yet
+    And the scripted first round for the second scenario writes that function, which greets one person but not a list
+    And the scripted test attempt of its second round writes a test of behaviour that exists already, submits a mutant that joins every name with and, and asks for a code attempt that makes the function use it
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the executor was asked for every prepared attempt, in order
+    And the output gives the new test's Red the class business_assertion, through a mutant
+    And the output says the test attempt's request for the second scenario was followed
