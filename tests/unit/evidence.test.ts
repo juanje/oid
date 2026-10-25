@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { judgeCode, judgeNewTests, judgeSteps } from "../../src/evidence.ts";
+import { judgeCode, judgeNewTests, judgeSteps, noTestSuiteFiles } from "../../src/evidence.ts";
 import { nothingExists } from "./support/symbols.ts";
 import { recorded, recordedVitest } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
@@ -148,5 +148,22 @@ describe("judgeNewTests", () => {
     await judgeNewTests(dir, files, recordedVitest(dir, files, recorded("vitest-greet-02-assert.json")), nothingExists, NONE_KNOWN);
 
     expect((await judgeNewTests(dir, files, recordedVitest(dir, files, undefined), nothingExists, NONE_KNOWN)).refusal).toBeDefined();
+  });
+});
+
+describe("noTestSuiteFiles", () => {
+  test("names the test files that register no vitest test: they are not tests there are", () => {
+    const unit = {
+      ran: true,
+      passed: [],
+      failed: ["tests/greet-all.test.ts", "tests/greet.test.ts > greets"],
+      failures: [
+        { test: "tests/greet-all.test.ts", message: "No test suite found in file /work/tests/greet-all.test.ts" },
+        { test: "tests/greet.test.ts > greets", message: "AssertionError: expected 1 to be 2" },
+      ],
+      output: "",
+    };
+
+    expect(noTestSuiteFiles(unit)).toEqual(["tests/greet-all.test.ts"]);
   });
 });
