@@ -53,6 +53,8 @@ export function addedLines(diff: string): Map<string, Set<number>> {
   return added;
 }
 
+const PLACEHOLDER = "the function (empty-report), which no test calls";
+
 /** A range of the source with how often it ran: a branch, or a function's body. */
 interface Ran extends Place {
   count: number;
@@ -72,7 +74,11 @@ export function untaken(reports: CoverageReport[], root: string): Untaken[] {
   ranges.forEach((files, index) => {
     for (const [file, ran] of files) {
       for (const range of ran.filter((candidate) => candidate.count === 0 && !candidate.synthetic)) {
-        const takenElsewhere = ranges.some((other, at) => at !== index && (innermost(other.get(file) ?? [], range)?.count ?? 0) > 0);
+        // vitest's provider reports a file no unit test loaded as one placeholder function, which stands for the file.
+        const whole = range.what === PLACEHOLDER;
+        const takenElsewhere = ranges.some(
+          (other, at) => at !== index && (whole ? (other.get(file) ?? []).some((ran) => ran.count > 0) : (innermost(other.get(file) ?? [], range)?.count ?? 0) > 0),
+        );
         if (takenElsewhere) continue;
         const { line, column } = range.start;
         const key = `${file} ${line}:${column} ${range.what}`;
