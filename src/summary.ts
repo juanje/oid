@@ -41,14 +41,15 @@ function ending(events: LogEvent[], end: EndEvent | undefined): string {
   return "Stopped on an error no attempt can fix.";
 }
 
-function measures({ attempts, rejections, blindRetries, noProgressRounds, provisional, tokens, cost, timeMs }: Measures): string {
+function measures({ attempts, rejections, blindRetries, noProgressRounds, requests, provisional, tokens, cost, timeMs }: Measures): string {
   const byKind = (counts: Partial<Record<string, number>>) =>
     Object.entries(counts)
       .map(([kind, count]) => `${kind} ${count}`)
       .join(", ") || "none";
   const rounds = noProgressRounds === undefined ? "" : `; rounds with no progress ${noProgressRounds}`;
+  const asked = requests === undefined ? "" : `; requests ${requests.asked} (accepted ${requests.accepted})`;
   const reds = provisional === undefined ? "" : `; provisional Reds ${provisional.accepted} (confirmed ${provisional.confirmed}, refuted ${provisional.refuted})`;
-  return `Measures: attempts ${byKind(attempts)}; rejections ${byKind(rejections)}; blind retries ${blindRetries}${rounds}${reds}; tokens ${tokens}; cost ${cost.toFixed(4)}; time ${(timeMs / 1000).toFixed(1)} s`;
+  return `Measures: attempts ${byKind(attempts)}; rejections ${byKind(rejections)}; blind retries ${blindRetries}${rounds}${asked}${reds}; tokens ${tokens}; cost ${cost.toFixed(4)}; time ${(timeMs / 1000).toFixed(1)} s`;
 }
 
 function location(scenario: Scenario): string {

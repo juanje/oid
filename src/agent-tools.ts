@@ -10,7 +10,10 @@ export const AGENT_TOOLS = [
   { name: "edit", does: "changes part of a file" },
   { name: "write", does: "writes a whole file" },
   { name: "try", does: "runs one unit test file (test: its path) or your scenario (scenario: true), then the type check on the files you changed; it records nothing" },
-  { name: "report", does: "ends the attempt with its result in a few words" },
+  {
+    name: "report",
+    does: "ends the attempt with its result in a few words; when the cause of a failure lies in paths another kind of attempt writes, it asks for that kind next (next: steps, test or code, with the reason)",
+  },
 ] as const;
 
 /** What `name` does, as a sentence: the description Pi gives the model with the tool. */

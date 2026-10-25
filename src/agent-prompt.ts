@@ -76,8 +76,15 @@ function limitsOf(kind: AttemptKind): string {
   ].join("\n");
 }
 
+/** How to ask for the attempt kind that owns a cause outside the kind's paths, from the paths each kind writes (FR-RUN-04). */
+function askFor(kind: AttemptKind): string {
+  const others = (Object.keys(WRITABLE) as AttemptKind[]).filter((other) => other !== kind);
+  const owners = others.map((other) => `a ${other} attempt writes ${WRITABLE[other].join(", ")}`).join("; ");
+  return `If the cause of the failure lies outside your paths, change nothing to work around it: end with report asking, in next, for the kind of attempt that owns those paths, and say why (${owners}).`;
+}
+
 function procedureOf(kind: AttemptKind): string {
-  const steps = PROCEDURE[kind].map((step, index) => `${index + 1}. ${step}`);
+  const steps = [...PROCEDURE[kind], askFor(kind)].map((step, index) => `${index + 1}. ${step}`);
   return [
     "Step 0. Read your task: the FR, the scenario, and the refusal of the attempt before yours, if there is one.",
     ...steps,
@@ -110,7 +117,7 @@ function failureText({ step, message, definition }: NonNullable<TaskContext["fai
 }
 
 /** The task of one attempt: what to build, from what the run gathered for it, and, for a retry, why the attempt before it was refused. */
-export function taskFor({ kind, fr, scenario, refusal, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "context">): string {
+export function taskFor({ kind, fr, scenario, refusal, asked, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "asked" | "context">): string {
   const parts = [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
   if (context?.fr !== undefined) parts.push(`The FR, from the spec:\n${context.fr}`);
   if (context?.domain !== undefined) parts.push(`The project's domain:\n${context.domain}`);
@@ -121,6 +128,7 @@ export function taskFor({ kind, fr, scenario, refusal, context }: Pick<Attempt, 
   if (context?.patterns !== undefined && context.patterns.length > 0) {
     parts.push(`The step definitions the project has: reuse a step that matches instead of defining it again, which cucumber-js reports as ambiguous.\n${context.patterns.join("\n")}`);
   }
+  if (asked !== undefined) parts.push(`The ${asked.by} attempt before this one asked for this ${kind} attempt:\n${asked.reason}`);
   if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
   if (refusal?.focus !== undefined) parts.push(focusText(refusal.focus));
   return parts.join("\n\n");

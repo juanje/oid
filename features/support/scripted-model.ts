@@ -120,7 +120,7 @@ export class ScriptedModel {
     }
     if (prepared.error !== undefined) return fauxAssistantMessage("", { stopReason: "error", errorMessage: prepared.error });
     if (prepared.loops) return fauxAssistantMessage(fauxToolCall("read", { path: "package.json" }));
-    const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt`, ...(prepared.next === undefined ? {} : { next: prepared.next }) });
+    const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt`, ...(prepared.next === undefined ? {} : { next: { kind: prepared.next.kind, reason: prepared.next.reason } }) });
     const probed = prepared.probes !== undefined && prepared.probes.length > 0;
     if (probed && this.attempts[index]!.length === 1) return fauxAssistantMessage(prepared.probes!.map(({ tool, args }) => fauxToolCall(tool, args)));
     // Its turns once the probes, if any, are answered.

@@ -2,6 +2,12 @@ import type { Refusal } from "./refusal.ts";
 
 export type AttemptKind = "steps" | "test" | "code";
 
+/** What a report can ask for: another attempt kind next, with its reason (FR-RUN-04). */
+export interface NextAttempt {
+  kind: AttemptKind;
+  reason: string;
+}
+
 export interface Attempt {
   kind: AttemptKind;
   fr: string;
@@ -12,6 +18,8 @@ export interface Attempt {
   tools: AttemptTools;
   /** The refusal that led to this attempt, when it is a retry: the most useful part of its task (FR-AGENT-03). */
   refusal?: Refusal;
+  /** For an attempt another one asked for: which kind asked, and why (FR-RUN-04). */
+  asked?: { by: AttemptKind; reason: string };
   /** The executor ends its agent between turns when it reaches `turns` (with Pi, finishTurn returning { action: "end" }). */
   limits: { turns: number };
   /** What the task gives the agent besides its kind and scenario (FR-AGENT-03). */
@@ -63,8 +71,8 @@ export type TryResult = { passed: true } | ({ passed: false } & Refusal);
 export interface AttemptTools {
   /** Runs the target, then the type check on the files the attempt changed. It records nothing. */
   try(target: TryTarget): Promise<TryResult>;
-  /** Ends the attempt with its result in a few words. An attempt that never calls it is refused. */
-  report(result: string): void;
+  /** Ends the attempt with its result in a few words, and may ask for another attempt kind next. An attempt that never calls it is refused. */
+  report(result: string, next?: NextAttempt): void;
 }
 
 /** Runs one attempt's agent: Pi, or the scripted executor of oid's own tests. oid judges the diff the same way for both. */

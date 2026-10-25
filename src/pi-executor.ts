@@ -140,9 +140,12 @@ function oidTools(attempt: Attempt, onReport: () => void) {
       name: "report",
       label: "report",
       description: toolDescription("report"),
-      parameters: Type.Object({ result: Type.String() }),
-      execute: async (_id, { result }) => {
-        attempt.tools.report(result);
+      parameters: Type.Object({
+        result: Type.String(),
+        next: Type.Optional(Type.Object({ kind: Type.Union([Type.Literal("steps"), Type.Literal("test"), Type.Literal("code")]), reason: Type.String() })),
+      }),
+      execute: async (_id, { result, next }) => {
+        attempt.tools.report(result, next);
         onReport();
         return text("Reported: the attempt ends with this turn.");
       },

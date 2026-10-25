@@ -17,6 +17,8 @@ export interface AttemptEvent {
   /** The attempt came with the refusal of the one before it. */
   retry: boolean;
   refusal?: Refusal;
+  /** Another attempt asked for this one (FR-RUN-04). */
+  asked?: true;
   /** The valid Reds an accepted steps or test attempt showed, each as `<what failed>: <class>`. */
   reds?: string[];
   /** As the executor reported them. */
@@ -78,6 +80,18 @@ export interface RedEvent {
   attempt: number;
 }
 
+/**
+ * An attempt asked for another kind next (FR-RUN-04). The reason is the agent's own words: it is what the next
+ * attempt's task gives, as a refusal's evidence is, and no measure is computed from it.
+ */
+export interface RequestEvent {
+  event: "request";
+  scenario: string;
+  by: AttemptKind;
+  kind: AttemptKind;
+  reason: string;
+}
+
 /** A round of a scenario's inner loop that made no progress, with the step where the scenario still fails (FR-RUN-03). */
 export interface RoundEvent {
   event: "round";
@@ -105,6 +119,8 @@ export interface Measures {
   cacheRead?: number;
   cost: number;
   deniedToolCalls: number;
+  /** Requests for another attempt kind, and the attempts asked for that were accepted (FR-RUN-04); logs before 0.1.11 do not have it. */
+  requests?: { asked: number; accepted: number };
   /** Rounds after which the scenario failed the same way (FR-RUN-03); logs before 0.1.10 do not have it. */
   noProgressRounds?: number;
   /** The provisional Reds accepted, and of those, the ones confirmed and refuted; logs before 0.1.8 do not have it. */
@@ -119,7 +135,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;
@@ -171,7 +187,11 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
   const gateRejections = events.flatMap((event) => (event.event === "gate" && event.verdict === "refused" && event.sendTo !== undefined ? [event.sendTo] : []));
   const provisional = { accepted: 0, confirmed: 0, refuted: 0 };
   const noProgressRounds = events.filter((event) => event.event === "round").length;
-  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, noProgressRounds, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, provisional, timeMs };
+  const requests = {
+    asked: events.filter((event) => event.event === "request").length,
+    accepted: attempts.filter((attempt) => attempt.asked === true && attempt.verdict === "accepted").length,
+  };
+  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, noProgressRounds, requests, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, provisional, timeMs };
   const last = new Map<AttemptKind, AttemptEvent>();
   for (const attempt of attempts) {
     measures.attempts[attempt.kind] = (measures.attempts[attempt.kind] ?? 0) + 1;

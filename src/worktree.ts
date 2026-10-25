@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile, symlink } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { basename, dirname, join, resolve } from "node:path";
 import type { AddedLine } from "./boundaries.ts";
 import { git, refExists } from "./git.ts";
@@ -145,4 +147,54 @@ function linesAddedTo(patch: string): AddedLine[] {
     else if (line.startsWith("+")) added.push({ file, text: line.slice(1) });
   }
   return added;
+}
+
+/** A copy of the run's code at an earlier checkpoint, where tests and step definitions are run against it (D-02). */
+export interface Scratch {
+  dir: string;
+  /** Puts `files` as the run's last checkpoint has them, or as the attempt under way left them; one that is not there goes. */
+  put(files: string[], from: "checkpoint" | "attempt"): Promise<void>;
+  remove(): Promise<void>;
+}
+
+/**
+ * A scratch copy of the run's worktree at `commit`, beside it, sharing the project's node_modules: the broken version
+ * a test attempt or steps attempt asked for must fail on (FR-RUN-04).
+ */
+export async function scratchCopy(worktree: RunWorktree, commit: string): Promise<Scratch> {
+  const dir = `${worktree.dir}-scratch`;
+  await rm(dir, { recursive: true, force: true });
+  await git(worktree.dir, "worktree", "add", "-q", "--detach", "--force", dir, commit);
+  await symlink(join(worktree.projectDir, "node_modules"), join(dir, "node_modules"));
+  return {
+    dir,
+    put: async (files, from) => {
+      for (const file of files) {
+        const content = from === "attempt" ? await readIfThere(join(worktree.dir, file)) : await gitShow(worktree.dir, `HEAD:${file}`);
+        const target = join(dir, file);
+        if (content === undefined) {
+          await rm(target, { force: true });
+          continue;
+        }
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, content);
+      }
+    },
+    remove: async () => {
+      await git(worktree.dir, "worktree", "remove", "--force", dir);
+    },
+  };
+}
+
+async function readIfThere(path: string): Promise<string | undefined> {
+  return existsSync(path) ? readFile(path, "utf8") : undefined;
+}
+
+/** A file as a commit has it, untrimmed, or nothing when the commit does not have it. */
+async function gitShow(dir: string, object: string): Promise<string | undefined> {
+  try {
+    return (await promisify(execFile)("git", ["show", object], { cwd: dir })).stdout;
+  } catch {
+    return undefined;
+  }
 }
