@@ -64,3 +64,11 @@ Feature: The agent may ask for another kind of attempt
     Then the run stops with a refusal, not a crash
     And the output says the attempt left fewer unit tests
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A request from an accepted attempt after which the scenario passes is not followed, and the scenario is built
+    Given the scripted code attempt for the first scenario of FR-GREET-02 asks for a steps attempt, saying why
+    And the scripted steps attempt it asks for fixes the shared Then step, and asks for a code attempt
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the executor was asked for every prepared attempt, in order
+    And the output says the steps attempt's request was not followed
