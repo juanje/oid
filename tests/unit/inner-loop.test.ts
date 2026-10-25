@@ -1,16 +1,20 @@
 import { describe, expect, test } from "vitest";
-import { type Failing, innerLoop, sameFailure } from "../../src/inner-loop.ts";
+import { type Failing, innerLoop, type RoundEnd, sameFailure } from "../../src/inner-loop.ts";
 
 const REFUSAL = { failed: "f", evidence: "e", next: "n" };
 const WHEN: Failing = { step: 'I greet "Ada" and "Grace"', message: "TypeError: greetPair is not a function" };
 const THEN: Failing = { step: 'I get "Hello, Ada and Grace!"', message: "AssertionError: undefined !== 'Hello, Ada and Grace!'" };
 
-/** A loop whose rounds answer `refusals` in turn, and whose scenario fails as `failures` say after each round. */
-async function loop(refusals: (typeof REFUSAL | undefined)[], failures: (Failing | undefined)[], rounds = 6) {
+/** A loop whose rounds end as `ends` say in turn, and whose scenario fails as `failures` say after each round. */
+async function loop(ends: RoundEnd<string>[], failures: (Failing | undefined)[], rounds = 6) {
   const noProgress: Failing[] = [];
+  const given: (string | undefined)[] = [];
   let checks = 0;
   const end = await innerLoop(
-    async () => refusals.shift(),
+    async (request) => {
+      given.push(request);
+      return ends.shift();
+    },
     async () => {
       checks += 1;
       return failures.shift();
@@ -21,7 +25,7 @@ async function loop(refusals: (typeof REFUSAL | undefined)[], failures: (Failing
       noProgress.push(failure);
     },
   );
-  return { end, noProgress, checks };
+  return { end, noProgress, checks, given };
 }
 
 describe("innerLoop", () => {
@@ -32,7 +36,7 @@ describe("innerLoop", () => {
   });
 
   test("ends at the first refused round, without checking the scenario", async () => {
-    const { end, checks } = await loop([REFUSAL], []);
+    const { end, checks } = await loop([{ refusal: REFUSAL }], []);
 
     expect({ end, checks }).toEqual({ end: { refusal: REFUSAL }, checks: 0 });
   });
@@ -42,6 +46,14 @@ describe("innerLoop", () => {
     const { end, noProgress } = await loop([undefined, undefined, undefined, undefined, undefined], [WHEN, THEN, THEN, THEN, undefined], 10);
 
     expect({ end, noProgress }).toEqual({ end: { built: true }, noProgress: [WHEN, THEN, THEN] });
+  });
+
+  test("a round that ends in a request does not check the scenario: the next round starts with it, and it counts toward the limit", async () => {
+    const { end, given, checks } = await loop([{ request: "steps, because of the shared step" }, undefined], [undefined]);
+    const limited = await loop([{ request: "steps" }, { request: "code" }], [], 2);
+
+    expect({ end, given, checks }).toEqual({ end: { built: true }, given: [undefined, "steps, because of the shared step"], checks: 1 });
+    expect(limited.end).toEqual({ limit: WHEN });
   });
 
   test("stops at its limit of rounds with the last failure, however the failure moves", async () => {
