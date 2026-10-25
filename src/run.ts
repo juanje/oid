@@ -241,6 +241,8 @@ class ScenarioBuild {
   // attempt asked for must fail on.
   private inRounds = false;
   private request: Asked | undefined;
+  // The scenario passed after an accepted attempt that asked for something: the round ends there.
+  private passed = false;
   private askedCode: Attempt["asked"];
   private beforeCode: string | undefined;
 
@@ -286,17 +288,21 @@ class ScenarioBuild {
         attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, reds: judgment.reds, asked: asked !== undefined }),
       );
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
-      if (!(await this.asks(kind, attempt.next))) return { refusal, rollback: accepted.restore };
+      if (!(await this.asks(kind, attempt.next, refusal === undefined))) return { refusal, rollback: accepted.restore };
       // A request ends the round whatever the verdict: a refused attempt is undone now, and not retried.
       if (refusal !== undefined) await accepted.restore();
       return { refusal, rollback: async () => {}, final: true };
     };
   }
 
-  /** Records what an attempt's report asked for, and whether the run follows it: only once the rounds have started. */
-  private async asks(by: AttemptKind, next: NextAttempt | undefined): Promise<boolean> {
+  /**
+   * Records what an attempt's report asked for, and whether the run follows it: only once the rounds have started, and,
+   * after an accepted attempt, only while the scenario still fails; when it passes, the round ends there.
+   */
+  private async asks(by: AttemptKind, next: NextAttempt | undefined, accepted: boolean): Promise<boolean> {
     if (next === undefined) return false;
-    const followed = this.inRounds;
+    if (this.inRounds && accepted) this.passed = (await this.runScenario()).status === "passed";
+    const followed = this.inRounds && !this.passed;
     await this.run.record({ event: "request", scenario: this.scenario.name, by, kind: next.kind, reason: next.reason, followed });
     if (followed) this.request = { by, ...next };
     return followed;
@@ -308,6 +314,7 @@ class ScenarioBuild {
    */
   private readonly round = async (request: Asked | undefined): Promise<RoundEnd<Asked>> => {
     this.request = undefined;
+    this.passed = false;
     // The attempt asked for works on the scenario's failure as it is now.
     if (request !== undefined) await this.runScenario();
     const retries = this.run.retries;
@@ -316,7 +323,7 @@ class ScenarioBuild {
       const refusal = await withRetries(retries, request === undefined ? this.testOnce : this.askedOnce(request.kind, asked!));
       if (this.request !== undefined) return { request: this.request };
       if (refusal !== undefined) return { refusal };
-      if (request?.kind === "steps") return undefined;
+      if (request?.kind === "steps" || this.passed) return undefined;
     }
     this.askedCode = request?.kind === "code" ? asked : undefined;
     const refusal = await this.codeRound();
@@ -423,7 +430,7 @@ class ScenarioBuild {
       await this.settle(this.pending.tests, "confirmed", this.lastCode);
       this.pending.tests = [];
     }
-    if (!(await this.asks("code", tried.next))) return tried;
+    if (!(await this.asks("code", tried.next, tried.refusal === undefined))) return tried;
     // A request ends the round whatever the verdict: a refused attempt is undone now, and not retried.
     if (tried.refusal !== undefined) await tried.rollback();
     return { ...tried, rollback: async () => {}, final: true };
