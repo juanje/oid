@@ -113,7 +113,7 @@ What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenari
 | An attempt starts | `attempt <kind> for "<scenario>"` | `, a retry …` when it is one |
 | An attempt ends | `attempt <kind> for "<scenario>": <verdict>` | `accepted`, `refused: <what failed>`, `stopped …` |
 | A Red | `  Red of the scenario` or `  Red of a unit test` | the scenario or test, then `: <class>`; `: undecided (provisional)` for one oid cannot classify |
-| An attempt asks for another kind | `request for "<scenario>": the <kind> attempt asks for a <kind> attempt` | `: ` and its reason |
+| An attempt asks for another kind | `request for "<scenario>": the <kind> attempt asks for a <kind> attempt` | `: ` and its reason, then `, not followed` when the run does not follow it |
 | A round makes no progress | `round for "<scenario>": no progress` | `, still failing at step "<step>"` |
 | A provisional Red is settled | `  Red confirmed by attempt <NN>` or `  Red refuted by attempt <NN>` | `: ` and the scenario or test; `<NN>` is the attempt's transcript number |
 
