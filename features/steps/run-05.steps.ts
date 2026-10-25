@@ -48,6 +48,12 @@ Given("a scripted executor that builds FR-GREET-02", function (this: RunWorld) {
   this.script = BUILD_GREET_02;
 });
 
+Given("the project's cucumber-js configuration names the paths of its feature files", async function (this: RunWorld) {
+  // With paths in its configuration, cucumber-js runs them all, whatever locations it is given (DOMAIN.md, cucumber-js).
+  await writeFile(join(this.projectDir, "cucumber.mjs"), 'export default {\n  paths: ["features/**/*.feature"],\n  import: ["features/steps/**/*.ts"],\n};\n');
+  git(this.projectDir, "commit", "-q", "-am", "chore: name the feature files' paths");
+});
+
 Given("FR-GREET-01's code no longer greets as its scenario says", async function (this: RunWorld) {
   await writeFile(join(this.projectDir, "src/greet.ts"), "export function greet(name: string): string {\n  return `Hi, ${name}!`;\n}\n");
   git(this.projectDir, "commit", "-q", "-am", "fix: a friendlier greeting");
