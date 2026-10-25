@@ -116,20 +116,42 @@ function failureText({ step, message, definition }: NonNullable<TaskContext["fai
   return `The scenario fails at the step "${step}":\n${message}${where}`;
 }
 
-/** The task of one attempt: what to build, from what the run gathered for it, and, for a retry, why the attempt before it was refused. */
+// What each kind writes, for the opening of a repair's task.
+const WRITES: Record<AttemptKind, string> = { steps: "step definitions", test: "unit tests", code: "source" };
+
+/**
+ * The task of one attempt: what to build, from what the run gathered for it, and, for a retry, why the attempt before
+ * it was refused. A repair, an attempt the gate sent back or one another attempt asked for, opens instead with its job,
+ * generated from that refusal or request, and its evidence, before the rest (FR-AGENT-03).
+ */
 export function taskFor({ kind, fr, scenario, refusal, asked, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "asked" | "context">): string {
-  const parts = [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
+  const repair = repairOpening({ kind, fr, scenario, refusal, asked, context });
+  const parts = repair ?? [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
   if (context?.fr !== undefined) parts.push(`The FR, from the spec:\n${context.fr}`);
   if (context?.domain !== undefined) parts.push(`The project's domain:\n${context.domain}`);
   if (context?.conventions !== undefined) parts.push(`The project's conventions:\n${context.conventions}`);
   if (context !== undefined && context.steps.length > 0) parts.push(`The scenario's steps:\n${context.steps.join("\n")}`);
-  if (context?.failure !== undefined) parts.push(failureText(context.failure));
+  // An attempt asked for got the scenario's failure in its opening.
+  if (context?.failure !== undefined && asked === undefined) parts.push(failureText(context.failure));
   if (context?.code !== undefined) parts.push(codeText(context.code));
   if (context?.patterns !== undefined && context.patterns.length > 0) {
     parts.push(`The step definitions the project has: reuse a step that matches instead of defining it again, which cucumber-js reports as ambiguous.\n${context.patterns.join("\n")}`);
   }
-  if (asked !== undefined) parts.push(`The ${asked.by} attempt before this one asked for this ${kind} attempt:\n${asked.reason}`);
+  if (repair !== undefined) return parts.join("\n\n");
   if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
   if (refusal?.focus !== undefined) parts.push(focusText(refusal.focus));
   return parts.join("\n\n");
+}
+
+/** A repair's job and its evidence, or nothing for any other attempt. */
+function repairOpening({ kind, fr, scenario, refusal, asked, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "asked" | "context">): string[] | undefined {
+  if (refusal?.from === "gate") {
+    const parts = [`Fix what the gate refused in the ${WRITES[kind]} of ${fr}: ${refusal.failed}`, `The gate's refusal:\n${formatRefusal(refusal)}`];
+    return refusal.focus === undefined ? parts : [...parts, focusText(refusal.focus)];
+  }
+  if (asked === undefined) return undefined;
+  const parts = [`Act on the ${asked.by} attempt's request for a ${kind} attempt in ${fr}, for the scenario "${scenario}".`, `Why the ${asked.by} attempt asked for it:\n${asked.reason}`];
+  if (context?.failure !== undefined) parts.push(failureText(context.failure));
+  if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
+  return parts;
 }

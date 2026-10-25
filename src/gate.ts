@@ -142,6 +142,7 @@ export function gateRefusal(results: CheckResult[], sendTo: AttemptKind = "code"
     .map(({ uri, line, name, steps, failure }) => ({ uri, line, name, ...(steps === undefined ? {} : { steps }), ...(failure === undefined ? {} : { failure }) }));
   const tests = failed.flatMap((result) => result.failedTests ?? []);
   return {
+    from: "gate",
     failed: `The gate failed: ${failed.map((result) => `${result.name}: ${result.ranNothing === true ? "FAIL, ran no test" : "FAIL"}`).join(", ")}`,
     evidence: failed.map((result) => `${result.name}:\n${result.failures?.join("\n") ?? result.output}`).join("\n"),
     next: NEXT_STEP[sendTo],

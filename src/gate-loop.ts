@@ -68,6 +68,7 @@ function ownerOfFailures(results: CheckResult[]): AttemptKind | undefined {
 
 function fewerTests(before: number, now: number): Refusal {
   return {
+    from: "gate",
     failed: "The attempt after the gate left fewer tests",
     evidence: `The gate ran ${before} unit tests before this attempt, and ${now} after it`,
     next: "Fix the error without removing tests",

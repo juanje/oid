@@ -19,6 +19,8 @@ export interface Refusal {
   focus?: { scenarios: FocusScenario[]; tests: string[] };
   /** The kind of attempt that can act on it, when it is not the kind refused: a test file the code cannot fix goes to a test attempt. */
   sendTo?: AttemptKind;
+  /** The gate's, not the refused attempt's own: the task of the attempt it goes back to opens with its job (FR-AGENT-03). */
+  from?: "gate";
 }
 
 export function formatRefusal(refusal: Refusal): string {
