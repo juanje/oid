@@ -75,7 +75,8 @@ describe("untaken", () => {
   });
 
   test("takes vitest's placeholder for a file no unit test loads as the whole file: taken when another report ran any part of it", () => {
-    const placeholder = report("/w/src/list.ts", [], [["(empty-report)", 1, 0]]);
+    // The placeholder comes with a branch at its place, as vitest's provider writes it.
+    const placeholder = report("/w/src/list.ts", [[1, 0, 0]], [["(empty-report)", 1, 0]]);
     const scenarios = report("/w/src/list.ts", [], [["greetList", 3, 1]]);
 
     expect(untaken([placeholder, scenarios], "/w")).toEqual([]);
