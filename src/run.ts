@@ -370,7 +370,8 @@ class ScenarioBuild {
       const before = testFiles.filter((file) => existsSync(join(scratch.dir, file)));
       const passedBefore = before.length === 0 ? [] : (await runUnitTests(scratch.dir, before, runCommand)).passed;
       await scratch.put(testFiles, "attempt");
-      return judgeNewTests(scratch.dir, testFiles, runCommand, await importedSymbolsOf(scratch.dir, testFiles), new Set(passedBefore));
+      // Awaited here: the scratch copy is removed in finally, once the judgment is done.
+      return await judgeNewTests(scratch.dir, testFiles, runCommand, await importedSymbolsOf(scratch.dir, testFiles), new Set(passedBefore));
     } finally {
       await scratch.remove();
     }
