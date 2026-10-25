@@ -32,3 +32,35 @@ Feature: The agent may ask for another kind of attempt
     Then the run stops with a refusal, not a crash
     And the output names the second scenario as passing on the code from before its own
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A code attempt that finds two unit tests contradicting each other asks for a test attempt, which fixes one, and the run goes on
+    Given the scripted code attempt for the first scenario of FR-GREET-02 asks for a steps attempt, saying why
+    And the scripted steps attempt it asks for fixes the shared Then step
+    And the scripted test attempt for the second scenario writes two tests that contradict each other, and its code attempt asks for a test attempt, saying why
+    And the scripted test attempt it asks for changes the second test so that it agrees with the first and still fails on the code from before
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the executor was asked for every prepared attempt, in order
+    And the test attempt asked for was given the reason
+    And the summary counts two requests, and two attempts asked for accepted
+    And every scenario of FR-GREET-02 passes on the run's branch
+
+  Scenario: A test attempt asked for that loosens a red test, so that it passes on the code from before it, is not accepted
+    Given the scripted code attempt for the first scenario of FR-GREET-02 asks for a steps attempt, saying why
+    And the scripted steps attempt it asks for fixes the shared Then step
+    And the scripted test attempt for the second scenario writes two tests that contradict each other, and its code attempt asks for a test attempt, saying why
+    And the scripted test attempt it asks for loosens the second test so that it passes on the code from before
+    When I run "oid run FR-GREET-02"
+    Then the run stops with a refusal, not a crash
+    And the output names the second test as passing before its code
+    And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A test attempt asked for that removes a unit test is not accepted
+    Given the scripted code attempt for the first scenario of FR-GREET-02 asks for a steps attempt, saying why
+    And the scripted steps attempt it asks for fixes the shared Then step
+    And the scripted test attempt for the second scenario writes two tests that contradict each other, and its code attempt asks for a test attempt, saying why
+    And the scripted test attempt it asks for removes the second test
+    When I run "oid run FR-GREET-02"
+    Then the run stops with a refusal, not a crash
+    And the output says the attempt left fewer unit tests
+    And the run's branch has no commit on top of the starting HEAD
