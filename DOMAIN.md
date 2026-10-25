@@ -20,7 +20,8 @@ Each term has one meaning. The last column names what it must not be confused wi
 | **Run** | One `oid run`, with its own worktree, branch and log. | — |
 | **Attempt** | One agent process that produces one diff of one kind. | A *session* (Pi's object; one per attempt) and a *turn* (one model response inside an attempt). |
 | **Attempt kind** | steps, test, code, refactor-code or refactor-tests. Each has its own write boundary. | — |
-| **Retry** | A new attempt after a refusal, from the last checkpoint, with the refusal in its task. | — |
+| **Retry** | A new attempt after a refusal, from the last checkpoint, with the refusal in its task; or a new round after a round with no progress. | — |
+| **Round** | In a scenario's inner loop, its test attempts and the code attempts after them. A round makes no progress when its test attempt adds no test, or when after its accepted code the scenario fails the same way: the same step and the same message, without its stack lines (`at …`). | An *attempt*, and a *retry*. |
 | **Checkpoint** | A commit in the run's worktree after an accepted attempt: the rollback target. | Evidence. |
 | **Valid Red** | A failure that shows the behaviour or the interface is missing (Red classes, below). | A failure that shows the test is broken. |
 | **Broken version** | The code a new test must fail on: the previous checkpoint's code, or a mutant. | — |
@@ -114,6 +115,7 @@ What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenari
 | An attempt starts | `attempt <kind> for "<scenario>"` | `, a retry …` when it is one |
 | An attempt ends | `attempt <kind> for "<scenario>": <verdict>` | `accepted`, `refused: <what failed>`, `stopped …` |
 | A Red | `  Red of the scenario` or `  Red of a unit test` | the scenario or test, then `: <class>`; `: undecided (provisional)` for one oid cannot classify |
+| A round makes no progress | `round for "<scenario>": no progress` | `, still failing at step "<step>"` |
 | A provisional Red is settled | `  Red confirmed by attempt <NN>` or `  Red refuted by attempt <NN>` | `: ` and the scenario or test; `<NN>` is the attempt's transcript number |
 
 ### Configuration
@@ -121,7 +123,7 @@ What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenari
 | File | Whose | Holds | Read from |
 |:--|:--|:--|:--|
 | `<config dir>/config.json` | The person's | `model`, as `<provider>/<model>` (later the effort and the notifications) | `$OID_CONFIG_DIR`, else `$XDG_CONFIG_HOME/oid`, else `~/.config/oid` |
-| `.oid.json` | The project's, committed | `limits` (`retries`, `turns`) and `paths` (`domain`, `conventions`); later the stack and the commands | The run's `HEAD`, never the working copy |
+| `.oid.json` | The project's, committed | `limits` (`retries`, `turns`, `rounds`) and `paths` (`domain`, `conventions`); later the stack and the commands | The run's `HEAD`, never the working copy |
 
 A `model` in `.oid.json` is an error: the model is personal (NFR-08).
 
