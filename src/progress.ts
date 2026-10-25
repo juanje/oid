@@ -17,6 +17,7 @@ const STAGES: Record<StageEvent["stage"], string> = {
 export function progressLine(event: LogEvent): string | undefined {
   if (event.event === "stage") return `stage ${event.stage}: ${STAGES[event.stage]}`;
   if (event.event === "attempting") return `attempt ${event.kind} for "${event.scenario}"${event.retry ? ", a retry with the refusal of the one before it" : ""}`;
+  if (event.event === "red") return `  Red ${event.verdict} by attempt ${String(event.attempt).padStart(2, "0")}: ${event.what}`;
   if (event.event !== "attempt") return undefined;
   const ended = `attempt ${event.kind} for "${event.scenario}": ${event.verdict}${event.refusal === undefined ? "" : `: ${event.refusal.failed}`}`;
   // A steps attempt's Red is its scenario's; a test attempt's are its new unit tests'.

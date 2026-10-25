@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import type { Scenario } from "./cucumber-messages.ts";
 import type { AttemptKind } from "./executor.ts";
 import { git } from "./git.ts";
+import { provisionalOf } from "./evidence.ts";
 import type { Refusal } from "./refusal.ts";
 
 // The run log (FR-STATE-02): append-only, one JSON event per line, in the repository's .git/oid/runs. Everything in it
@@ -67,6 +68,16 @@ export interface GateEvent {
   sendTo?: AttemptKind;
 }
 
+/** A provisional Red the code settled: confirmed when it made it pass, refuted when its attempts ran out (FR-EVID-01). */
+export interface RedEvent {
+  event: "red";
+  /** The test, or the scenario as `<uri>:<line> "<name>"`. */
+  what: string;
+  verdict: "confirmed" | "refuted";
+  /** The code attempt that settled it, by its transcript number. */
+  attempt: number;
+}
+
 export interface StopEvent {
   event: "stop";
   limit: "turns";
@@ -82,6 +93,8 @@ export interface Measures {
   cacheRead?: number;
   cost: number;
   deniedToolCalls: number;
+  /** The provisional Reds accepted, and of those, the ones confirmed and refuted; logs before 0.1.8 do not have it. */
+  provisional?: { accepted: number; confirmed: number; refuted: number };
   /** The run's time, on a monotonic clock, so that a suspended machine does not count. */
   timeMs: number;
 }
@@ -92,7 +105,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;
@@ -142,7 +155,8 @@ export async function startRunLog(dir: string, runId: string, onEvent: (event: L
 export function measuresOf(events: LogEvent[], timeMs: number): Measures {
   const attempts = events.filter((event): event is AttemptEvent => event.event === "attempt");
   const gateRejections = events.flatMap((event) => (event.event === "gate" && event.verdict === "refused" && event.sendTo !== undefined ? [event.sendTo] : []));
-  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, timeMs };
+  const provisional = { accepted: 0, confirmed: 0, refuted: 0 };
+  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, provisional, timeMs };
   const last = new Map<AttemptKind, AttemptEvent>();
   for (const attempt of attempts) {
     measures.attempts[attempt.kind] = (measures.attempts[attempt.kind] ?? 0) + 1;
@@ -153,8 +167,10 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
     measures.cacheRead = (measures.cacheRead ?? 0) + (attempt.cacheRead ?? 0);
     measures.cost += attempt.cost ?? 0;
     measures.deniedToolCalls += attempt.deniedToolCalls ?? 0;
+    provisional.accepted += provisionalOf(attempt.reds ?? []).length;
     last.set(attempt.kind, attempt);
   }
+  for (const event of events) if (event.event === "red") provisional[event.verdict] += 1;
   // A refusal of the gate rejects the work of the attempt kind it goes back to.
   for (const kind of gateRejections) measures.rejections[kind] = (measures.rejections[kind] ?? 0) + 1;
   return measures;

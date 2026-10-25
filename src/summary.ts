@@ -39,12 +39,13 @@ function ending(events: LogEvent[], end: EndEvent | undefined): string {
   return "Stopped on an error no attempt can fix.";
 }
 
-function measures({ attempts, rejections, blindRetries, tokens, cost, timeMs }: Measures): string {
+function measures({ attempts, rejections, blindRetries, provisional, tokens, cost, timeMs }: Measures): string {
   const byKind = (counts: Partial<Record<string, number>>) =>
     Object.entries(counts)
       .map(([kind, count]) => `${kind} ${count}`)
       .join(", ") || "none";
-  return `Measures: attempts ${byKind(attempts)}; rejections ${byKind(rejections)}; blind retries ${blindRetries}; tokens ${tokens}; cost ${cost.toFixed(4)}; time ${(timeMs / 1000).toFixed(1)} s`;
+  const reds = provisional === undefined ? "" : `; provisional Reds ${provisional.accepted} (confirmed ${provisional.confirmed}, refuted ${provisional.refuted})`;
+  return `Measures: attempts ${byKind(attempts)}; rejections ${byKind(rejections)}; blind retries ${blindRetries}${reds}; tokens ${tokens}; cost ${cost.toFixed(4)}; time ${(timeMs / 1000).toFixed(1)} s`;
 }
 
 function location(scenario: Scenario): string {
