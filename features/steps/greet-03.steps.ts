@@ -51,12 +51,19 @@ Then("the output says the scenario's Red is confirmed", function (this: RunWorld
   assertLineWith(this, `"${SCENARIO}"`, ["confirmed"]);
 });
 
+/** Asserts that the refusal the run stopped with names `what` as refuted. */
+function assertRefusedAsRefuted(world: RunWorld, what: string): void {
+  const refusal = world.output.slice(world.output.lastIndexOf("Refused: "));
+  assert.ok(refusal.startsWith("Refused: ") && /\brefuted\b/.test(refusal.split("\n")[0]!), `The run did not stop with a refutation:\n${world.output}`);
+  assert.ok(refusal.includes(what), `The refusal does not name "${what}":\n${refusal}`);
+}
+
 Then("the output names the test as refuted", function (this: RunWorld) {
-  assertLineWith(this, NEW_TEST, ["refuted"]);
+  assertRefusedAsRefuted(this, NEW_TEST);
 });
 
 Then("the output names the scenario as refuted", function (this: RunWorld) {
-  assertLineWith(this, SCENARIO, ["refuted"]);
+  assertRefusedAsRefuted(this, SCENARIO);
 });
 
 Then("the test attempt after the code attempts was given the refusal, naming the test as refuted", function (this: RunWorld) {
