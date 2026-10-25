@@ -49,14 +49,15 @@ describe("innerLoop", () => {
   });
 
   test("a round after which the scenario fails the same way makes no progress; one that moves the failure on resets the count", async () => {
-    // WHEN → THEN moves on; THEN again is one round with no progress; WHEN moves on and resets; THEN, THEN stall.
+    // WHEN → THEN moves on; THEN again is one round with no progress; WHEN moves on and resets the count, so the
+    // next WHEN is the first in a row again, and only the one after it uses the retry up.
     const { end, stalls } = await loop(
       [{ added: true }, { added: true }, { added: true }, { added: true }, { added: true }],
-      [THEN, THEN, WHEN, THEN, THEN],
+      [THEN, THEN, WHEN, WHEN, WHEN],
       { retries: 1, rounds: 10 },
     );
 
-    expect({ end, stalls }).toEqual({ end: { stalled: THEN }, stalls: [THEN, THEN] });
+    expect({ end, stalls }).toEqual({ end: { stalled: WHEN }, stalls: [THEN, WHEN, WHEN] });
   });
 
   test("stops at its limit of rounds with the last failure, even when every round moves the failure on", async () => {
