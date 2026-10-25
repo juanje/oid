@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { CommandOptions, CommandResult } from "../../src/command.ts";
-import { frScenarios, listScenarios, runScenarios } from "../../src/scenarios.ts";
+import { frScenarios, listScenarios, runAllScenarios, runScenarios } from "../../src/scenarios.ts";
 import { GREET_02_FIRST as FIRST, GREET_02_SECOND as SECOND, recorded } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
 
@@ -72,5 +72,17 @@ describe("runScenarios", () => {
       { ...FIRST, status: "passed" },
       { ...missing, status: "not run" },
     ]);
+  });
+});
+
+describe("runAllScenarios", () => {
+  test("given locations, keeps only their results, whatever cucumber-js ran: a configuration with paths runs them all", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    // The recording holds both scenarios of FR-GREET-02, as cucumber-js runs them when its configuration names paths.
+    const run = recordedCucumber(dir, ["features/greet-02.feature:4"], recorded("cucumber-greet-02-run.ndjson"));
+
+    const { results, steps } = await runAllScenarios(dir, run, undefined, ["features/greet-02.feature:4"]);
+
+    expect({ results, steps: [...steps.keys()] }).toEqual({ results: [{ ...FIRST, status: "passed" }], steps: ["features/greet-02.feature:4"] });
   });
 });
