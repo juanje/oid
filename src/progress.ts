@@ -17,7 +17,9 @@ const STAGES: Record<StageEvent["stage"], string> = {
 export function progressLine(event: LogEvent): string | undefined {
   if (event.event === "stage") return `stage ${event.stage}: ${STAGES[event.stage]}`;
   if (event.event === "attempting") return `attempt ${event.kind} for "${event.scenario}"${event.retry ? ", a retry with the refusal of the one before it" : ""}`;
-  if (event.event === "request") return `request for "${event.scenario}": the ${event.by} attempt asks for a ${event.kind} attempt: ${event.reason}`;
+  if (event.event === "request") {
+    return `request for "${event.scenario}": the ${event.by} attempt asks for a ${event.kind} attempt: ${event.reason}${event.followed === false ? ", not followed" : ""}`;
+  }
   if (event.event === "round") return `round for "${event.scenario}": ${event.verdict}, still failing at step "${event.step}"`;
   if (event.event === "red") return `  Red ${event.verdict} by attempt ${String(event.attempt).padStart(2, "0")}: ${event.what}`;
   if (event.event !== "attempt") return undefined;

@@ -47,7 +47,7 @@ function measures({ attempts, rejections, blindRetries, noProgressRounds, reques
       .map(([kind, count]) => `${kind} ${count}`)
       .join(", ") || "none";
   const rounds = noProgressRounds === undefined ? "" : `; rounds with no progress ${noProgressRounds}`;
-  const asked = requests === undefined ? "" : `; requests ${requests.asked} (accepted ${requests.accepted})`;
+  const asked = requests === undefined ? "" : `; requests that changed the next kind ${requests.changing ?? "?"} of ${requests.asked} (accepted ${requests.accepted})`;
   const reds = provisional === undefined ? "" : `; provisional Reds ${provisional.accepted} (confirmed ${provisional.confirmed}, refuted ${provisional.refuted})`;
   return `Measures: attempts ${byKind(attempts)}; rejections ${byKind(rejections)}; blind retries ${blindRetries}${rounds}${asked}${reds}; tokens ${tokens}; cost ${cost.toFixed(4)}; time ${(timeMs / 1000).toFixed(1)} s`;
 }

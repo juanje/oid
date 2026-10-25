@@ -296,10 +296,10 @@ class ScenarioBuild {
   /** Records what an attempt's report asked for, and whether the run follows it: only once the rounds have started. */
   private async asks(by: AttemptKind, next: NextAttempt | undefined): Promise<boolean> {
     if (next === undefined) return false;
-    await this.run.record({ event: "request", scenario: this.scenario.name, by, kind: next.kind, reason: next.reason });
-    if (!this.inRounds) return false;
-    this.request = { by, ...next };
-    return true;
+    const followed = this.inRounds;
+    await this.run.record({ event: "request", scenario: this.scenario.name, by, kind: next.kind, reason: next.reason, followed });
+    if (followed) this.request = { by, ...next };
+    return followed;
   }
 
   /**

@@ -4,6 +4,7 @@ import type { Scenario } from "./cucumber-messages.ts";
 import type { AttemptKind } from "./executor.ts";
 import { git } from "./git.ts";
 import { provisionalOf } from "./evidence.ts";
+import { changesNextKind } from "./requests.ts";
 import type { Refusal } from "./refusal.ts";
 
 // The run log (FR-STATE-02): append-only, one JSON event per line, in the repository's .git/oid/runs. Everything in it
@@ -91,6 +92,8 @@ export interface RequestEvent {
   by: AttemptKind;
   kind: AttemptKind;
   reason: string;
+  /** Whether the run followed it; logs of 0.1.11 do not say. */
+  followed?: boolean;
 }
 
 /** A round of a scenario's inner loop that made no progress, with the step where the scenario still fails (FR-RUN-03). */
@@ -120,8 +123,11 @@ export interface Measures {
   cacheRead?: number;
   cost: number;
   deniedToolCalls: number;
-  /** Requests for another attempt kind, and the attempts asked for that were accepted (FR-RUN-04); logs before 0.1.11 do not have it. */
-  requests?: { asked: number; accepted: number };
+  /**
+   * Requests for another attempt kind: all of them, those the run followed that changed the next kind, and the attempts
+   * asked for that were accepted (FR-RUN-04); logs before 0.1.11 do not have it, and those of 0.1.11 not `changing`.
+   */
+  requests?: { asked: number; changing?: number; accepted: number };
   /** Rounds after which the scenario failed the same way (FR-RUN-03); logs before 0.1.10 do not have it. */
   noProgressRounds?: number;
   /** The provisional Reds accepted, and of those, the ones confirmed and refuted; logs before 0.1.8 do not have it. */
@@ -188,8 +194,10 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
   const gateRejections = events.flatMap((event) => (event.event === "gate" && event.verdict === "refused" && event.sendTo !== undefined ? [event.sendTo] : []));
   const provisional = { accepted: 0, confirmed: 0, refuted: 0 };
   const noProgressRounds = events.filter((event) => event.event === "round").length;
+  const asked = events.filter((event) => event.event === "request");
   const requests = {
-    asked: events.filter((event) => event.event === "request").length,
+    asked: asked.length,
+    changing: asked.filter((request) => request.followed === true && changesNextKind(request.by, request.kind)).length,
     accepted: attempts.filter((attempt) => attempt.asked === true && attempt.verdict === "accepted").length,
   };
   const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, noProgressRounds, requests, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, provisional, timeMs };
