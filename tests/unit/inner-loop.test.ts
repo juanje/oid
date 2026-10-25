@@ -1,69 +1,53 @@
 import { describe, expect, test } from "vitest";
-import { type Failing, innerLoop, type RoundResult, sameFailure } from "../../src/inner-loop.ts";
+import { type Failing, innerLoop, sameFailure } from "../../src/inner-loop.ts";
 
 const REFUSAL = { failed: "f", evidence: "e", next: "n" };
 const WHEN: Failing = { step: 'I greet "Ada" and "Grace"', message: "TypeError: greetPair is not a function" };
 const THEN: Failing = { step: 'I get "Hello, Ada and Grace!"', message: "AssertionError: undefined !== 'Hello, Ada and Grace!'" };
-const LIMITS = { retries: 1, rounds: 6 };
 
-/** A loop whose rounds answer `results` in turn, and whose scenario fails as `failures` say after each round that adds a test. */
-async function loop(results: RoundResult[], failures: (Failing | undefined)[], limits = LIMITS) {
-  const given: (Failing | undefined)[] = [];
-  const stalls: Failing[] = [];
+/** A loop whose rounds answer `refusals` in turn, and whose scenario fails as `failures` say after each round. */
+async function loop(refusals: (typeof REFUSAL | undefined)[], failures: (Failing | undefined)[], rounds = 6) {
+  const noProgress: Failing[] = [];
   let checks = 0;
   const end = await innerLoop(
-    async (previous) => {
-      given.push(previous);
-      return results.shift()!;
-    },
+    async () => refusals.shift(),
     async () => {
       checks += 1;
       return failures.shift();
     },
     WHEN,
-    limits,
+    rounds,
     async (failure) => {
-      stalls.push(failure);
+      noProgress.push(failure);
     },
   );
-  return { end, given, stalls, checks };
+  return { end, noProgress, checks };
 }
 
 describe("innerLoop", () => {
-  test("repeats rounds until the scenario passes, while each round moves the failure on", async () => {
-    const { end, given } = await loop([{ added: true }, { added: true }], [THEN, undefined]);
+  test("repeats rounds until the scenario passes", async () => {
+    const { end, checks } = await loop([undefined, undefined, undefined], [THEN, THEN, undefined]);
 
-    expect({ end, given }).toEqual({ end: { built: true }, given: [undefined, undefined] });
+    expect({ end, checks }).toEqual({ end: { built: true }, checks: 3 });
   });
 
   test("ends at the first refused round, without checking the scenario", async () => {
-    const { end, checks } = await loop([{ refusal: REFUSAL }], []);
+    const { end, checks } = await loop([REFUSAL], []);
 
     expect({ end, checks }).toEqual({ end: { refusal: REFUSAL }, checks: 0 });
   });
 
-  test("a round that adds no test makes no progress, without checking the scenario: the next round gets the unchanged failure, and when the retries run out the loop stalls", async () => {
-    const { end, given, stalls, checks } = await loop([{ added: false }, { added: false }], []);
+  test("records each round after which the scenario fails the same way, and goes on: a round with no progress spends no retry", async () => {
+    // WHEN stays WHEN: no progress; WHEN → THEN moves on; THEN stays THEN, twice: no progress; then it passes.
+    const { end, noProgress } = await loop([undefined, undefined, undefined, undefined, undefined], [WHEN, THEN, THEN, THEN, undefined], 10);
 
-    expect({ end, given, stalls, checks }).toEqual({ end: { stalled: WHEN }, given: [undefined, WHEN], stalls: [WHEN, WHEN], checks: 0 });
+    expect({ end, noProgress }).toEqual({ end: { built: true }, noProgress: [WHEN, THEN, THEN] });
   });
 
-  test("a round after which the scenario fails the same way makes no progress; one that moves the failure on resets the count", async () => {
-    // WHEN → THEN moves on; THEN again is one round with no progress; WHEN moves on and resets the count, so the
-    // next WHEN is the first in a row again, and only the one after it uses the retry up.
-    const { end, stalls } = await loop(
-      [{ added: true }, { added: true }, { added: true }, { added: true }, { added: true }],
-      [THEN, THEN, WHEN, WHEN, WHEN],
-      { retries: 1, rounds: 10 },
-    );
-
-    expect({ end, stalls }).toEqual({ end: { stalled: WHEN }, stalls: [THEN, WHEN, WHEN] });
-  });
-
-  test("stops at its limit of rounds with the last failure, even when every round moves the failure on", async () => {
+  test("stops at its limit of rounds with the last failure, however the failure moves", async () => {
     const alternating = [THEN, WHEN, THEN];
 
-    const { end, checks } = await loop([{ added: true }, { added: true }, { added: true }], alternating, { retries: 1, rounds: 3 });
+    const { end, checks } = await loop([undefined, undefined, undefined], alternating, 3);
 
     expect({ end, checks }).toEqual({ end: { limit: THEN }, checks: 3 });
   });

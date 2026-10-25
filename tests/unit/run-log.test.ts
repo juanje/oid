@@ -52,6 +52,12 @@ describe("measuresOf", () => {
     expect(measuresOf(events, 1).provisional).toEqual({ accepted: 2, confirmed: 1, refuted: 1 });
   });
 
+  test("counts the rounds with no progress", () => {
+    const round = (scenario: string): LogEvent => ({ event: "round", scenario, verdict: "no progress", step: "I get it", failure: "AssertionError" });
+
+    expect(measuresOf([round("A"), round("A"), round("B")], 1).noProgressRounds).toBe(3);
+  });
+
   test("totals the tokens read from the provider's cache, apart from the tokens", () => {
     const events = [attempt("steps", "accepted", { tokens: 100, cacheRead: 30 }), attempt("test", "accepted", { tokens: 200, cacheRead: 120 }), attempt("code", "accepted")];
 
