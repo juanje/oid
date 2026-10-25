@@ -3,7 +3,7 @@ import { chmod, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { startRunLog } from "../../src/run-log.ts";
-import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
+import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, scratchCopy, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
@@ -204,5 +204,40 @@ describe("finishRun", () => {
     expect(git(repo, "rev-parse", worktree.branch)).toBe(start);
     expect(git(repo, "ls-tree", "-r", "--name-only", worktree.checkpoints)).toContain("features/steps/a.steps.ts");
     expect(existsSync(worktree.dir)).toBe(false);
+  });
+});
+
+describe("scratchCopy", () => {
+  test("is the run's code at an earlier checkpoint, beside its worktree, with files put from the last checkpoint or from the attempt", async () => {
+    const repo = await tempRepo({ "src/greet.ts": "before\n", "tests/a.test.ts": "old\n" });
+    await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
+    const worktree = await createRunWorktree(repo, "r1");
+    const before = git(worktree.dir, "rev-parse", "HEAD");
+    await writeFiles(worktree.dir, { "src/greet.ts": "after\n" });
+    await takeAttemptDiff(worktree.dir);
+    await checkpoint(worktree, "code");
+    await writeFiles(worktree.dir, { "tests/a.test.ts": "new\n", "tests/b.test.ts": "added\n" });
+    const files = ["tests/a.test.ts", "tests/b.test.ts"];
+    const read = async (dir: string) => ({
+      greet: await readFile(join(dir, "src/greet.ts"), "utf8"),
+      a: await readFile(join(dir, "tests/a.test.ts"), "utf8"),
+      b: existsSync(join(dir, "tests/b.test.ts")),
+    });
+
+    const scratch = await scratchCopy(worktree, before);
+    await scratch.put(files, "checkpoint");
+    const fromCheckpoint = await read(scratch.dir);
+    await scratch.put(files, "attempt");
+    const fromAttempt = await read(scratch.dir);
+    const shares = existsSync(join(scratch.dir, "node_modules/dep/index.js"));
+    await scratch.remove();
+
+    expect({ fromCheckpoint, fromAttempt, shares, beside: dirname(scratch.dir) === dirname(worktree.dir), removed: existsSync(scratch.dir) }).toEqual({
+      fromCheckpoint: { greet: "before\n", a: "old\n", b: false },
+      fromAttempt: { greet: "before\n", a: "new\n", b: true },
+      shares: true,
+      beside: true,
+      removed: false,
+    });
   });
 });

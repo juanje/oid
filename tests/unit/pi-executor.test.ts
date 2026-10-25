@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
-import type { Attempt, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
 import { piExecutor } from "../../src/pi-executor.ts";
 import { type ModelAttempt, ScriptedModel } from "../../features/support/scripted-model.ts";
 
@@ -24,7 +24,7 @@ afterEach(async () => {
 
 /** One code attempt for GREET-01's scenario, whose try answers `tried` and whose report is kept. */
 function codeAttempt(turns = 40, tried: TryResult = { passed: true }) {
-  const calls = { tries: [] as TryTarget[], reports: [] as string[] };
+  const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[] };
   const attempt: Attempt = {
     kind: "code",
     fr: "FR-GREET-01",
@@ -36,7 +36,10 @@ function codeAttempt(turns = 40, tried: TryResult = { passed: true }) {
         calls.tries.push(target);
         return tried;
       },
-      report: (result) => calls.reports.push(result),
+      report: (result, next) => {
+        calls.reports.push(result);
+        calls.next.push(next);
+      },
     },
   };
   return { attempt, calls };
@@ -65,6 +68,16 @@ describe("piExecutor", () => {
     expect(existsSync(join(worktree, "src/greet.ts"))).toBe(true);
     expect(await readFile(join(worktree, "src/greet.ts"), "utf8")).toBe(await readFile(join(attemptDir("code"), "src/greet.ts"), "utf8"));
     expect(calls.reports).toEqual(["scripted code attempt"]);
+  });
+
+  test("gives oid's report the attempt kind the agent asks for next, with its reason", async () => {
+    const next = { kind: "steps" as const, reason: "The shared Then step checks the wrong greeting" };
+    const model = await scripted({ dir: attemptDir("code"), next });
+    const { attempt, calls } = codeAttempt();
+
+    await executorOn(model).run(attempt);
+
+    expect(calls.next).toEqual([next]);
   });
 
   test("keeps its agent's whole session as JSONL where the attempt says, creating the directory", async () => {

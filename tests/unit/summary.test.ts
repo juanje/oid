@@ -54,6 +54,12 @@ describe("summarize", () => {
     expect(ending).toMatch(new RegExp(`round limit.*${FIRST.name}`));
   });
 
+  test("counts the requests among the measures, and the attempts asked for accepted", () => {
+    const text = summarize([START, { event: "end", exitCode: 0, measures: { ...MEASURES, requests: { asked: 2, accepted: 1 } } }], "/repo/log.jsonl");
+
+    expect(text).toMatch(/\brequests 2 \(accepted 1\)/);
+  });
+
   test("counts the rounds with no progress among the measures", () => {
     const text = summarize([START, { event: "end", exitCode: 0, measures: { ...MEASURES, noProgressRounds: 2 } }], "/repo/log.jsonl");
 

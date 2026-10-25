@@ -50,6 +50,12 @@ describe("progressLine", () => {
     );
   });
 
+  test("says when an attempt asks for another kind, with its reason", () => {
+    expect(progressLine({ event: "request", scenario: SCENARIO, by: "code", kind: "steps", reason: "The shared Then step checks the wrong greeting" })).toBe(
+      `request for "${SCENARIO}": the code attempt asks for a steps attempt: The shared Then step checks the wrong greeting`,
+    );
+  });
+
   test("gives no line for the events the summary covers", () => {
     expect(progressLine({ event: "stop", limit: "turns" })).toBeUndefined();
   });

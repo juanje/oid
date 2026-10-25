@@ -24,6 +24,16 @@ describe("systemPromptFor", () => {
     }
   });
 
+  test("tells each kind which kind of attempt owns the other paths, from the paths each may write, so that it can ask for it", () => {
+    for (const kind of ["steps", "test", "code"] as const) {
+      const prompt = systemPromptFor(kind);
+
+      for (const other of (["steps", "test", "code"] as const).filter((one) => one !== kind)) {
+        for (const path of WRITABLE[other]) expect(prompt).toMatch(new RegExp(`\\b${other}\\b[^\\n]*${path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`));
+      }
+    }
+  });
+
   test("tells the test and steps agents the runner oid runs their files with, and what those files import from it", () => {
     for (const [kind, runner] of [["test", RUNNERS.unit], ["steps", RUNNERS.scenarios]] as const) {
       const prompt = systemPromptFor(kind);
@@ -117,6 +127,13 @@ describe("taskFor", () => {
 
     expect(task).toContain(texts.domain);
     expect(task).toContain(texts.conventions);
+  });
+
+  test("gives an attempt another one asked for which kind asked for it, and why", () => {
+    const task = taskFor({ kind: "steps", fr: "FR-GREET-02", scenario: SCENARIO, asked: { by: "code", reason: "The shared Then step checks the wrong greeting" }, context: CONTEXT });
+
+    expect(task).toContain("The shared Then step checks the wrong greeting");
+    expect(task).toMatch(/\bcode attempt\b/);
   });
 
   test("gives a retry the refusal of the attempt before it", () => {

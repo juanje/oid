@@ -52,6 +52,18 @@ describe("measuresOf", () => {
     expect(measuresOf(events, 1).provisional).toEqual({ accepted: 2, confirmed: 1, refuted: 1 });
   });
 
+  test("counts the requests for another attempt kind, and the attempts asked for that were accepted", () => {
+    const events: LogEvent[] = [
+      { event: "request", scenario: "A person", by: "code", kind: "steps", reason: "the step" },
+      attempt("steps", "refused", { asked: true, refusal: REFUSED }),
+      attempt("steps", "accepted", { asked: true, retry: true }),
+      { event: "request", scenario: "A person", by: "test", kind: "code", reason: "wiring" },
+      attempt("code", "accepted", { asked: true }),
+    ];
+
+    expect(measuresOf(events, 1).requests).toEqual({ asked: 2, accepted: 2 });
+  });
+
   test("counts the rounds with no progress", () => {
     const round = (scenario: string): LogEvent => ({ event: "round", scenario, verdict: "no progress", step: "I get it", failure: "AssertionError" });
 
