@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { OID_FACTS, systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
+import { CALL_AS_OFFERED, OID_FACTS, systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
 import { AGENT_TOOLS } from "../../src/agent-tools.ts";
 import { WRITABLE } from "../../src/boundaries.ts";
 import { RUNNERS } from "../../src/runners.ts";
@@ -32,6 +32,16 @@ describe("systemPromptFor", () => {
         for (const path of WRITABLE[other]) expect(prompt).toMatch(new RegExp(`\\b${other}\\b[^\\n]*${path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`));
       }
     }
+  });
+
+  test("gives the steps and test agents, who write a Red before its code exists, the value of calling the code as it will be offered; not the code agent", () => {
+    for (const kind of ["steps", "test"] as const) {
+      expect(CALL_AS_OFFERED[kind]).toBeDefined();
+      expect(systemPromptFor(kind)).toContain(CALL_AS_OFFERED[kind]);
+    }
+    const code = systemPromptFor("code");
+    expect(CALL_AS_OFFERED.code).toBeUndefined();
+    for (const value of Object.values(CALL_AS_OFFERED)) expect(code).not.toContain(value);
   });
 
   test("tells the test and steps agents the runner oid runs their files with, and what those files import from it", () => {
