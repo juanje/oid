@@ -32,7 +32,7 @@ When("I run {string} with the oid command", function (this: RunWorld, command: s
 
 // The commands oid has today, as the person types them; the help must list each with its usage.
 const COMMANDS = [
-  { name: "run", usage: "oid run <FR>" },
+  { name: "run", usage: "oid run <FR…>" },
   { name: "help", usage: "oid help" },
 ];
 

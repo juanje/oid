@@ -9,8 +9,8 @@ const WITH = scenario("features/greet-03.feature", 4, "A person is greeted with 
 const failing = (status: string, message = "") => ({ step: "a step", kind: "Outcome" as const, status, message });
 
 describe("runIdOf", () => {
-  test("names a run of one FR after it, and a run of several after the first and the last", () => {
-    expect([runIdOf(["FR-A-01"], "20261025T120000"), runIdOf(["FR-A-01", "FR-B-02", "NFR-02"], "20261025T120000")]).toEqual(["FR-A-01-20261025T120000", "FR-A-01..NFR-02-20261025T120000"]);
+  test("names a run of one FR after it, and a run of several after the first and the last, as a name a git branch can take", () => {
+    expect([runIdOf(["FR-A-01"], "20261025T120000"), runIdOf(["FR-A-01", "FR-B-02", "NFR-02"], "20261025T120000")]).toEqual(["FR-A-01-20261025T120000", "FR-A-01-to-NFR-02-20261025T120000"]);
   });
 });
 

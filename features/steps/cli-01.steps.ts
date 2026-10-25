@@ -51,7 +51,7 @@ Then("the run's summary marks the first scenario of FR-GREET-02 built and the se
 });
 
 Then("the run's summary says the run stopped at the steps attempt for the second scenario, on a refusal", function (this: RunWorld) {
-  const line = this.output.split("\n").find((text) => /\bstopped\b/i.test(text));
+  const line = this.output.split("\n").find((text) => /^\s*Stopped\b/.test(text));
   assert.ok(line !== undefined, `The summary does not say where the run stopped:\n${this.output}`);
   for (const part of ["steps attempt", SECOND, "refus"]) assert.ok(line.includes(part), `The line where the run stopped does not name ${part}: ${line}`);
 });
