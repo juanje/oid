@@ -41,3 +41,10 @@ Feature: Several FRs in one run
     And the executor was asked for no attempt
     And the output names FR-GREET-01's scenario and its failure
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: The gate leaves out the scenarios not built even when the project's cucumber-js configuration names its feature files
+    Given the project's cucumber-js configuration names the paths of its feature files
+    And a scripted executor that builds FR-GREET-02 and then FR-GREET-03
+    When I run "oid run FR-GREET-02 FR-GREET-03"
+    Then the run succeeds
+    And the run's branch has one commit per FR on top of the starting HEAD, FR-GREET-02's first
