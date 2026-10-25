@@ -31,7 +31,7 @@ Name the model the agents run on, as Pi lists it (`pi --list-models`), in your o
 
 The model is yours, not the project's: a project's `.oid.json` that names one is an error.
 
-The project may commit a `.oid.json` with its `limits` (`retries`, `turns`) and the `paths` of its domain and conventions. oid reads it from the commit the run starts from, never from your uncommitted changes, and says so when you have some. Then, with the FR's feature files approved and committed:
+The project may commit a `.oid.json` with its `limits` (`retries`, `turns`, `rounds`) and the `paths` of its domain and conventions. oid reads it from the commit the run starts from, never from your uncommitted changes, and says so when you have some. Then, with the FR's feature files approved and committed:
 
 ```bash
 oid run FR-AREA-01
