@@ -24,8 +24,19 @@ export async function frTexts(dir: string, fr: string): Promise<FrTexts> {
  * patterns the project has; to a later attempt, once the steps have run, where the scenario fails now and the code
  * relevant to it.
  */
-export async function taskContext(dir: string, kind: AttemptKind, shared: FrTexts, steps: string[], latest: ScenarioRun | undefined): Promise<TaskContext> {
-  if (kind === "steps") return { ...shared, steps, patterns: await stepPatterns(dir) };
+export async function taskContext(
+  dir: string,
+  kind: AttemptKind,
+  shared: FrTexts,
+  steps: string[],
+  latest: ScenarioRun | undefined,
+  { asked = false }: { asked?: boolean } = {},
+): Promise<TaskContext> {
+  // A steps attempt another one asked for gets the failure it is asked to fix (FR-RUN-04); the first one has none.
+  if (kind === "steps") {
+    const failure = asked && latest?.failure !== undefined ? { failure: await failureContext(dir, latest.failure) } : {};
+    return { ...shared, steps, ...failure, patterns: await stepPatterns(dir) };
+  }
   const stepFiles = latest?.stepFiles ?? [];
   return {
     ...shared,

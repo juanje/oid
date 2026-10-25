@@ -7,7 +7,8 @@ import { provisionalOf } from "./evidence.ts";
 import type { Refusal } from "./refusal.ts";
 
 // The run log (FR-STATE-02): append-only, one JSON event per line, in the repository's .git/oid/runs. Everything in it
-// is computed by oid; what an agent says of itself never reaches it.
+// is computed by oid; what an agent says of itself never reaches it. The one exception is a request's reason, which is
+// the next attempt's input (FR-RUN-04), as a refusal's evidence is: no measure is computed from it.
 
 export interface AttemptEvent {
   event: "attempt";

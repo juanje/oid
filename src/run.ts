@@ -1,32 +1,34 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
-import { isTestFile } from "./boundaries.ts";
+import { WRITABLE, isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import { ConfigError, readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps, noTestSuiteFiles, provisionalOf } from "./evidence.ts";
-import type { AttemptKind, AttemptOutcome, Executor } from "./executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, NextAttempt } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
 import { LimitReached, RoundLimitReached } from "./limits.ts";
 import { missingCoverageProvider } from "./coverage.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
-import { type Failing, innerLoop, withoutStack } from "./inner-loop.ts";
+import { type Failing, innerLoop, type RoundEnd, withoutStack } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { type Pending, refutedRefusal, whenCodeRunsOut } from "./provisional.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { roundLimitMessage } from "./rounds.ts";
+import { git } from "./git.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
 import { progressLine } from "./progress.ts";
 import { summarize, transcriptsOf } from "./summary.ts";
 import { oidVersion } from "./version.ts";
 import { type FrTexts, frTexts, taskContext } from "./task-context.ts";
-import { frScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
-import { runUnitTests, testsIn } from "./unit-tests.ts";
+import { frScenarios, runAllScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
+import { runUnitTests, testsIn, type UnitRun } from "./unit-tests.ts";
 import type { TestFailure } from "./vitest-report.ts";
-import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, type RunWorktree } from "./worktree.ts";
+import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, type RunWorktree, scratchCopy } from "./worktree.ts";
 
 export interface RunOptions {
   projectDir: string;
@@ -47,6 +49,8 @@ interface FrRun {
   green: Scenario[];
   /** The tests there are, so that a test attempt is judged on its new tests only. */
   known: Set<string>;
+  /** How many unit tests the last run of the whole suite ran: an attempt asked for must not leave fewer (FR-RUN-04). */
+  tests: number;
   /** How many times a refused attempt is retried. */
   retries: number;
   /** How many turns an attempt's agent may take. */
@@ -146,11 +150,12 @@ function attemptEvent(attempt: {
   outcome: AttemptOutcome;
   verdict?: AttemptEvent["verdict"];
   reds?: string[];
+  asked?: boolean;
 }): AttemptEvent {
   const { kind, scenario, refusal, retry, reds = [] } = attempt;
   const { turns, model, tokens, cacheRead, cost, deniedToolCalls } = attempt.outcome;
   const verdict = attempt.verdict ?? (refusal === undefined ? "accepted" : "refused");
-  const shown = { ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
+  const shown = { ...(attempt.asked === true ? { asked: true as const } : {}), ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
   return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cacheRead, cost, deniedToolCalls };
 }
 
@@ -169,9 +174,10 @@ async function buildFr(
   const noProvider = missingCoverageProvider(worktree.dir);
   if (noProvider !== undefined) return stop(noProvider, out);
   await record({ event: "stage", stage: "unit tests" });
-  const known = testsIn(await runUnitTests(worktree.dir, [], runCommand));
+  const baseline = await runUnitTests(worktree.dir, [], runCommand);
+  const known = testsIn(baseline);
   const { retries, turns, rounds } = await readLimits(worktree.dir);
-  const run: FrRun = { executor, fr, worktree, out, green: [], known, retries, turns, rounds, reports: new Map(), record, texts: await frTexts(worktree.dir, fr), steps, latest: new Map(), transcripts, attempts: 0, repaired: new Set() };
+  const run: FrRun = { executor, fr, worktree, out, green: [], known, tests: testCount(baseline), retries, turns, rounds, reports: new Map(), record, texts: await frTexts(worktree.dir, fr), steps, latest: new Map(), transcripts, attempts: 0, repaired: new Set() };
   const builtRefusal = await buildScenarios(run, scenarios);
   if (builtRefusal !== undefined) return refuse(builtRefusal, out);
   // An attempt after the gate belongs to the FR's last scenario; its refusal's evidence and focus say what to fix.
@@ -230,6 +236,13 @@ class ScenarioBuild {
   private lastAccepted = 0;
   private undoLastCode = async (): Promise<void> => {};
   private readonly testOnce: (previous: Refusal | undefined) => Promise<Tried>;
+  // Requests are followed once the scenario's rounds start (FR-RUN-04): the one the round under way ended in, the code
+  // attempts a request asked for, and the checkpoint before the scenario's first code attempt, the broken version an
+  // attempt asked for must fail on.
+  private inRounds = false;
+  private request: Asked | undefined;
+  private askedCode: Attempt["asked"];
+  private beforeCode: string | undefined;
 
   constructor(run: FrRun, scenario: Scenario) {
     this.run = run;
@@ -242,8 +255,9 @@ class ScenarioBuild {
     const { run, scenario } = this;
     const stepsRefusal = await withRetries(run.retries, this.once("steps", () => this.judgeStepsRun()));
     if (stepsRefusal !== undefined) return stepsRefusal;
+    this.inRounds = true;
     const end = await innerLoop(
-      async () => (await withRetries(run.retries, this.testOnce)) ?? (await this.codeRound()),
+      this.round,
       async () => failingOf(await this.runScenario()),
       failingOf(run.latest.get(locationOf(scenario))) ?? { step: "?", message: "" },
       run.rounds,
@@ -256,11 +270,11 @@ class ScenarioBuild {
   }
 
   /** One attempt and the judgment of its kind, from the work accepted before it; retried while refused, up to the run's retries (FR-RUN-07). */
-  private once(kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) {
+  private once(kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>, asked?: Attempt["asked"]) {
     return async (previous: Refusal | undefined): Promise<Tried> => {
       const { run, scenario } = this;
       const accepted = await acceptedWork(run.worktree.dir);
-      const attempt = await attemptFor(run, kind, scenario, previous);
+      const attempt = await attemptFor(run, kind, scenario, previous, asked);
       if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
       const judgment = attempt.refusal === undefined ? await judge(attempt.files) : { refusal: attempt.refusal, reds: [] };
       const refusal = judgment.refusal;
@@ -268,10 +282,98 @@ class ScenarioBuild {
       const provisional = refusal === undefined ? provisionalOf(judgment.reds) : [];
       if (kind === "steps" && provisional.length > 0) this.pending.scenario = provisional[0];
       if (kind === "test") this.pending.tests.push(...provisional);
-      await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, reds: judgment.reds }));
+      await run.record(
+        attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, reds: judgment.reds, asked: asked !== undefined }),
+      );
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
-      return { refusal, rollback: accepted.restore };
+      if (!(await this.asks(kind, attempt.next))) return { refusal, rollback: accepted.restore };
+      // A request ends the round whatever the verdict: a refused attempt is undone now, and not retried.
+      if (refusal !== undefined) await accepted.restore();
+      return { refusal, rollback: async () => {}, final: true };
     };
+  }
+
+  /** Records what an attempt's report asked for, and whether the run follows it: only once the rounds have started. */
+  private async asks(by: AttemptKind, next: NextAttempt | undefined): Promise<boolean> {
+    if (next === undefined) return false;
+    await this.run.record({ event: "request", scenario: this.scenario.name, by, kind: next.kind, reason: next.reason });
+    if (!this.inRounds) return false;
+    this.request = { by, ...next };
+    return true;
+  }
+
+  /**
+   * A round: test attempts, then code attempts, or the attempt a request asked for. A steps attempt asked for ends the
+   * round, and the scenario runs again; a test attempt asked for is followed by the round's code attempts.
+   */
+  private readonly round = async (request: Asked | undefined): Promise<RoundEnd<Asked>> => {
+    this.request = undefined;
+    // The attempt asked for works on the scenario's failure as it is now.
+    if (request !== undefined) await this.runScenario();
+    const retries = this.run.retries;
+    const asked = request === undefined ? undefined : { by: request.by, reason: request.reason };
+    if (request === undefined || request.kind !== "code") {
+      const refusal = await withRetries(retries, request === undefined ? this.testOnce : this.askedOnce(request.kind, asked!));
+      if (this.request !== undefined) return { request: this.request };
+      if (refusal !== undefined) return { refusal };
+      if (request?.kind === "steps") return undefined;
+    }
+    this.askedCode = request?.kind === "code" ? asked : undefined;
+    const refusal = await this.codeRound();
+    this.askedCode = undefined;
+    if (this.request !== undefined) return { request: this.request };
+    return refusal === undefined ? undefined : { refusal };
+  };
+
+  /**
+   * A steps or test attempt another one asked for (FR-RUN-04), judged by D-02 on the code from before the scenario's
+   * first code attempt, and by keeping the unit tests and every scenario that passed just before it.
+   */
+  private askedOnce(kind: AttemptKind, asked: NonNullable<Attempt["asked"]>) {
+    return async (previous: Refusal | undefined): Promise<Tried> => {
+      const passing = await this.passingScenarios();
+      const base = this.beforeCode ?? (await git(this.run.worktree.dir, "rev-parse", "HEAD"));
+      return this.once(kind, (files) => this.judgeAsked(kind, files, passing, base), asked)(previous);
+    };
+  }
+
+  /** The scenarios of the project that pass now, by `<uri>:<line>`. */
+  private async passingScenarios(): Promise<Set<string>> {
+    const { results } = await runAllScenarios(this.run.worktree.dir, runCommand);
+    return new Set(results.filter((result) => result.status === "passed").map(locationOf));
+  }
+
+  private async judgeAsked(kind: AttemptKind, files: string[], passing: Set<string>, base: string): Promise<Judgment> {
+    const { run } = this;
+    const written = files.filter((file) => WRITABLE[kind].some((path) => file.startsWith(path)));
+    if (kind === "test") {
+      const unit = await runUnitTests(run.worktree.dir, [], runCommand);
+      if (unit.ran && testCount(unit) < run.tests) return { refusal: fewerTests(run.tests, testCount(unit)), reds: [] };
+      for (const test of testsIn(unit)) run.known.add(test);
+    }
+    const { results } = await runAllScenarios(run.worktree.dir, runCommand);
+    const turnedRed = results.filter((result) => passing.has(locationOf(result)) && result.status !== "passed");
+    if (turnedRed.length > 0) return { refusal: turnedRedRefusal(turnedRed), reds: [] };
+    const scratch = await scratchCopy(run.worktree, base);
+    try {
+      if (kind === "steps") {
+        await scratch.put(written, "attempt");
+        const result = (await runScenarios(scratch.dir, [this.scenario], runCommand))[0]!;
+        const stepFile = result.failure?.definedIn;
+        const exists = await importedSymbolsOf(scratch.dir, stepFile === undefined ? [] : [stepFile]);
+        return judgeSteps(result, (name) => exists(name, stepFile ?? ""));
+      }
+      const testFiles = written.filter(isTestFile);
+      if (testFiles.length === 0) return { refusal: undefined, reds: [] };
+      // The tests that passed there as they were before this attempt are not its to prove; any other must fail.
+      await scratch.put(testFiles, "checkpoint");
+      const before = testFiles.filter((file) => existsSync(join(scratch.dir, file)));
+      const passedBefore = before.length === 0 ? [] : (await runUnitTests(scratch.dir, before, runCommand)).passed;
+      await scratch.put(testFiles, "attempt");
+      return judgeNewTests(scratch.dir, testFiles, runCommand, await importedSymbolsOf(scratch.dir, testFiles), new Set(passedBefore));
+    } finally {
+      await scratch.remove();
+    }
   }
 
   private async runScenario(): Promise<ScenarioRun> {
@@ -311,7 +413,8 @@ class ScenarioBuild {
 
   /** A code attempt. An accepted one makes every unit test pass: it confirms the provisional tests. */
   private readonly settledCode = async (previous: Refusal | undefined): Promise<Tried> => {
-    const tried = await codeAttempt(this.run, this.scenario, previous);
+    this.beforeCode ??= await git(this.run.worktree.dir, "rev-parse", "HEAD");
+    const tried = await codeAttempt(this.run, this.scenario, previous, this.askedCode);
     this.lastCode = this.run.attempts;
     this.undoLastCode = tried.rollback;
     if (tried.refusal === undefined) {
@@ -319,7 +422,10 @@ class ScenarioBuild {
       await this.settle(this.pending.tests, "confirmed", this.lastCode);
       this.pending.tests = [];
     }
-    return tried;
+    if (!(await this.asks("code", tried.next))) return tried;
+    // A request ends the round whatever the verdict: a refused attempt is undone now, and not retried.
+    if (tried.refusal !== undefined) await tried.rollback();
+    return { ...tried, rollback: async () => {}, final: true };
   };
 
   /**
@@ -329,6 +435,7 @@ class ScenarioBuild {
   private readonly codeRetry = async (previous: Refusal | undefined): Promise<Tried> => {
     if (previous?.sendTo !== "test") return this.settledCode(previous);
     const test = await this.testOnce(previous);
+    if (this.request !== undefined) return test;
     if (test.refusal !== undefined) return { ...test, refusal: { ...test.refusal, sendTo: "test" } };
     return this.settledCode(undefined);
   };
@@ -340,7 +447,7 @@ class ScenarioBuild {
   private async codeRound(): Promise<Refusal | undefined> {
     for (;;) {
       const refusal = await withRetries(this.run.retries, this.codeRetry);
-      if (refusal === undefined) return undefined;
+      if (refusal === undefined || this.request !== undefined) return undefined;
       const unsatisfied = this.run.unsatisfied;
       const settled = whenCodeRunsOut(this.pending, this.run.repaired, unsatisfied?.map((failure) => failure.test));
       if (settled === undefined) return refusal;
@@ -350,6 +457,7 @@ class ScenarioBuild {
       };
       if ("refuted" in settled) return this.refuted(settled.refuted, withFailure);
       const repair = await this.repair(settled.repair, withFailure);
+      if (this.request !== undefined) return undefined;
       if (repair !== undefined) return repair;
     }
   }
@@ -385,13 +493,13 @@ function failingOf(result: ScenarioRun | undefined): Failing | undefined {
 }
 
 /** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
-async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined) {
+async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"]) {
   const location = locationOf(scenario);
-  const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location));
+  const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location), { asked: asked !== undefined });
   await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined });
   run.attempts += 1;
   const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context, transcript });
+  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context, transcript, asked });
 }
 
 function locationOf(scenario: Scenario): string {
@@ -399,10 +507,10 @@ function locationOf(scenario: Scenario): string {
 }
 
 /** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
-function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined): Promise<Tried> {
+function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"]): Promise<Tried & { next?: NextAttempt }> {
   // Refused before its judgment, at its boundary or its turn limit, it leaves no test unsatisfied.
   run.unsatisfied = undefined;
-  return checkpointedAttempt(run, "code", scenario, previous, () => judgeCodeAttempt(run));
+  return checkpointedAttempt(run, "code", scenario, previous, () => judgeCodeAttempt(run), asked);
 }
 
 /**
@@ -421,14 +529,15 @@ async function checkpointedAttempt(
   scenario: Scenario,
   previous: Refusal | undefined,
   judge: () => Promise<Refusal | undefined>,
-): Promise<Tried> {
+  asked?: Attempt["asked"],
+): Promise<Tried & { next?: NextAttempt }> {
   const accepted = await acceptedWork(run.worktree.dir);
-  const attempt = await attemptFor(run, kind, scenario, previous);
+  const attempt = await attemptFor(run, kind, scenario, previous, asked);
   if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
   const refusal = attempt.refusal ?? (await judge());
-  await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome }));
+  await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, asked: asked !== undefined }));
   if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
-  return { refusal, rollback: accepted.restore };
+  return { refusal, rollback: accepted.restore, ...(attempt.next === undefined ? {} : { next: attempt.next }) };
 }
 
 /** A code attempt's judgment: the whole unit suite, and the scenarios built so far. */
@@ -437,12 +546,37 @@ async function judgeCodeAttempt(run: FrRun): Promise<Refusal | undefined> {
   const greenRuns = green.length === 0 ? [] : await runScenarios(worktree.dir, green, runCommand);
   const unit = await runUnitTests(worktree.dir, [], runCommand);
   for (const test of testsIn(unit)) known.add(test);
+  if (unit.ran) run.tests = testCount(unit);
   // A file with no vitest test goes back to a test attempt, whose tests in it are new.
   for (const file of noTestSuiteFiles(unit)) known.delete(file);
   const refusal = judgeCode(unit, greenRuns);
   // Refused for its failing unit tests, and not for a test file the code cannot fix, which goes back to a test attempt.
   if (refusal !== undefined && refusal.sendTo === undefined && unit.ran && unit.failed.length > 0) run.unsatisfied = unit.failures ?? [];
   return refusal;
+}
+
+/** What a round ended asking for: the kind asked for, which kind asked, and why (FR-RUN-04). */
+type Asked = NextAttempt & { by: AttemptKind };
+
+function fewerTests(before: number, now: number): Refusal {
+  return {
+    failed: "The attempt left fewer unit tests",
+    evidence: `The unit suite ran ${before} tests before this attempt, and ${now} after it`,
+    next: "Keep every unit test: change the ones that are wrong, without removing them",
+  };
+}
+
+function turnedRedRefusal(scenarios: ScenarioRun[]): Refusal {
+  return {
+    failed: "Scenarios that passed before this attempt no longer pass",
+    evidence: scenarios.map((scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}": ${scenario.status}`).join("\n"),
+    next: "Keep every scenario that passed passing: the step definitions you change must hold for each scenario that uses them",
+  };
+}
+
+/** How many unit tests a run of the suite ran, passing or failing. */
+function testCount(unit: UnitRun): number {
+  return unit.passed.length + (unit.failures ?? []).length;
 }
 
 function runId(fr: string): string {

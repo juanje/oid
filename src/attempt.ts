@@ -2,7 +2,7 @@ import { agentError } from "./agent-error.ts";
 import { judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { AttemptKind, AttemptOutcome, Executor, TaskContext, TryTarget } from "./executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, NextAttempt, TaskContext, TryTarget } from "./executor.ts";
 import { LimitReached, turnLimitReached } from "./limits.ts";
 import type { Refusal } from "./refusal.ts";
 import { judgeReport } from "./report.ts";
@@ -23,6 +23,8 @@ export interface AttemptRequest {
   context?: TaskContext;
   /** Where its agent's session is kept. */
   transcript?: string;
+  /** For an attempt another one asked for: which kind asked, and why (FR-RUN-04). */
+  asked?: Attempt["asked"];
 }
 
 /**
@@ -41,12 +43,15 @@ export async function runAttempt({
   turns,
   context,
   transcript,
-}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string }> {
+  asked,
+}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string; next?: NextAttempt }> {
   let reported: string | undefined;
+  let next: NextAttempt | undefined;
   const tools = {
     try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand),
-    report: (result: string) => {
+    report: (result: string, asks?: NextAttempt) => {
       reported = result;
+      next = asks;
     },
   };
   const outcome = await executor.run({
@@ -59,11 +64,12 @@ export async function runAttempt({
     ...(previous === undefined ? {} : { refusal: previous }),
     ...(context === undefined ? {} : { context }),
     ...(transcript === undefined ? {} : { transcript }),
+    ...(asked === undefined ? {} : { asked }),
   });
   const error = agentError(kind, scenario.name, outcome);
   if (error !== undefined) throw error;
   if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns, outcome);
   const diff = await takeAttemptDiff(worktreeDir);
   const refusal = judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff);
-  return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }) };
+  return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }), ...(next === undefined ? {} : { next }) };
 }

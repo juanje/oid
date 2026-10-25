@@ -26,26 +26,34 @@ export function withoutStack(message: string): string {
     .trim();
 }
 
+/** How a round ends: refused, asking for another attempt kind to start the next round (FR-RUN-04), or done. */
+export type RoundEnd<Request> = { refusal: Refusal } | { request: Request } | undefined;
+
 /**
  * Runs rounds of test and code attempts while the scenario fails (FR-RUN-03), starting from its failure `before`. A
  * round after which the scenario fails the same way makes no progress: it is recorded through `onNoProgress`, and the
- * loop goes on. However the failure moves, the loop runs at most `rounds` rounds (FR-RUN-09).
+ * loop goes on. A round that ends in a request starts the next one with it, without checking the scenario. However
+ * the failure moves, and whatever the requests, the loop runs at most `rounds` rounds (FR-RUN-09).
  */
-export async function innerLoop(
-  round: () => Promise<Refusal | undefined>,
+export async function innerLoop<Request>(
+  round: (request: Request | undefined) => Promise<RoundEnd<Request>>,
   failure: () => Promise<Failing | undefined>,
   before: Failing,
   rounds: number,
   onNoProgress: (failure: Failing) => Promise<void> = async () => {},
 ): Promise<LoopEnd> {
   let last = before;
+  let request: Request | undefined;
   for (let done = 1; ; done += 1) {
-    const refusal = await round();
-    if (refusal !== undefined) return { refusal };
-    const now = await failure();
-    if (now === undefined) return { built: true };
-    if (sameFailure(now, last)) await onNoProgress(now);
-    last = now;
-    if (done >= rounds) return { limit: now };
+    const end = await round(request);
+    if (end !== undefined && "refusal" in end) return { refusal: end.refusal };
+    request = end?.request;
+    if (request === undefined) {
+      const now = await failure();
+      if (now === undefined) return { built: true };
+      if (sameFailure(now, last)) await onNoProgress(now);
+      last = now;
+    }
+    if (done >= rounds) return { limit: last };
   }
 }
