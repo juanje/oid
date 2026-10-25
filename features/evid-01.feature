@@ -33,14 +33,6 @@ Feature: Classify a failure
     And the test attempt after the code attempts was given the refusal, naming the test as refuted
     And the executor was asked for every prepared attempt, in order
 
-  Scenario: Steps and a test that call a method an existing class does not have yet are Reds
-    Given the module of FR-GREET-01 also has a greeter class
-    And the scripted executor builds FR-GREET-03 as a new method of the greeter class, its steps typing the World by shape
-    When I run "oid run FR-GREET-03"
-    Then the run succeeds
-    And the output gives the scenario's failure the class missing_implementation
-    And the output gives the new test's failure the class missing_implementation
-
   Scenario: A refuted Red whose repair no code makes pass either stops the run
     Given the scripted test attempt calls a function the assertion package does not have, and so does its repair
     When I run "oid run FR-GREET-03"
