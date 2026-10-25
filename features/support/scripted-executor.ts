@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { cp, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
 export interface PreparedAttempt {
@@ -12,6 +12,8 @@ export interface PreparedAttempt {
   tries?: TryTarget[];
   /** The result it ends with through report; null ends it without one. A short default when left out. */
   report?: string | null;
+  /** The attempt kind its report asks for next, with its reason (FR-RUN-04). */
+  next?: NextAttempt;
   /** How many turns its agent would take to finish; 1 when left out. */
   turns?: number;
   /** What the executor reports of the agent's use: its model, tokens, cost and denied tool calls. */
@@ -45,6 +47,10 @@ export interface Request {
   /** The worktree's HEAD when the request came: its history, newest first, and the files it holds. */
   history: string[];
   committed: string[];
+  /** For an attempt another one asked for: which kind asked, and why (FR-RUN-04). */
+  asked: Attempt["asked"];
+  /** Where the scenario failed when the request came, as its task gives it. */
+  failure: NonNullable<Attempt["context"]>["failure"];
 }
 
 /** An executor that answers each request with the next prepared attempt, the way an agent's diff would land. */
@@ -87,11 +93,13 @@ export class ScriptedExecutor implements Executor {
       ...outcome,
       history: lines(gitIn(attempt.worktree, "rev-list", "HEAD")),
       committed: lines(gitIn(attempt.worktree, "ls-tree", "-r", "--name-only", "HEAD")),
+      asked: attempt.asked,
+      failure: attempt.context?.failure,
     });
     if (outcome.stoppedAtLimit) return outcome;
     await cp(next.dir, attempt.worktree, { recursive: true });
     for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
-    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`);
+    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`, next.next);
     return outcome;
   }
 }
