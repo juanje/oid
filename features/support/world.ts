@@ -25,6 +25,8 @@ export class RunWorld extends World {
   smokeModel: string | undefined;
   /** The paths the scripted model's probes asked for, in order. */
   probed: string[] = [];
+  /** The positions, in the scripted model's script, of the repairs: attempts the gate sent back or another asked for. */
+  repairs: number[] = [];
   /** This scenario's own personal config dir, when it has one (configDirOf). */
   configDir: string | undefined;
   /** The URLs of the modules a run of the oid command loaded, when it recorded them. */

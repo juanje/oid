@@ -164,3 +164,89 @@ Then("every attempt's task gives the project's domain and its conventions", func
     assert.ok(task.includes(CONVENTIONS_TEXT), `The ${kind} attempt's task does not give the project's conventions:\n${task}`);
   }
 });
+
+/** The refusals the gate gave in the run, from its log, whose path the summary names. */
+function gateRefusals(world: RunWorld): { failed: string; evidence: string }[] {
+  const log = /^\s*Log: (.+\.jsonl)$/m.exec(world.output)?.[1];
+  assert.ok(log !== undefined, `The output does not name the run's log:\n${world.output}`);
+  return readFileSync(log, "utf8")
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line))
+    .filter((event) => event.event === "gate" && event.refusal !== undefined)
+    .map((event) => event.refusal);
+}
+
+/** Asserts that each of `first` comes before each of `then` in `task`, and that all of them are there. */
+function assertBefore(task: string, first: string[], then: string[]): void {
+  for (const part of [...first, ...then]) assert.ok(task.includes(part), `The task does not give "${part}":\n${task}`);
+  const last = Math.max(...first.map((part) => task.indexOf(part)));
+  const earliest = Math.min(...then.map((part) => task.indexOf(part)));
+  assert.ok(last < earliest, `The task does not give ${JSON.stringify(first)} before ${JSON.stringify(then)}:\n${task}`);
+}
+
+/** The opening paragraph of a task. */
+const opener = (task: string): string => task.split("\n\n")[0]!;
+
+Given("the scripted model builds FR-GREET-03, its steps attempt leaving a type error that no test catches, and its steps attempt after the gate fixing it", function (this: RunWorld) {
+  const scenario = scenarioNames("greet-03/contract/features/greet-03.feature")[0]!;
+  const attempt = (kind: AttemptKind, dir: string) => ({ kind, scenario, dir: greet03AttemptDir(dir) });
+  scriptedModel(this).script = [attempt("steps", "steps-type-error"), attempt("test", "test"), attempt("code", "code"), attempt("steps", "steps")];
+  this.repairs = [3];
+});
+
+Then("the steps attempt after the gate was given its job and the gate's type error before FR-GREET-03's text and its scenario's steps", function (this: RunWorld) {
+  const task = tasksOf(this).filter(({ kind }) => kind === "steps")[1]!.task;
+  const [refusal] = gateRefusals(this);
+  assert.ok(refusal !== undefined, "The gate refused nothing");
+  assert.ok(opener(task).includes(refusal.failed), `The task does not open with what the gate refused, "${refusal.failed}":\n${task}`);
+  const steps = stepTexts(this.projectDir, "features/greet-03.feature");
+  assertBefore(task, ["error TS"], [frBody(this.projectDir, "FR-GREET-03"), steps[0]!]);
+});
+
+const ASKED_REASON = "The scenario fails in the shared Then step, which checks the greeting of the name the When step kept";
+
+Given("the scripted model builds FR-GREET-02, its first scenario's code attempt asking for a steps attempt, which fixes the shared Then step", function (this: RunWorld) {
+  const [first, second] = scenarioNames("greet-02/contract/features/greet-02.feature") as [string, string];
+  const attempt = (kind: AttemptKind, scenario: string, dir: string) => ({ kind, scenario, dir });
+  scriptedModel(this).script = [
+    attempt("steps", first, greet02AttemptDir("s1-steps")),
+    attempt("test", first, greet02AttemptDir("s1-test")),
+    { ...attempt("code", first, greet02AttemptDir("s1-code")), next: { kind: "steps", reason: ASKED_REASON } },
+    attempt("steps", first, attemptDir("steps")),
+    attempt("steps", second, greet02AttemptDir("s2-steps")),
+    attempt("test", second, greet02AttemptDir("s2-test")),
+    attempt("code", second, greet02AttemptDir("s2-code")),
+  ];
+  this.repairs = [3];
+});
+
+Then("the steps attempt asked for was given its job, the code attempt's reason and the scenario's failure before FR-GREET-02's text and its scenario's steps", function (this: RunWorld) {
+  const task = tasksOf(this).filter(({ kind }) => kind === "steps")[1]!.task;
+  assert.match(opener(task), /\bcode\b/, `The task does not open with the code attempt's request:\n${task}`);
+  const steps = stepTexts(this.projectDir, "features/greet-02.feature");
+  assertBefore(task, [ASKED_REASON, "AssertionError"], [frBody(this.projectDir, "FR-GREET-02"), steps[0]!]);
+});
+
+Given("the scripted model builds FR-GREET-01, its first test attempt writing a test that passes without its code", function (this: RunWorld) {
+  const scenario = scenarioNames("project/features/greet-01.feature")[0]!;
+  const attempt = (kind: AttemptKind, dir: string) => ({ kind, scenario, dir: attemptDir(dir) });
+  scriptedModel(this).script = [attempt("steps", "steps"), attempt("test", "test-passes-without-code"), attempt("test", "test"), attempt("code", "code")];
+});
+
+Then("every other attempt's task opens with its kind's usual work, before any refusal", function (this: RunWorld) {
+  const others = tasksOf(this).filter((_, index) => !this.repairs.includes(index));
+  assert.ok(others.length > 0, "No other attempt to check");
+  for (const { kind, task } of others) {
+    assert.match(opener(task), new RegExp(`\\b${kind}\\b`), `The ${kind} attempt's task does not open with its kind's work:\n${task}`);
+    const refused = task.indexOf("Refused: ");
+    if (refused !== -1) assert.ok(task.indexOf(frBody(this.projectDir, frOf(task))) < refused, `The ${kind} attempt's task gives a refusal before its FR:\n${task}`);
+  }
+});
+
+/** The FR a task names in its opening. */
+function frOf(task: string): string {
+  const fr = /\bFR-[A-Z]+-\d+\b/.exec(opener(task))?.[0];
+  assert.ok(fr !== undefined, `The task's opening names no FR:\n${task}`);
+  return fr;
+}
