@@ -86,7 +86,7 @@ function askFor(kind: AttemptKind): string {
 function procedureOf(kind: AttemptKind): string {
   const steps = [...PROCEDURE[kind], askFor(kind)].map((step, index) => `${index + 1}. ${step}`);
   return [
-    "Step 0. Read your task: the FR, the scenario, and the refusal of the attempt before yours, if there is one.",
+    "Step 0. Read your task: the FR, the scenario, and the refusal of the attempt before yours, or why it asked for yours, if there is one.",
     ...steps,
     `${steps.length + 1}. End with report, giving your result in a few words.`,
     `Success: ${SUCCESS[kind]}`,
