@@ -212,123 +212,170 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
 }
 
 /** Builds one scenario: its step definitions, Red first, then rounds of test and code until it passes, keeping the green ones green. */
-async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
-  const { known, retries } = run;
-  const worktreeDir = run.worktree.dir;
-  // One attempt and the judgment of its kind, from the work accepted before it.
-  const once =
-    (kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) =>
-    async (previous: Refusal | undefined): Promise<Tried> => {
-      const accepted = await acceptedWork(worktreeDir);
+function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | undefined> {
+  return new ScenarioBuild(run, scenario).build();
+}
+
+/**
+ * One scenario's build (FR-RUN-02, FR-RUN-03), with what its attempts share: the provisional Reds the code has yet to
+ * settle (FR-EVID-01), and the code attempts that settle them.
+ */
+class ScenarioBuild {
+  private readonly run: FrRun;
+  private readonly scenario: Scenario;
+  private readonly description: string;
+  private readonly pending: Pending = { tests: [] };
+  // The last code attempt, and the last accepted one, by transcript number: the attempts that settle provisional Reds.
+  private lastCode = 0;
+  private lastAccepted = 0;
+  private undoLastCode = async (): Promise<void> => {};
+  private readonly testOnce: (previous: Refusal | undefined) => Promise<Tried>;
+
+  constructor(run: FrRun, scenario: Scenario) {
+    this.run = run;
+    this.scenario = scenario;
+    this.description = `${scenario.uri}:${scenario.line} "${scenario.name}"`;
+    this.testOnce = this.once("test", this.judgeTests([]));
+  }
+
+  async build(): Promise<Refusal | undefined> {
+    const { run, scenario } = this;
+    const stepsRefusal = await withRetries(run.retries, this.once("steps", () => this.judgeStepsRun()));
+    if (stepsRefusal !== undefined) return stepsRefusal;
+    const end = await innerLoop(
+      async () => (await withRetries(run.retries, this.testOnce)) ?? (await this.codeRound()),
+      async () => failingOf(await this.runScenario()),
+      failingOf(run.latest.get(locationOf(scenario))) ?? { step: "?", message: "" },
+      run.rounds,
+      (failure) => run.record({ event: "round", scenario: scenario.name, verdict: "no progress", step: failure.step, failure: withoutStack(failure.message) }),
+    );
+    if ("refusal" in end) return end.refusal;
+    if ("limit" in end) throw new RoundLimitReached(roundLimitMessage(this.description, run.rounds, end.limit, run.reports), scenario.name);
+    if (this.pending.scenario !== undefined) await this.settle([this.pending.scenario], "confirmed", this.lastAccepted);
+    return undefined;
+  }
+
+  /** One attempt and the judgment of its kind, from the work accepted before it; retried while refused, up to the run's retries (FR-RUN-07). */
+  private once(kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) {
+    return async (previous: Refusal | undefined): Promise<Tried> => {
+      const { run, scenario } = this;
+      const accepted = await acceptedWork(run.worktree.dir);
       const attempt = await attemptFor(run, kind, scenario, previous);
       if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
       const judgment = attempt.refusal === undefined ? await judge(attempt.files) : { refusal: attempt.refusal, reds: [] };
       const refusal = judgment.refusal;
       // An accepted Red oid cannot classify waits for the code to confirm it.
       const provisional = refusal === undefined ? provisionalOf(judgment.reds) : [];
-      if (kind === "steps" && provisional.length > 0) pending.scenario = provisional[0];
-      if (kind === "test") pending.tests.push(...provisional);
+      if (kind === "steps" && provisional.length > 0) this.pending.scenario = provisional[0];
+      if (kind === "test") this.pending.tests.push(...provisional);
       await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, reds: judgment.reds }));
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
       return { refusal, rollback: accepted.restore };
     };
-  const pending: Pending = { tests: [] };
-  // The last code attempt, and the last accepted one, by transcript number: the attempts that settle provisional Reds.
-  let lastCode = 0;
-  let lastAccepted = 0;
-  const settle = async (what: string[], verdict: "confirmed" | "refuted", attempt: number): Promise<void> => {
-    for (const one of what) await run.record({ event: "red", what: one, verdict, attempt });
-  };
-  // Retried while refused, up to the run's retries (FR-RUN-07).
-  const judged = (kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>) => withRetries(retries, once(kind, judge));
-  const runScenario = async (): Promise<ScenarioRun> => {
-    const result = (await runScenarios(worktreeDir, [scenario], runCommand))[0]!;
-    run.latest.set(locationOf(scenario), result);
-    return result;
-  };
-  // Asked at each judgment, of the file that failed: the project changes with every attempt.
-  const symbolsOf = (files: string[]) => importedSymbolsOf(worktreeDir, files);
+  }
 
-  const stepsRefusal = await judged("steps", async () => {
-    const result = await runScenario();
+  private async runScenario(): Promise<ScenarioRun> {
+    const result = (await runScenarios(this.run.worktree.dir, [this.scenario], runCommand))[0]!;
+    this.run.latest.set(locationOf(this.scenario), result);
+    return result;
+  }
+
+  /** Whether names exist, asked at each judgment, of the files that failed: the project changes with every attempt. */
+  private symbolsOf(files: string[]) {
+    return importedSymbolsOf(this.run.worktree.dir, files);
+  }
+
+  /** A steps attempt's judgment: its scenario fails with a Red. */
+  private async judgeStepsRun(): Promise<Judgment> {
+    const result = await this.runScenario();
     const stepFile = result.failure?.definedIn;
-    const exists = await symbolsOf(stepFile === undefined ? [] : [stepFile]);
+    const exists = await this.symbolsOf(stepFile === undefined ? [] : [stepFile]);
     return judgeSteps(result, (name) => exists(name, stepFile ?? ""));
-  });
-  if (stepsRefusal !== undefined) return stepsRefusal;
-  // A test attempt's new tests, in the files it changed and in `also`: a repaired test's file, even if left as it was.
-  const description = `${scenario.uri}:${scenario.line} "${scenario.name}"`;
-  // A test attempt that adds no test is accepted, and its round goes on to the code: the wiring path (docs/design.md §2).
-  const judgeTests = (also: string[]) => async (files: string[]): Promise<Judgment> => {
-    const testFiles = [...new Set([...files.filter(isTestFile), ...also])];
-    if (testFiles.length === 0) return { refusal: undefined, reds: [] };
-    return judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known);
-  };
-  const testOnce = once("test", judgeTests([]));
-  // A code attempt's retry; a refusal the code cannot act on goes back to a test attempt first, and the pair counts as
-  // one retry (FR-RUN-03). A refused test attempt there sends the next retry to a test attempt again.
-  // An accepted code attempt makes every unit test pass: it confirms the provisional tests.
-  let undoLastCode = async (): Promise<void> => {};
-  const settledCode = async (previous: Refusal | undefined): Promise<Tried> => {
-    const tried = await codeAttempt(run, scenario, previous);
-    lastCode = run.attempts;
-    undoLastCode = tried.rollback;
+  }
+
+  /**
+   * A test attempt's judgment: its new tests, in the files it changed and in `also`, a repaired test's file even if left
+   * as it was. One that adds no test is accepted, and its round goes on to the code: the wiring path (docs/design.md §2).
+   */
+  private judgeTests(also: string[]) {
+    return async (files: string[]): Promise<Judgment> => {
+      const testFiles = [...new Set([...files.filter(isTestFile), ...also])];
+      if (testFiles.length === 0) return { refusal: undefined, reds: [] };
+      return judgeNewTests(this.run.worktree.dir, testFiles, runCommand, await this.symbolsOf(testFiles), this.run.known);
+    };
+  }
+
+  private async settle(what: string[], verdict: "confirmed" | "refuted", attempt: number): Promise<void> {
+    for (const one of what) await this.run.record({ event: "red", what: one, verdict, attempt });
+  }
+
+  /** A code attempt. An accepted one makes every unit test pass: it confirms the provisional tests. */
+  private readonly settledCode = async (previous: Refusal | undefined): Promise<Tried> => {
+    const tried = await codeAttempt(this.run, this.scenario, previous);
+    this.lastCode = this.run.attempts;
+    this.undoLastCode = tried.rollback;
     if (tried.refusal === undefined) {
-      lastAccepted = lastCode;
-      await settle(pending.tests, "confirmed", lastCode);
-      pending.tests = [];
+      this.lastAccepted = this.lastCode;
+      await this.settle(this.pending.tests, "confirmed", this.lastCode);
+      this.pending.tests = [];
     }
     return tried;
   };
-  const codeRetry = async (previous: Refusal | undefined): Promise<Tried> => {
-    if (previous?.sendTo !== "test") return settledCode(previous);
-    const test = await testOnce(previous);
+
+  /**
+   * A code attempt's retry; a refusal the code cannot act on goes back to a test attempt first, and the pair counts as
+   * one retry (FR-RUN-03). A refused test attempt there sends the next retry to a test attempt again.
+   */
+  private readonly codeRetry = async (previous: Refusal | undefined): Promise<Tried> => {
+    if (previous?.sendTo !== "test") return this.settledCode(previous);
+    const test = await this.testOnce(previous);
     if (test.refusal !== undefined) return { ...test, refusal: { ...test.refusal, sendTo: "test" } };
-    return settledCode(undefined);
+    return this.settledCode(undefined);
   };
-  // The code attempts, and when they run out with a provisional Red still failing, its refutation: a provisional test
-  // goes back to one test attempt, then to the code attempts again; a refuted scenario stops the run (FR-EVID-01).
-  const codeRound = async (): Promise<Refusal | undefined> => {
+
+  /**
+   * The code attempts, and when they run out with a provisional Red still failing, its refutation: a provisional test
+   * goes back to one test attempt, then to the code attempts again; a refuted scenario stops the run (FR-EVID-01).
+   */
+  private async codeRound(): Promise<Refusal | undefined> {
     for (;;) {
-      const refusal = await withRetries(retries, codeRetry);
+      const refusal = await withRetries(this.run.retries, this.codeRetry);
       if (refusal === undefined) return undefined;
-      const unsatisfied = run.unsatisfied;
-      const settled = whenCodeRunsOut(pending, run.repaired, unsatisfied?.map((failure) => failure.test));
+      const unsatisfied = this.run.unsatisfied;
+      const settled = whenCodeRunsOut(this.pending, this.run.repaired, unsatisfied?.map((failure) => failure.test));
       if (settled === undefined) return refusal;
       const withFailure = (test: string): string => {
         const failure = unsatisfied?.find((one) => one.test === test);
         return failure === undefined ? test : `${test}: ${failure.message}`;
       };
-      if ("refuted" in settled) {
-        await settle(settled.refuted, "refuted", lastCode);
-        if (settled.refuted[0] !== pending.scenario) return refutedRefusal("tests", settled.refuted.map(withFailure));
-        const failure = run.latest.get(locationOf(scenario))?.failure;
-        return refutedRefusal("scenario", [failure === undefined ? pending.scenario : `${pending.scenario}, step "${failure.step}": ${failure.message}`]);
-      }
-      await settle(settled.repair, "refuted", lastCode);
-      for (const test of settled.repair) {
-        run.repaired.add(test);
-        // Its repair is judged as a new test: it must fail again before its code.
-        run.known.delete(test);
-      }
-      pending.tests = pending.tests.filter((test) => !settled.repair.includes(test));
-      await undoLastCode();
-      const repairOnce = once("test", judgeTests([...new Set(settled.repair.map((test) => test.split(" > ")[0]!))]));
-      const repair = await repairOnce(refutedRefusal("tests", settled.repair.map(withFailure)));
-      if (repair.refusal !== undefined) return repair.refusal;
+      if ("refuted" in settled) return this.refuted(settled.refuted, withFailure);
+      const repair = await this.repair(settled.repair, withFailure);
+      if (repair !== undefined) return repair;
     }
-  };
-  const end = await innerLoop(
-    async () => (await withRetries(retries, testOnce)) ?? (await codeRound()),
-    async () => failingOf(await runScenario()),
-    failingOf(run.latest.get(locationOf(scenario))) ?? { step: "?", message: "" },
-    run.rounds,
-    (failure) => run.record({ event: "round", scenario: scenario.name, verdict: "no progress", step: failure.step, failure: withoutStack(failure.message) }),
-  );
-  if ("refusal" in end) return end.refusal;
-  if ("limit" in end) throw new RoundLimitReached(roundLimitMessage(description, run.rounds, end.limit, run.reports), scenario.name);
-  if (pending.scenario !== undefined) await settle([pending.scenario], "confirmed", lastAccepted);
-  return undefined;
+  }
+
+  /** The refusal the run stops on for refuted Reds: tests after their repair, or the scenario. */
+  private async refuted(what: string[], withFailure: (test: string) => string): Promise<Refusal> {
+    await this.settle(what, "refuted", this.lastCode);
+    const scenario = this.pending.scenario;
+    if (what[0] !== scenario) return refutedRefusal("tests", what.map(withFailure));
+    const failure = this.run.latest.get(locationOf(this.scenario))?.failure;
+    return refutedRefusal("scenario", [failure === undefined ? scenario : `${scenario}, step "${failure.step}": ${failure.message}`]);
+  }
+
+  /** A refuted test's one repair: a test attempt with the refusal, from the code before the last code attempt; its refusal, if any. */
+  private async repair(tests: string[], withFailure: (test: string) => string): Promise<Refusal | undefined> {
+    await this.settle(tests, "refuted", this.lastCode);
+    for (const test of tests) {
+      this.run.repaired.add(test);
+      // Its repair is judged as a new test: it must fail again before its code.
+      this.run.known.delete(test);
+    }
+    this.pending.tests = this.pending.tests.filter((test) => !tests.includes(test));
+    await this.undoLastCode();
+    const repairOnce = this.once("test", this.judgeTests([...new Set(tests.map((test) => test.split(" > ")[0]!))]));
+    return (await repairOnce(refutedRefusal("tests", tests.map(withFailure)))).refusal;
+  }
 }
 
 /** How a scenario's run fails, or nothing when it passes. */
