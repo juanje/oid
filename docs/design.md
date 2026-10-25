@@ -121,7 +121,7 @@ One judgment (D-02): a new test counts when it failed with a valid Red on a brok
 
 - **Classification.** The runner's report gives the class of the failure (`DOMAIN.md`, Red classes). oid first checks that the test it asked for exists and ran, and uses the compiler API to tell whether a symbol exists. The class is a recorded signal: it gates only where oid can prove the failure is not a Red.
 - **Provisional Reds.** A failure oid cannot classify is accepted as `undecided (provisional)`. The code confirms it: the code attempt that makes the test or scenario pass, by its attempt number. When the code attempts run out with it still failing, it is refuted. A refuted unit test goes back to one test attempt with the refusal, once per test and run, and its tests are judged as new; a refuted scenario stops the run.
-- **The broken version.** Normally it is the previous checkpoint's source, restored in a scratch copy, with the new tests on top. When that code already passes, it is a mutant: a diff the agent proposes in its report. oid applies it to covered lines, runs the test, and undoes it.
+- **The broken version.** Normally it is the previous checkpoint's source, restored in a scratch copy, with the new tests on top. When that code already passes, it is a mutant: edits to the source the agent proposes in its report. oid applies them to the source, in a scratch copy, and the scenario or test must fail there on an assertion.
 - **The record.** For each scenario and test, `progress.json` keeps the broken version (a checkpoint or a mutant diff), the class of the failure and the passing checkpoint.
 
 ## 5. The gate

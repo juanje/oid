@@ -26,7 +26,7 @@ Each term has one meaning. The last column names what it must not be confused wi
 | **Checkpoint** | A commit in the run's worktree after an accepted attempt: the rollback target. | Evidence. |
 | **Valid Red** | A failure that shows the behaviour or the interface is missing (Red classes, below). | A failure that shows the test is broken. |
 | **Broken version** | The code a new test must fail on: the previous checkpoint's code, or a mutant. | — |
-| **Mutant** | A small change to lines a test covers. oid applies it, runs the test and undoes it. The agent proposes it and never writes it to the source. | — |
+| **Mutant** | A small change to the source, which an attempt proposes in its report when its scenario or new test passes before its code. oid applies it in a scratch copy, never in the worktree, and the scenario or test must fail on it with `business_assertion`. | — |
 | **Evidence** | For a scenario or a test: the broken version it failed on, the class of the failure, and the code it passed on. | A checkpoint. |
 | **Guard** | A scenario or test about something that must *not* happen, so it passes before any code exists. Its evidence is a mutant. | — |
 | **Gate** | The deterministic checks that decide whether an FR is done. It runs as the loop step before each commit and as `oid gate`. | The evidence check of an attempt, and `try`. |

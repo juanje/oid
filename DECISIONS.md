@@ -39,7 +39,7 @@ The decisions in force, with their reasons and the options they rule out. Read t
 - a person accepting guards;
 - refusing a failure for being unreadable.
 
-**Follows.** The mutant must touch lines the test covers, must fail with a valid Red, and is recorded as the evidence.
+**Follows.** A mutant changes only source files, must fail with `business_assertion` (a removed function only shows the test calls it), and is recorded as the evidence.
 
 ## D-03: No state machine: attempts with kinds, judged on their outcome
 
