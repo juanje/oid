@@ -4,8 +4,8 @@ import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import { OID_ROOT, createGreetProjectWith, git, greet03AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
-import { assertOutputNames } from "../support/run.ts";
-import { lastAttempt, type PreparedAttempt } from "../support/scripted-executor.ts";
+import { assertOutputNames, requestsOf } from "../support/run.ts";
+import { lastAttempt, type PreparedAttempt, replacedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
 const [SCENARIO] = scenarioNames("greet-03/contract/features/greet-03.feature") as [string];
@@ -29,6 +29,43 @@ Then("the output gives the scenario's failure the class {word}", function (this:
   assert.ok(line !== undefined, `No line of the output gives the scenario "${SCENARIO}" the class ${failureClass}:\n${this.output}`);
 });
 
+/** Asserts that a line of the output names `what` with every one of the fixed `words`. */
+function assertLineWith(world: RunWorld, what: string, words: string[]): void {
+  const line = world.output.split("\n").find((text) => text.includes(what) && words.every((word) => new RegExp(`\\b${word}\\b`).test(text)));
+  assert.ok(line !== undefined, `No line of the output names "${what}" with ${words.join(", ")}:\n${world.output}`);
+}
+
+Then("the output gives the new test's failure the class undecided, provisional", function (this: RunWorld) {
+  assertLineWith(this, NEW_TEST, ["undecided", "provisional"]);
+});
+
+Then("the output says the new test's Red is confirmed", function (this: RunWorld) {
+  assertLineWith(this, NEW_TEST, ["confirmed"]);
+});
+
+Then("the output gives the scenario's failure the class undecided, provisional", function (this: RunWorld) {
+  assertLineWith(this, `"${SCENARIO}"`, ["undecided", "provisional"]);
+});
+
+Then("the output says the scenario's Red is confirmed", function (this: RunWorld) {
+  assertLineWith(this, `"${SCENARIO}"`, ["confirmed"]);
+});
+
+Then("the output names the test as refuted", function (this: RunWorld) {
+  assertLineWith(this, NEW_TEST, ["refuted"]);
+});
+
+Then("the output names the scenario as refuted", function (this: RunWorld) {
+  assertLineWith(this, SCENARIO, ["refuted"]);
+});
+
+Then("the test attempt after the code attempts was given the refusal, naming the test as refuted", function (this: RunWorld) {
+  const refusal = requestsOf(this, "test", 2)[1]!.refusal;
+  assert.ok(refusal !== undefined, "The test attempt after the code attempts came without a refusal");
+  const text = `${refusal.failed}\n${refusal.evidence}`;
+  assert.ok(text.includes(NEW_TEST) && /\brefuted\b/.test(text), `The refusal does not name "${NEW_TEST}" as refuted:\n${text}`);
+});
+
 Then("the output gives the failure the class {word}", function (this: RunWorld, failureClass: string) {
   assert.match(this.output, new RegExp(`\\b${failureClass}\\b`), `The output does not give the class ${failureClass}:\n${this.output}`);
 });
@@ -47,10 +84,6 @@ function replaceAttempt(world: RunWorld, kind: PreparedAttempt["kind"], name: st
   world.script = lastAttempt(world.script, kind, SCENARIO, greet03AttemptDir(name));
 }
 
-Given("the scripted test attempt calls the existing greeting function in a way that fails as {string}", function (this: RunWorld, _message: string) {
-  replaceAttempt(this, "test", "test-wrong-call");
-});
-
 Given("the module of FR-GREET-01 also has a greeter class", async function (this: RunWorld) {
   await cp(join(OID_ROOT, "fixtures/greet/greet-03/greeter"), this.projectDir, { recursive: true });
   git(this.projectDir, "add", "--all");
@@ -61,8 +94,42 @@ Given("the scripted executor builds FR-GREET-03 as a new method of the greeter c
   this.script = (["steps", "test", "code"] as const).map((kind): PreparedAttempt => ({ kind, scenario: SCENARIO, dir: greet03AttemptDir(`greeter-${kind}`) }));
 });
 
-Given("the scripted test attempt calls a function the assertion package does not have", function (this: RunWorld) {
-  replaceAttempt(this, "test", "test-package-call");
+/** The prepared attempt `name` of `kind` takes the place of the default one; the attempts after it stay. */
+function replaceKeeping(world: RunWorld, kind: PreparedAttempt["kind"], name: string): void {
+  world.script = replacedAttempt(world.script, kind, SCENARIO, greet03AttemptDir(name));
+}
+
+/** Steps, a test, a code attempt that leaves it failing, the test's repair, and the code again. */
+function withRepair(test: string, repair: string): PreparedAttempt[] {
+  return (["steps", test, "code", repair, "code"] as const).map((name): PreparedAttempt => ({
+    kind: name === "steps" || name === "code" ? name : "test",
+    scenario: SCENARIO,
+    dir: greet03AttemptDir(name),
+  }));
+}
+
+Given("the scripted test attempt fails with an error of its own while the function it asks for does not exist yet", function (this: RunWorld) {
+  replaceKeeping(this, "test", "test-own-error");
+});
+
+Given("the scripted steps attempt fails with an error of its own while the function it asks for does not exist yet", function (this: RunWorld) {
+  replaceKeeping(this, "steps", "steps-own-error");
+});
+
+Given("the scripted test attempt calls the existing greeting function in a way that fails as {string}, and its repair calls the new function", function (this: RunWorld, _message: string) {
+  this.script = withRepair("test-wrong-call", "test");
+});
+
+Given("the scripted test attempt calls a function the assertion package does not have, and so does its repair", function (this: RunWorld) {
+  this.script = withRepair("test-package-call", "test-package-call");
+});
+
+Given("the scripted steps attempt asserts with a function the assertion package does not have", function (this: RunWorld) {
+  replaceKeeping(this, "steps", "steps-package-call");
+});
+
+Given("the scripted code attempt does not make its unit test pass", function (this: RunWorld) {
+  replaceKeeping(this, "code", "code-wrong");
 });
 
 Given("the scripted steps attempt leaves the Then step of FR-GREET-03 undefined", function (this: RunWorld) {
@@ -83,14 +150,6 @@ Given("the scripted test attempt writes a test that imports a package that is no
 
 Given("the scripted test attempt writes its test in a file vitest does not collect", function (this: RunWorld) {
   replaceAttempt(this, "test", "test-not-collected");
-});
-
-Given("the scripted test attempt writes a test that fails reading a file that does not exist", function (this: RunWorld) {
-  replaceAttempt(this, "test", "test-enoent");
-});
-
-Then("the output names the test", function (this: RunWorld) {
-  assertOutputNames(this, NEW_TEST);
 });
 
 Then("the output names the undefined step", function (this: RunWorld) {
