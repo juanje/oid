@@ -12,11 +12,11 @@ import { LimitReached, RoundLimitReached } from "./limits.ts";
 import { missingCoverageProvider } from "./coverage.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
-import { type Failing, innerLoop, type RoundResult, withoutStack } from "./inner-loop.ts";
+import { type Failing, innerLoop, withoutStack } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { type Pending, refutedRefusal, whenCodeRunsOut } from "./provisional.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
-import { roundLimitMessage, stalledRefusal } from "./rounds.ts";
+import { roundLimitMessage } from "./rounds.ts";
 import { type Tried, withRetries } from "./retries.ts";
 import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
 import { progressLine } from "./progress.ts";
@@ -53,7 +53,7 @@ interface FrRun {
   turns: number;
   /** How many rounds of test and code attempts a scenario may take (FR-RUN-09). */
   rounds: number;
-  /** The last report of each attempt kind, for the person when the rounds stop moving or reach their limit. */
+  /** The last report of each attempt kind, for the person when the scenario reaches its limit of rounds. */
   reports: Map<AttemptKind, string>;
   /** Appends to the run log. */
   record: (event: LogEvent) => Promise<void>;
@@ -258,15 +258,11 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
   if (stepsRefusal !== undefined) return stepsRefusal;
   // A test attempt's new tests, in the files it changed and in `also`: a repaired test's file, even if left as it was.
   const description = `${scenario.uri}:${scenario.line} "${scenario.name}"`;
-  // A test attempt that adds no test is not accepted: its round makes no progress (FR-RUN-03).
-  let addedNoTest = false;
+  // A test attempt that adds no test is accepted, and its round goes on to the code: the wiring path (docs/design.md §2).
   const judgeTests = (also: string[]) => async (files: string[]): Promise<Judgment> => {
     const testFiles = [...new Set([...files.filter(isTestFile), ...also])];
-    const judgment = testFiles.length === 0 ? undefined : await judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known);
-    if (judgment !== undefined && (judgment.refusal !== undefined || judgment.reds.length > 0)) return judgment;
-    addedNoTest = true;
-    const now = failingOf(run.latest.get(locationOf(scenario)));
-    return { refusal: stalledRefusal(description, now ?? { step: "?", message: "" }), reds: [] };
+    if (testFiles.length === 0) return { refusal: undefined, reds: [] };
+    return judgeNewTests(worktreeDir, testFiles, runCommand, await symbolsOf(testFiles), known);
   };
   const testOnce = once("test", judgeTests([]));
   // A code attempt's retry; a refusal the code cannot act on goes back to a test attempt first, and the pair counts as
@@ -322,33 +318,14 @@ async function buildScenario(run: FrRun, scenario: Scenario): Promise<Refusal | 
       if (repair.refusal !== undefined) return repair.refusal;
     }
   };
-  // A round: the test attempts, then the code attempts. One whose test attempt adds no test ends there, undone.
-  const round = async (unchanged: Failing | undefined): Promise<RoundResult> => {
-    const previous = unchanged === undefined ? undefined : stalledRefusal(description, unchanged);
-    let undoNoTest = async (): Promise<void> => {};
-    const tests = await withRetries(retries, async (refused) => {
-      addedNoTest = false;
-      const tried = await testOnce(refused ?? previous);
-      undoNoTest = tried.rollback;
-      return addedNoTest ? { ...tried, final: true } : tried;
-    });
-    if (addedNoTest) {
-      await undoNoTest();
-      return { added: false };
-    }
-    if (tests !== undefined) return { refusal: tests };
-    const code = await codeRound();
-    return code === undefined ? { added: true } : { refusal: code };
-  };
   const end = await innerLoop(
-    round,
+    async () => (await withRetries(retries, testOnce)) ?? (await codeRound()),
     async () => failingOf(await runScenario()),
     failingOf(run.latest.get(locationOf(scenario))) ?? { step: "?", message: "" },
-    { retries, rounds: run.rounds },
+    run.rounds,
     (failure) => run.record({ event: "round", scenario: scenario.name, verdict: "no progress", step: failure.step, failure: withoutStack(failure.message) }),
   );
   if ("refusal" in end) return end.refusal;
-  if ("stalled" in end) return stalledRefusal(description, end.stalled, run.reports);
   if ("limit" in end) throw new RoundLimitReached(roundLimitMessage(description, run.rounds, end.limit, run.reports), scenario.name);
   if (pending.scenario !== undefined) await settle([pending.scenario], "confirmed", lastAccepted);
   return undefined;

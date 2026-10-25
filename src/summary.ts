@@ -36,22 +36,19 @@ function ending(events: LogEvent[], end: EndEvent | undefined): string {
   const stop = events.find((event) => event.event === "stop");
   if (stop?.limit === "rounds") return `Stopped at the round limit for "${stop.scenario ?? "?"}".`;
   if (stop !== undefined && last !== undefined) return `Stopped at the turn limit in the ${last.kind} attempt for "${last.scenario}".`;
-  const lastRound = [...events].reverse().find((event) => event.event === "attempt" || event.event === "round");
-  if (end?.exitCode === 1 && lastRound?.event === "round") {
-    return `Stopped on rounds with no progress for "${lastRound.scenario}", still failing at step "${lastRound.step}".`;
-  }
   if (end?.exitCode === 1 && last?.verdict === "refused") return `Stopped at the ${last.kind} attempt for "${last.scenario}": refused, ${last.refusal?.failed ?? ""}.`;
   if (end?.exitCode === 1) return "Stopped at the gate: refused.";
   return "Stopped on an error no attempt can fix.";
 }
 
-function measures({ attempts, rejections, blindRetries, provisional, tokens, cost, timeMs }: Measures): string {
+function measures({ attempts, rejections, blindRetries, noProgressRounds, provisional, tokens, cost, timeMs }: Measures): string {
   const byKind = (counts: Partial<Record<string, number>>) =>
     Object.entries(counts)
       .map(([kind, count]) => `${kind} ${count}`)
       .join(", ") || "none";
+  const rounds = noProgressRounds === undefined ? "" : `; rounds with no progress ${noProgressRounds}`;
   const reds = provisional === undefined ? "" : `; provisional Reds ${provisional.accepted} (confirmed ${provisional.confirmed}, refuted ${provisional.refuted})`;
-  return `Measures: attempts ${byKind(attempts)}; rejections ${byKind(rejections)}; blind retries ${blindRetries}${reds}; tokens ${tokens}; cost ${cost.toFixed(4)}; time ${(timeMs / 1000).toFixed(1)} s`;
+  return `Measures: attempts ${byKind(attempts)}; rejections ${byKind(rejections)}; blind retries ${blindRetries}${rounds}${reds}; tokens ${tokens}; cost ${cost.toFixed(4)}; time ${(timeMs / 1000).toFixed(1)} s`;
 }
 
 function location(scenario: Scenario): string {

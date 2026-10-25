@@ -105,6 +105,8 @@ export interface Measures {
   cacheRead?: number;
   cost: number;
   deniedToolCalls: number;
+  /** Rounds after which the scenario failed the same way (FR-RUN-03); logs before 0.1.10 do not have it. */
+  noProgressRounds?: number;
   /** The provisional Reds accepted, and of those, the ones confirmed and refuted; logs before 0.1.8 do not have it. */
   provisional?: { accepted: number; confirmed: number; refuted: number };
   /** The run's time, on a monotonic clock, so that a suspended machine does not count. */
@@ -168,7 +170,8 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
   const attempts = events.filter((event): event is AttemptEvent => event.event === "attempt");
   const gateRejections = events.flatMap((event) => (event.event === "gate" && event.verdict === "refused" && event.sendTo !== undefined ? [event.sendTo] : []));
   const provisional = { accepted: 0, confirmed: 0, refuted: 0 };
-  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, provisional, timeMs };
+  const noProgressRounds = events.filter((event) => event.event === "round").length;
+  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, noProgressRounds, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, provisional, timeMs };
   const last = new Map<AttemptKind, AttemptEvent>();
   for (const attempt of attempts) {
     measures.attempts[attempt.kind] = (measures.attempts[attempt.kind] ?? 0) + 1;

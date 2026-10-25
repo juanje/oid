@@ -6,11 +6,8 @@ export interface Failing {
   message: string;
 }
 
-/** A round's end: a refusal ends the loop; otherwise whether its test attempt added a test. */
-export type RoundResult = { refusal: Refusal } | { added: boolean };
-
-/** How the loop ended: the scenario passes, a round was refused, rounds with no progress used the retries up, or the limit of rounds was reached. */
-export type LoopEnd = { built: true } | { refusal: Refusal } | { stalled: Failing } | { limit: Failing };
+/** How the loop ended: the scenario passes, a round was refused, or the limit of rounds was reached. */
+export type LoopEnd = { built: true } | { refusal: Refusal } | { limit: Failing };
 
 /**
  * Whether two failures are the same: the same step and the same message, without its stack lines, which move with
@@ -31,36 +28,24 @@ export function withoutStack(message: string): string {
 
 /**
  * Runs rounds of test and code attempts while the scenario fails (FR-RUN-03), starting from its failure `before`. A
- * round makes no progress when it adds no test, or when the scenario then fails the same way; each one in a row spends
- * a retry, the next round gets the unchanged failure, and a round that moves the failure on resets the count. However
- * the failure moves, the loop runs at most `limits.rounds` rounds (FR-RUN-09).
+ * round after which the scenario fails the same way makes no progress: it is recorded through `onNoProgress`, and the
+ * loop goes on. However the failure moves, the loop runs at most `rounds` rounds (FR-RUN-09).
  */
 export async function innerLoop(
-  round: (unchanged: Failing | undefined) => Promise<RoundResult>,
+  round: () => Promise<Refusal | undefined>,
   failure: () => Promise<Failing | undefined>,
   before: Failing,
-  limits: { retries: number; rounds: number },
+  rounds: number,
   onNoProgress: (failure: Failing) => Promise<void> = async () => {},
 ): Promise<LoopEnd> {
   let last = before;
-  let stalls = 0;
-  let unchanged: Failing | undefined;
-  for (let rounds = 1; ; rounds += 1) {
-    const result = await round(unchanged);
-    if ("refusal" in result) return { refusal: result.refusal };
-    // A round that added no test was not accepted: the scenario is as it was.
-    const now = result.added ? await failure() : last;
+  for (let done = 1; ; done += 1) {
+    const refusal = await round();
+    if (refusal !== undefined) return { refusal };
+    const now = await failure();
     if (now === undefined) return { built: true };
-    const progress = result.added && !sameFailure(now, last);
+    if (sameFailure(now, last)) await onNoProgress(now);
     last = now;
-    unchanged = progress ? undefined : now;
-    if (!progress) {
-      await onNoProgress(now);
-      stalls += 1;
-      if (stalls > limits.retries) return { stalled: now };
-    } else {
-      stalls = 0;
-    }
-    if (rounds >= limits.rounds) return { limit: now };
+    if (done >= rounds) return { limit: now };
   }
 }
