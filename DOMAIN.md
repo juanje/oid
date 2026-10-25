@@ -69,7 +69,10 @@ That codebase uses some of these words with other meanings. When you port a piec
 
 - **A failure in a `Given` or `Background` step is `test_bug`, never a Red.** The scenario failed while being set up. The refusal's next step: set the scenario up without code that does not exist yet, or move that behaviour into a `When` or `Then` step. A failure in a `When` or `Then` step is judged by its message.
 - **`ENOENT` reading something the code should produce is undecided.** Tests assert first that the output exists, then check its content, so that a missing behaviour fails as an assertion.
-- **`X is not a function` is a valid Red only if `X` does not exist in the project.** Ask the compiler API. If `X` exists, the test may be using it wrongly.
+- **`X is not a function` is a valid Red only if `X` does not exist in the project.** If `X` exists, the test may be using it wrongly.
+  - Called by its name: the failing file imports `X` from a project module that does not export it.
+  - Called as a member, through a chain of names (`resolver.resolve`, `this.shortener.resolve`): no source file, under the paths a code attempt writes, declares anything named `X`, and the compiler API types the receiver of every call of that chain in the failing file as the project declares it. `undefined` and `null` are left out of the type first; every other part, and every type it extends, must be declared outside packages and TypeScript's library. A receiver a package types, one typed `any`, and a callee with no chain of names (`(intermediate value).X`) stay undecided.
+  - Known false Red: a receiver whose type the project declares but that holds something else at runtime, such as a World typed by shape that holds a package's object.
 - **An assertion that fails on a line the attempt did not add is undecided.**
 - **A test that passes before its code is not a Red.** If it describes a guard, its evidence is a mutant.
 - **A test that did not run is `not_run`, never evidence.** Check that the test asked for is in the report and ran before reading its result.
@@ -201,6 +204,7 @@ With `--reporter=json --outputFile=<file>`:
 | Case | Where it appears | Message |
 |:--|:--|:--|
 | The test imports an export that does not exist | Test, `failureMessages` | `TypeError: (0 , generateCode) is not a function` |
+| The test calls a member of an imported binding that does not have it | Test, `failureMessages` | `TypeError: default.matchs is not a function`: vitest renames the binding; a local keeps its name (`resolver.resolve`) |
 | The test imports a module that does not exist | File, `message`, no tests listed | `Cannot find module '../../src/redirect' imported from '<test file>'` |
 | A syntax error in a test file | File, `message`, no tests listed | `Transform failed with 1 error: …` |
 | A failing expectation | Test, `failureMessages` | `AssertionError: expected 2 to be 4 // Object.is equality` |
