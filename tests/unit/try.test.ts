@@ -62,6 +62,20 @@ describe("tryAttempt", () => {
     expect(result.passed === false && result.evidence).not.toContain("src/other.ts");
   });
 
+  test("answers a failing test with its failure alone, without type-checking: a Red is never type-checked", async () => {
+    const dir = await tempRepo({ "src/greet.ts": "export {};\n" });
+    await writeFiles(dir, { "src/greet.ts": "export const x: number = '';\n", "tests/greet-all.test.ts": "x\n" });
+    const commands: string[] = [];
+    const runners = recordedRunners(dir, recorded("vitest-greet-02-assert.json"), TSC_ERRORS);
+
+    const result = await tryAttempt(dir, SCENARIO, TEST, async (command, args, options) => {
+      commands.push(basename(command));
+      return runners(command, args, options);
+    });
+
+    expect({ commands, failed: result.passed === false && result.failed }).toEqual({ commands: ["vitest"], failed: expect.stringContaining("tests/greet-all.test.ts") });
+  });
+
   test("passes when the test passes and no file the attempt changed has a type error", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     await writeFiles(dir, { "tests/greet-all.test.ts": "x\n" });
