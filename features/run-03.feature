@@ -6,13 +6,14 @@ Feature: The inner loop
     And a scripted executor that builds the first scenario of FR-GREET-02 and then the second
     And the run allows no retries
 
-  Scenario: Test and code attempts repeat until the scenario passes
-    Given the run allows 1 retry
-    And the first scenario of FR-GREET-02 still fails after its first test and code attempts
+  Scenario: Test and code attempts repeat until the scenario passes, and a round after which it fails the same way is recorded
+    Given the first scenario of FR-GREET-02 still fails after its first test and code attempts
     When I run "oid run FR-GREET-02"
     Then the run succeeds
     And the executor was asked for every prepared attempt, in order
     And every scenario of FR-GREET-02 passes on the run's branch
+    And the output says the first round made no progress, naming the step where the scenario still failed
+    And the summary counts one round with no progress
 
   Scenario: Code that leaves its new tests failing is not committed
     Given the scripted code attempt for the first scenario leaves its new test failing
@@ -44,21 +45,9 @@ Feature: The inner loop
     And the retried test attempt was told its test file defines no vitest test, naming the file
     And no code attempt was asked to fix that test file
 
-  Scenario: A round that adds no test spends a retry, and when the retries run out the run stops with what each attempt kind reported
-    Given the run allows 1 retry
-    And the scripted steps attempt for the first scenario keeps the greeting where its Then step never looks
-    And the scripted test attempts after its first round add no test, each reporting why
+  Scenario: Once the scenario's unit tests are green, a test attempt that adds no test is accepted, and code that connects the parts makes the scenario pass
+    Given the first round for the first scenario of FR-GREET-02 builds a helper only, and its second round adds no test and code that connects the helper
     When I run "oid run FR-GREET-02"
-    Then the run stops with a refusal, not a crash
-    And no test attempt that added no test was accepted
+    Then the run succeeds
     And the executor was asked for every prepared attempt, in order
-    And the output names the first scenario, the step where it still fails, and its failure
-    And the output gives the last report of each attempt kind
-
-  Scenario: A round whose code leaves the scenario failing the same way spends a retry; one that moves the failure on does not
-    Given the scripted steps attempt for the first scenario keeps the greeting where its Then step never looks
-    And the scripted second round for the first scenario adds a test and its code, and the scenario still fails the same way
-    When I run "oid run FR-GREET-02"
-    Then the run stops with a refusal, not a crash
-    And the executor was asked for every prepared attempt, in order
-    And the output names the first scenario, the step where it still fails, and its failure
+    And every scenario of FR-GREET-02 passes on the run's branch
