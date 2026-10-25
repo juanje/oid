@@ -121,3 +121,13 @@ Then("the output names the second test as passing before its code", function (th
 Then("the output says the attempt left fewer unit tests", function (this: RunWorld) {
   assert.match(finalRefusal(this), /\bfewer unit tests\b/, `The refusal does not say the attempt left fewer unit tests:\n${this.output}`);
 });
+
+Given("the scripted steps attempt it asks for fixes the shared Then step, and asks for a code attempt", function (this: RunWorld) {
+  const next = { kind: "code" as const, reason: "The scenario's step definitions are right now: write the code" };
+  this.script = [...this.script, { kind: "steps", scenario: FIRST, dir: attemptDir("steps"), next }, ...BUILD_SECOND];
+});
+
+Then("the output says the steps attempt's request was not followed", function (this: RunWorld) {
+  const line = this.output.split("\n").find((text) => text.startsWith(`request for "${FIRST}": the steps attempt asks for a code attempt`));
+  assert.ok(line !== undefined && /, not followed$/.test(line), `The output does not say the steps attempt's request was not followed:\n${this.output}`);
+});
