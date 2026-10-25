@@ -44,6 +44,12 @@ describe("progressLine", () => {
     expect(progressLine({ event: "red", what: "tests/a.test.ts > a", verdict: "refuted", attempt: 12 })).toBe("  Red refuted by attempt 12: tests/a.test.ts > a");
   });
 
+  test("says when a round makes no progress, with the step where the scenario still fails", () => {
+    expect(progressLine({ event: "round", scenario: SCENARIO, verdict: "no progress", step: 'I get "Hello, Ada!"', failure: "AssertionError: undefined" })).toBe(
+      `round for "${SCENARIO}": no progress, still failing at step "I get \"Hello, Ada!\""`,
+    );
+  });
+
   test("gives no line for the events the summary covers", () => {
     expect(progressLine({ event: "stop", limit: "turns" })).toBeUndefined();
   });

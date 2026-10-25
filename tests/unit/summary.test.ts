@@ -46,6 +46,17 @@ describe("summarize", () => {
     expect(text).toMatch(/provisional Reds 2 \(confirmed 1, refuted 1\)/);
   });
 
+  test("a run that stopped on rounds with no progress, or at its limit of rounds, says so and names the scenario", () => {
+    const round: LogEvent = { event: "round", scenario: FIRST.name, verdict: "no progress", step: "I get it", failure: "AssertionError" };
+    const stalled: LogEvent[] = [START, accepted("test", FIRST.name), round, { event: "end", exitCode: 1, measures: MEASURES }];
+    const limit: LogEvent[] = [START, accepted("code", FIRST.name), { event: "stop", limit: "rounds", scenario: FIRST.name }, { event: "end", exitCode: 3, measures: MEASURES }];
+
+    const ending = (events: LogEvent[]) => summarize(events, "/repo/log.jsonl").split("\n").find((line) => /^\s*Stopped/.test(line));
+
+    expect(ending(stalled)).toMatch(new RegExp(`no progress.*${FIRST.name}`));
+    expect(ending(limit)).toMatch(new RegExp(`round limit.*${FIRST.name}`));
+  });
+
   test("a run that stopped: what is built and not, where it stopped and why, and the ref that keeps its checkpoints", () => {
     const refusal = { failed: "The scenario passes before its code exists: test_bug", evidence: "…", next: "…" };
     const events: LogEvent[] = [
