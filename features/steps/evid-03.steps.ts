@@ -104,3 +104,44 @@ Then("the output says the scenario still passes under the mutant", function (thi
   const refusal = finalRefusal(this);
   assert.ok(refusal.includes(SECOND) && /\bmutant\b/.test(refusal) && /\bpass/.test(refusal), `The refusal does not say the scenario still passes under the mutant:\n${this.output}`);
 });
+
+Given("its retry submits a mutant that joins every name with and, and asks for a code attempt", function (this: RunWorld) {
+  this.script = [
+    ...this.script,
+    { kind: "steps", scenario: SECOND, dir: greet02AttemptDir("s2-steps"), mutant: JOIN_ALL, next: { kind: "code", reason: "Write the list's code" } },
+  ];
+});
+
+Given("the scripted first round for the second scenario writes that function, which greets one person but not a list", function (this: RunWorld) {
+  this.script = [
+    ...this.script,
+    { kind: "test", scenario: SECOND, dir: greet02AttemptDir("test-list-pair") },
+    { kind: "code", scenario: SECOND, dir: greet02AttemptDir("code-list-wrong") },
+  ];
+});
+
+Given(
+  "the scripted test attempt of its second round writes a test of behaviour that exists already, submits a mutant that joins every name with and, and asks for a code attempt that makes the function use it",
+  function (this: RunWorld) {
+    this.script = [
+      ...this.script,
+      { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test"), mutant: JOIN_ALL, next: { kind: "code", reason: "greetList must greet through greetAll, which lists with commas" } },
+      { kind: "code", scenario: SECOND, dir: greet02AttemptDir("s2-code-list") },
+    ];
+  },
+);
+
+/** The output's line for the request the `by` attempt made for the second scenario. */
+function requestLine(world: RunWorld, by: string): string {
+  const line = world.output.split("\n").find((text) => text.startsWith(`request for "${SECOND}": the ${by} attempt asks for a code attempt`));
+  assert.ok(line !== undefined, `The output has no request of the ${by} attempt for "${SECOND}":\n${world.output}`);
+  return line;
+}
+
+Then("the output says the steps attempt's request for the second scenario was not followed", function (this: RunWorld) {
+  assert.match(requestLine(this, "steps"), /, not followed$/);
+});
+
+Then("the output says the test attempt's request for the second scenario was followed", function (this: RunWorld) {
+  assert.doesNotMatch(requestLine(this, "test"), /, not followed$/);
+});
