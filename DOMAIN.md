@@ -194,7 +194,7 @@ Observed on 1.1.0; the 1.4.0 code was compared and is the same unless a line say
   - A failure carries `exception.type` and `exception.message`.
   - The messages give each step's definition file and line.
 - **A step file that statically imports a missing module stops cucumber before any scenario runs:** `ERR_MODULE_NOT_FOUND` on stderr, exit 1, and no message file. A dynamic import of a missing module fails only its step.
-- **Select a scenario by location:** `features/x.feature:12`.
+- **Select a scenario by location:** `features/x.feature:12`. A configuration that sets `paths` (such as `paths: ["features/**/*.feature"]`) runs every path it names whatever locations it is given: `cucumber-js features/x.feature:12 --dry-run` then lists every scenario (checked on 13.3.0). Keep only the results of the locations asked for.
 - **In a Cucumber expression, `/` separates alternatives.** Escape a literal slash: `"a .pi\\/settings.json"` in a TypeScript string.
 - **TypeScript steps need `NODE_OPTIONS="--import tsx"`.**
 - **Under `NODE_V8_COVERAGE`, a cucumber-js run under tsx writes its scripts' coverage with their source maps** (`source-map-cache`, with `lineLengths` in place of the executed source). `v8-to-istanbul` converts it to the TypeScript, as c8 does (checked on 13.3.0 with tsx 4.23.15); tsx adds a synthetic `__name` function, which is not in the source.
