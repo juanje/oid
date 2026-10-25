@@ -131,38 +131,26 @@ Then("no code attempt was asked to fix that test file", function (this: RunWorld
   }
 });
 
-// Run 47's shape: a step definition that defeats the scenario, so that no test or code attempt can make it pass.
-const DEFEATED = "s1-steps-defeated";
-const STEPS_REPORT = "Wrote the step definitions for greeting two people";
-const CODE_REPORT = "greetPair joins two names with and";
-const TEST_REPORT = "The scenario fails in its When step, which keeps the greeting where the Then step never looks; that is in features/steps, outside tests/";
-
-/** The attempts of the first scenario, each with the report it ends with. */
-function reporting(...prepared: [PreparedAttempt["kind"], string, string][]): PreparedAttempt[] {
-  return prepared.map(([kind, name, report]) => ({ kind, scenario: FIRST, dir: greet02AttemptDir(name), report }));
-}
-
-Given("the scripted steps attempt for the first scenario keeps the greeting where its Then step never looks", function (this: RunWorld) {
-  this.script = reporting(["steps", DEFEATED, STEPS_REPORT], ["test", "s1-test", "Tested greetPair"], ["code", "s1-code", CODE_REPORT]);
+Given("the first round for the first scenario of FR-GREET-02 builds a helper only, and its second round adds no test and code that connects the helper", function (this: RunWorld) {
+  // Writing the first round's test again, as it is, adds no test; the code then connects the helper (docs/design.md §2, Wiring).
+  const wiring = attempts(
+    FIRST,
+    ["steps", "s1-steps"],
+    ["test", "s1-test-names"],
+    ["code", "s1-code-names"],
+    ["test", "s1-test-names"],
+    ["code", "s1-code-uses-names"],
+  );
+  this.script = [...wiring, ...BUILD_SECOND];
 });
 
-Given("the scripted test attempts after its first round add no test, each reporting why", function (this: RunWorld) {
-  // Writing the first round's test again, as it is, adds no test.
-  this.script = [...this.script, ...reporting(["test", "s1-test", `${TEST_REPORT}.`], ["test", "s1-test", `${TEST_REPORT}, as before.`])];
+Then("the output says the first round made no progress, naming the step where the scenario still failed", function (this: RunWorld) {
+  const rounds = this.output.split("\n").filter((line) => line.startsWith(`round for "${FIRST}": `));
+  assert.equal(rounds.length, 1, `Expected one round of "${FIRST}" with no progress:\n${this.output}`);
+  assert.match(rounds[0]!, /\bno progress\b/);
+  assert.ok(rounds[0]!.includes('I greet "Ada" and "Grace"'), `The round's line does not name the step where the scenario still failed:\n${rounds[0]}`);
 });
 
-Given("the scripted second round for the first scenario adds a test and its code, and the scenario still fails the same way", function (this: RunWorld) {
-  this.script = [...this.script, ...reporting(["test", "s2-test", "Tested a list of three names"], ["code", "s2-code", "greetAll lists three names"])];
-});
-
-Then("no test attempt that added no test was accepted", function (this: RunWorld) {
-  const ended = this.output.split("\n").filter((line) => line.startsWith(`attempt test for "${FIRST}": `));
-  // The first round's test attempt added its test; every one after it added none.
-  assert.ok(ended.length > 1 && /: accepted$/.test(ended[0]!), `The first test attempt was not accepted:\n${this.output}`);
-  for (const line of ended.slice(1)) assert.match(line, /: refused\b/, `A test attempt that added no test was accepted:\n${this.output}`);
-});
-
-Then("the output names the first scenario, the step where it still fails, and its failure", function (this: RunWorld) {
-  const refusal = this.output.slice(this.output.lastIndexOf("Refused: "));
-  for (const part of [FIRST, 'I get "Hello, Ada and Grace!"', "undefined"]) assert.ok(refusal.includes(part), `The refusal does not name ${part}:\n${refusal}`);
+Then("the summary counts one round with no progress", function (this: RunWorld) {
+  assert.match(this.output, /\brounds with no progress 1\b/, `The summary does not count one round with no progress:\n${this.output}`);
 });
