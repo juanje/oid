@@ -91,6 +91,7 @@ describe("gateLoop", () => {
     expect(outcome).toEqual({ refusal: undefined });
     expect(kinds).toEqual(["test", "test"]);
     expect(given[1]!.evidence).toMatch(/3[^]*2/);
+    expect(given.map((refusal) => refusal.from)).toEqual(["gate", "gate"]);
   });
 
   test("when the retries run out on a type error, the gate's refusal ends the run", async () => {

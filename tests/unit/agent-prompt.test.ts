@@ -136,6 +136,37 @@ describe("taskFor", () => {
     expect(task).toMatch(/\bcode attempt\b/);
   });
 
+  test("opens the task of an attempt the gate sent back with its job, from the gate's refusal, and gives the refusal before the FR and the steps", () => {
+    const refusal = { failed: "The gate failed: types: FAIL", evidence: "features/steps/greet.steps.ts(3,1): error TS2532: Object is possibly 'undefined'.", next: "Fix these errors", from: "gate" as const };
+
+    const task = taskFor({ kind: "steps", fr: "FR-GREET-01", scenario: SCENARIO, refusal, context: CONTEXT });
+
+    expect(task.split("\n\n")[0]).toContain(refusal.failed);
+    expect(task.indexOf(refusal.evidence)).toBeLessThan(task.indexOf(CONTEXT.fr));
+    expect(task.indexOf(refusal.evidence)).toBeLessThan(task.indexOf(CONTEXT.steps[0]!));
+  });
+
+  test("opens the task of an attempt another asked for with its job, naming who asked, and gives the reason and the scenario's failure before the FR and the steps", () => {
+    const failure = { step: 'I get "Hello, Ada!"', message: "AssertionError: 'Hello, !' !== 'Hello, Ada!'" };
+    const reason = "The shared Then step checks the wrong greeting";
+
+    const task = taskFor({ kind: "steps", fr: "FR-GREET-01", scenario: SCENARIO, asked: { by: "code", reason }, context: { ...CONTEXT, failure } });
+
+    expect(task.split("\n\n")[0]).toMatch(/\bcode\b/);
+    for (const evidence of [reason, failure.message]) {
+      expect(task.indexOf(evidence)).toBeLessThan(task.indexOf(CONTEXT.fr));
+      expect(task.indexOf(evidence)).toBeLessThan(task.indexOf(CONTEXT.steps[0]!));
+    }
+  });
+
+  test("keeps a retry after the attempt's own refusal as it was: the kind's work first, the refusal after the FR", () => {
+    const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
+
+    expect(task.split("\n\n")[0]).toMatch(/\btest\b/);
+    expect(task.split("\n\n")[0]).not.toContain(REFUSAL.failed);
+    expect(task.indexOf(CONTEXT.fr)).toBeLessThan(task.indexOf(REFUSAL.failed));
+  });
+
   test("gives a retry the refusal of the attempt before it", () => {
     const task = taskFor({ kind: "test", fr: "FR-GREET-01", scenario: SCENARIO, refusal: REFUSAL, context: CONTEXT });
 

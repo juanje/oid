@@ -151,6 +151,10 @@ describe("gateRefusal", () => {
     expect(refusal?.evidence).toContain(TYPE_ERROR);
   });
 
+  test("marks itself as the gate's, so that the task of the attempt it goes back to opens with its job", () => {
+    expect(gateRefusal([{ name: "types", passed: false, output: TYPE_ERROR }])?.from).toBe("gate");
+  });
+
   test("puts the failing scenarios and tests in focus, whatever scenario the next attempt belongs to", () => {
     const broken = { ...GREET_02_SECOND, status: "failed" as const };
 
