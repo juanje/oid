@@ -100,7 +100,7 @@ describe("summarize", () => {
 
     expect(lines.find((line) => line.includes(FIRST.name))).toMatch(/\bbuilt\b/);
     expect(lines.find((line) => line.includes(SECOND.name) && !/stopped/i.test(line))).toMatch(/\bnot built\b/);
-    expect(lines.find((line) => /stopped/i.test(line))).toMatch(new RegExp(`steps attempt.*${SECOND.name}.*refus`));
+    expect(lines.find((line) => /^\s*Stopped\b/.test(line))).toMatch(new RegExp(`steps attempt.*${SECOND.name}.*refus`));
     expect(lines.join("\n")).toContain("refs/oid/checkpoints/FR-GREET-02-1");
   });
 });
