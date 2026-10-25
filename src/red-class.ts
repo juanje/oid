@@ -9,7 +9,10 @@ export function isValidRed(redClass: RedClass): boolean {
   return redClass === "business_assertion" || redClass === "missing_implementation";
 }
 
-/** The class of a failure, from its message. `symbolExists` asks the project whether a name is declared in it. */
+/**
+ * The class of a failure, from its message. `symbolExists` asks the project whether a callee exists in it: a name, or a
+ * member reached through a chain of names (`this.shortener.resolve`).
+ */
 export function classifyFailure(message: string, symbolExists: (name: string) => boolean): RedClass {
   if (/^AssertionError\b/m.test(message)) return "business_assertion";
   // vitest says this of a test file it cannot parse, such as one with a syntax error.
@@ -17,7 +20,8 @@ export function classifyFailure(message: string, symbolExists: (name: string) =>
   if (/Cannot find package '/.test(message)) return "environment";
   // A relative or absolute path is a module of the project; a bare name would be a package.
   if (/Cannot find module '[./]/.test(message)) return "missing_implementation";
-  const notAFunction = /(?:\(0 , )?([A-Za-z_$][\w$]*)\)?(?:\(\.\.\.\))? is not a function/.exec(message);
+  // A callee that does not start a chain of names, such as `(intermediate value).resolve`, leaves nothing to ask.
+  const notAFunction = /(?<![\w$.)])(?:\(0 , )?((?:this|[A-Za-z_$][\w$]*)(?:\.[A-Za-z_$][\w$]*)*)\)?(?:\(\.\.\.\))? is not a function/.exec(message);
   if (notAFunction !== null) return symbolExists(notAFunction[1]!) ? "undecided" : "missing_implementation";
   return "undecided";
 }
