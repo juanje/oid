@@ -10,7 +10,7 @@ async function loop(ends: RoundEnd<string>[], failures: (Failing | undefined)[],
   const noProgress: Failing[] = [];
   const given: (string | undefined)[] = [];
   let checks = 0;
-  const end = await innerLoop(
+  const end = await innerLoop<string>(
     async (request) => {
       given.push(request);
       return ends.shift();
