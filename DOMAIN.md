@@ -70,10 +70,7 @@ That codebase uses some of these words with other meanings. When you port a piec
 
 - **A failure in a `Given` or `Background` step is `test_bug`, never a Red.** The scenario failed while being set up. The refusal's next step: set the scenario up without code that does not exist yet, or move that behaviour into a `When` or `Then` step. A failure in a `When` or `Then` step is judged by its message.
 - **`ENOENT` reading something the code should produce is undecided.** Tests assert first that the output exists, then check its content, so that a missing behaviour fails as an assertion.
-- **`X is not a function` is `missing_implementation` only if `X` does not exist in the project; otherwise it is `undecided`.** If `X` exists, the test may be using it wrongly.
-  - Called by its name: the failing file imports `X` from a project module that does not export it.
-  - Called as a member, through a chain of names (`resolver.resolve`, `this.shortener.resolve`): no source file, under the paths a code attempt writes, declares anything named `X`, and the compiler API types the receiver of every call of that chain in the failing file as the project declares it. `undefined` and `null` are left out of the type first; every other part, and every type it extends, must be declared outside packages and TypeScript's library. A receiver a package types, one typed `any`, and a callee with no chain of names (`(intermediate value).X`) stay undecided.
-  - Known false Red: a receiver whose type the project declares but that holds something else at runtime, such as a World typed by shape that holds a package's object.
+- **`X is not a function` is `missing_implementation` only when the failing file imports `X` from a project module that does not export it; otherwise it is `undecided`.** If `X` exists, the test may be using it wrongly. Called as a member (`resolver.resolve`, `this.shortener.resolve`), it is `undecided`: oid accepts it provisionally, and the code confirms it.
 - **An assertion that fails on a line the attempt did not add is undecided.**
 - **A test that passes before its code is not a Red.** If it describes a guard, its evidence is a mutant.
 - **A test that did not run is `not_run`, never evidence.** Check that the test asked for is in the report and ran before reading its result.
