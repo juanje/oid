@@ -53,3 +53,7 @@ For their usage and options, and the version: `oid --help`.
 ## More
 
 What oid does and why: [`SPEC.md`](SPEC.md). Its terms and how the tools it drives behave: [`DOMAIN.md`](DOMAIN.md). How it works: [`docs/design.md`](docs/design.md).
+
+## License
+
+Licensed under the MIT License. See [LICENSE](LICENSE).
