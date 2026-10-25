@@ -3,7 +3,7 @@ import { chmod, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { startRunLog } from "../../src/run-log.ts";
-import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, scratchCopy, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
+import { acceptedWork, checkpoint, commitFr, createRunWorktree, finishRun, freeRunId, scratchCopy, takeAttemptChanges, takeAttemptDiff } from "../../src/worktree.ts";
 import { git, tempRepo, writeFiles } from "./support/repo.ts";
 
 describe("createRunWorktree", () => {
@@ -171,22 +171,28 @@ describe("checkpoint", () => {
 });
 
 describe("finishRun", () => {
-  test("a built run: its checkpoints squashed onto the branch as one commit, its checkpoint ref deleted, its worktree removed", async () => {
+  test("a built run: each FR's checkpoints squashed onto the branch as one commit, in order, its checkpoint ref deleted, its worktree removed", async () => {
     const repo = await tempRepo({ "a.txt": "first\n" });
     await writeFiles(repo, { "node_modules/dep/index.js": "export {};\n" });
     const start = git(repo, "rev-parse", "HEAD");
     const worktree = await createRunWorktree(repo, "r1");
-    const attempts: Record<string, string>[] = [{ "features/steps/a.steps.ts": "export {};\n" }, { "a.txt": "changed\n", "src/new.ts": "export {};\n" }];
-    for (const files of attempts) {
-      await writeFiles(worktree.dir, files);
-      await takeAttemptDiff(worktree.dir);
-      await checkpoint(worktree, "an accepted attempt");
-    }
+    const build = async (attempts: Record<string, string>[]) => {
+      for (const files of attempts) {
+        await writeFiles(worktree.dir, files);
+        await takeAttemptDiff(worktree.dir);
+        await checkpoint(worktree, "an accepted attempt");
+      }
+    };
+    await build([{ "features/steps/a.steps.ts": "export {};\n" }, { "a.txt": "changed\n", "src/new.ts": "export {};\n" }]);
+    await commitFr(worktree, start, "feat(FR-X-01): built");
+    const first = git(repo, "rev-parse", worktree.branch);
+    await build([{ "src/other.ts": "export {};\n" }]);
+    await commitFr(worktree, first, "feat(FR-X-02): built");
 
-    await finishRun(worktree, "feat(FR-X-01): built");
+    await finishRun(worktree, true);
 
-    expect(git(repo, "rev-parse", `${worktree.branch}^`)).toBe(start);
-    expect(git(repo, "diff", "--name-only", start, worktree.branch).split("\n")).toEqual(["a.txt", "features/steps/a.steps.ts", "src/new.ts"]);
+    expect(git(repo, "log", "--reverse", "--format=%s", `${start}..${worktree.branch}`).split("\n")).toEqual(["feat(FR-X-01): built", "feat(FR-X-02): built"]);
+    expect(git(repo, "diff", "--name-only", start, `${worktree.branch}^`).split("\n")).toEqual(["a.txt", "features/steps/a.steps.ts", "src/new.ts"]);
     expect(git(repo, "for-each-ref", worktree.checkpoints)).toBe("");
     expect(existsSync(worktree.dir)).toBe(false);
   });
@@ -199,7 +205,7 @@ describe("finishRun", () => {
     await takeAttemptDiff(worktree.dir);
     await checkpoint(worktree, "steps for a scenario");
 
-    await finishRun(worktree, undefined);
+    await finishRun(worktree, false);
 
     expect(git(repo, "rev-parse", worktree.branch)).toBe(start);
     expect(git(repo, "ls-tree", "-r", "--name-only", worktree.checkpoints)).toContain("features/steps/a.steps.ts");

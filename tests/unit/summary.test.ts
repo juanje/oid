@@ -46,6 +46,26 @@ describe("summarize", () => {
     expect(text).toMatch(/provisional Reds 2 \(confirmed 1, refuted 1\)/);
   });
 
+  test("marks each FR of a run of several as built, stopped or not started", () => {
+    const events: LogEvent[] = [
+      { event: "plan", frs: ["FR-GREET-01", "FR-GREET-02", "FR-GREET-03"] },
+      { ...START, fr: "FR-GREET-01", scenarios: [FIRST] },
+      { event: "scenario", ...FIRST, verdict: "built" },
+      { event: "built", fr: "FR-GREET-01" },
+      { ...START, fr: "FR-GREET-02", scenarios: [SECOND] },
+      { event: "end", exitCode: 1, measures: MEASURES },
+    ];
+
+    const lines = summarize(events, "/repo/log.jsonl").split("\n");
+    const marked = (fr: string) => lines.find((line) => new RegExp(`^\\s*${fr}\\b`).test(line));
+
+    expect([marked("FR-GREET-01"), marked("FR-GREET-02"), marked("FR-GREET-03")]).toEqual([
+      expect.stringMatching(/\bbuilt\b/),
+      expect.stringMatching(/\bstopped\b/),
+      expect.stringMatching(/\bnot started\b/),
+    ]);
+  });
+
   test("a run that stopped at its limit of rounds says so and names the scenario", () => {
     const limit: LogEvent[] = [START, accepted("code", FIRST.name), { event: "stop", limit: "rounds", scenario: FIRST.name }, { event: "end", exitCode: 3, measures: MEASURES }];
 

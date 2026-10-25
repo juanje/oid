@@ -2,8 +2,9 @@ import { describe, expect, test } from "vitest";
 import { COMMANDS, helpText, parseArgs, usageOf } from "../../src/cli-args.ts";
 
 describe("parseArgs", () => {
-  test("reads oid run <FR>", () => {
-    expect(parseArgs(["run", "FR-GREET-01"])).toEqual({ command: "run", fr: "FR-GREET-01" });
+  test("reads oid run <FR…>, one FR or several, in the order given", () => {
+    expect(parseArgs(["run", "FR-GREET-01"])).toEqual({ command: "run", frs: ["FR-GREET-01"] });
+    expect(parseArgs(["run", "FR-GREET-02", "FR-GREET-03"])).toEqual({ command: "run", frs: ["FR-GREET-02", "FR-GREET-03"] });
   });
 
   test("an option it does not know is an error that names it", () => {

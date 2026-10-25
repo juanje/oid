@@ -57,6 +57,13 @@ describe("progressLine", () => {
     expect(progressLine({ event: "request", scenario: SCENARIO, by: "steps", kind: "code", reason: "Write the code", followed: false })).toMatch(/: Write the code, not followed$/);
   });
 
+  test("says which scenarios an FR's gate leaves out, and gives no line when it leaves out none", () => {
+    const leftOut = [{ uri: "features/greet-03.feature", line: 4, name: "A person is greeted with the chosen salutation" }];
+
+    expect(progressLine({ event: "scope", fr: "FR-GREET-02", leftOut })).toBe(`gate of FR-GREET-02 leaves out: features/greet-03.feature:4 "A person is greeted with the chosen salutation"`);
+    expect(progressLine({ event: "scope", fr: "FR-GREET-02", leftOut: [] })).toBeUndefined();
+  });
+
   test("gives no line for the events the summary covers", () => {
     expect(progressLine({ event: "stop", limit: "turns" })).toBeUndefined();
   });
