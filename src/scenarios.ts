@@ -49,7 +49,12 @@ export async function runAllScenarios(
   // locations, it runs only those scenarios: the gate's scope (FR-GATE-01).
   const { report, output } = await cucumber(dir, locations, run, v8CoverageDir === undefined ? {} : { NODE_V8_COVERAGE: v8CoverageDir });
   if (report === undefined) return { ran: false, results: [], steps: new Map(), output };
-  return { ran: true, results: scenarioResults(report), steps: scenarioSteps(report), output };
+  // A configuration that names paths runs them all, whatever locations it is given (DOMAIN.md, cucumber-js): only the
+  // scenarios asked for count.
+  const asked = locations.length === 0 ? undefined : new Set(locations);
+  const results = scenarioResults(report).filter((result) => asked === undefined || asked.has(location(result)));
+  const steps = new Map([...scenarioSteps(report)].filter(([where]) => asked === undefined || asked.has(where)));
+  return { ran: true, results, steps, output };
 }
 
 function location(scenario: Scenario): string {
