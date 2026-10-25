@@ -158,7 +158,7 @@ Only the common facts come from one source: what oid is, the goal of the whole s
 **Decision.**
 - **Where:** a new repository. v1 is used as a quarry from its own checkout, and a piece enters only when the design asks for it, with new behaviour-level tests.
 - **How:** built with Claude Code and a short `AGENTS.md`, with no process hooks. oid is not used on itself until the MVP runs on an external target.
-- **The walking skeleton comes first:** the URL shortener as a library, time-boxed to 4 days. The rest of the MVP gets its box once the skeleton runs.
+- **The walking skeleton comes first:** the URL shortener as a library, time-boxed to 4 days; it ran in one. The rest of the MVP has no time box (Juanje, 2026-10-25). Instead, if development slows down the way v1's did, the work stops and the cause is analysed before going on.
 - **The MVP is done when:**
   - every shortener FR has been built by `oid run` in at least three runs;
   - then one FR of an existing project has been built;

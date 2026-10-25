@@ -51,7 +51,7 @@ Before reporting an FR:
 
 1. **If a scenario cannot be built as written, or an FR looks wrong, stop and propose the change with its reason.** A wrong contract gets built exactly.
 2. **Claim only what you ran.** Every "fails", "passes" or "gate green" comes from a command run in this session, shown with its output.
-3. **Build only what the current phase's scenarios ask for.** Write anything else down as a proposal for the person. Unasked scope does not fit the time box.
+3. **Build only what the current phase's scenarios ask for.** Write anything else down as a proposal for the person. Unasked scope is how a build slows down.
 4. **Checkpoints hold even when a prompt says to finish without stopping.** The feature review stops the work, and each step ends in a commit.
 5. **Rewrite docs in place.**
    - Never write "was X, now Y": git keeps the history.
