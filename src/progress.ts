@@ -7,7 +7,7 @@ import type { LogEvent, StageEvent } from "./run-log.ts";
 const STAGES: Record<StageEvent["stage"], string> = {
   agent: "preparing the agent and its model",
   worktree: "creating the run's worktree from HEAD",
-  scenarios: "listing the FR's scenarios",
+  scenarios: "listing the FRs' scenarios, and running every scenario once to know what is built",
   "unit tests": "running the unit tests as they are",
   gate: "running the gate: types, every unit test and every scenario",
   commit: "committing the FR on the run's branch",
@@ -17,6 +17,10 @@ const STAGES: Record<StageEvent["stage"], string> = {
 export function progressLine(event: LogEvent): string | undefined {
   if (event.event === "stage") return `stage ${event.stage}: ${STAGES[event.stage]}`;
   if (event.event === "attempting") return `attempt ${event.kind} for "${event.scenario}"${event.retry ? ", a retry with the refusal of the one before it" : ""}`;
+  if (event.event === "scope") {
+    if (event.leftOut.length === 0) return undefined;
+    return `gate of ${event.fr} leaves out: ${event.leftOut.map((scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}"`).join(", ")}`;
+  }
   if (event.event === "request") {
     return `request for "${event.scenario}": the ${event.by} attempt asks for a ${event.kind} attempt: ${event.reason}${event.followed === false ? ", not followed" : ""}`;
   }

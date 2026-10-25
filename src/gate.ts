@@ -41,13 +41,13 @@ function unknownOptionIn(output: string): { unknownOption?: string } {
  * Runs every check of the gate over the whole project in `dir`, with the project's own runners. Given the commit a run
  * started from, it also checks the coverage of the branches the run added (FR-GATE-02).
  */
-export async function runGate(dir: string, run: CommandRunner, since?: { start: string }): Promise<CheckResult[]> {
+export async function runGate(dir: string, run: CommandRunner, since?: { start: string; scenarios?: string[] }): Promise<CheckResult[]> {
   if (since === undefined) return [await typesCheck(dir, run), await unitCheck(dir, run), await scenariosCheck(dir, run)];
   const unitDir = await reportPath(dir, "oid-coverage-unit");
   const v8Dir = await reportPath(dir, "oid-coverage-scenarios");
   await rm(unitDir, { recursive: true, force: true });
   await rm(v8Dir, { recursive: true, force: true });
-  const checks = [await typesCheck(dir, run), await unitCheck(dir, run, unitDir), await scenariosCheck(dir, run, v8Dir)];
+  const checks = [await typesCheck(dir, run), await unitCheck(dir, run, unitDir), await scenariosCheck(dir, run, v8Dir, since.scenarios)];
   return [...checks, await coverageCheck(dir, since.start, unitDir, v8Dir)];
 }
 
@@ -103,8 +103,8 @@ async function unitCheck(dir: string, run: CommandRunner, coverageDir?: string):
   return unit.ran ? { ...result, tests: unit.passed.length + failures.length } : result;
 }
 
-async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: string): Promise<CheckResult> {
-  const { ran, results, steps, output } = await runAllScenarios(dir, run, v8CoverageDir);
+async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: string, scope?: string[]): Promise<CheckResult> {
+  const { ran, results, steps, output } = await runAllScenarios(dir, run, v8CoverageDir, scope);
   const failedScenarios = results
     .filter((result) => result.status !== "passed")
     .map((result) => {

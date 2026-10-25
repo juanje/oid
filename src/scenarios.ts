@@ -43,9 +43,11 @@ export async function runAllScenarios(
   dir: string,
   run: CommandRunner,
   v8CoverageDir?: string,
+  locations: string[] = [],
 ): Promise<{ ran: boolean; results: ScenarioResult[]; steps: Map<string, string[]>; output: string }> {
-  // With a coverage dir, Node writes the V8 coverage of every process cucumber-js runs there (FR-GATE-02).
-  const { report, output } = await cucumber(dir, [], run, v8CoverageDir === undefined ? {} : { NODE_V8_COVERAGE: v8CoverageDir });
+  // With a coverage dir, Node writes the V8 coverage of every process cucumber-js runs there (FR-GATE-02). Given
+  // locations, it runs only those scenarios: the gate's scope (FR-GATE-01).
+  const { report, output } = await cucumber(dir, locations, run, v8CoverageDir === undefined ? {} : { NODE_V8_COVERAGE: v8CoverageDir });
   if (report === undefined) return { ran: false, results: [], steps: new Map(), output };
   return { ran: true, results: scenarioResults(report), steps: scenarioSteps(report), output };
 }

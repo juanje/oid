@@ -65,18 +65,21 @@ export async function checkpoint(worktree: RunWorktree, message: string): Promis
   await git(worktree.dir, "update-ref", worktree.checkpoints, "HEAD");
 }
 
+/** Commits an FR on the run's branch: the squash of its checkpoints since `since`, the commit before it (FR-RUN-05). */
+export async function commitFr(worktree: RunWorktree, since: string, message: string): Promise<void> {
+  await takeAttemptChanges(worktree.dir);
+  await git(worktree.dir, "reset", "-q", "--soft", since);
+  await git(worktree.dir, "commit", "-q", "--no-verify", "--allow-empty", "-m", message);
+  await git(worktree.dir, "update-ref", `refs/heads/${worktree.branch}`, "HEAD");
+  await git(worktree.dir, "update-ref", worktree.checkpoints, "HEAD");
+}
+
 /**
- * Ends a run. A built run gets the squash of its checkpoints, with `builtMessage`, as one commit on its branch, and
- * its checkpoints go; a run that stops before the end keeps them for a later resume. Either way the worktree goes.
+ * Ends a run. Its branch holds one commit per FR it built; a run that built every FR drops its checkpoints, and one
+ * that stops keeps them for a later resume. Either way the worktree goes.
  */
-export async function finishRun(worktree: RunWorktree, builtMessage: string | undefined): Promise<void> {
-  if (builtMessage !== undefined) {
-    await takeAttemptChanges(worktree.dir);
-    await git(worktree.dir, "reset", "-q", "--soft", worktree.start);
-    await git(worktree.dir, "commit", "-q", "--no-verify", "--allow-empty", "-m", builtMessage);
-    await git(worktree.dir, "update-ref", `refs/heads/${worktree.branch}`, "HEAD");
-    if (await refExists(worktree.dir, worktree.checkpoints)) await git(worktree.dir, "update-ref", "-d", worktree.checkpoints);
-  }
+export async function finishRun(worktree: RunWorktree, built: boolean): Promise<void> {
+  if (built && (await refExists(worktree.dir, worktree.checkpoints))) await git(worktree.dir, "update-ref", "-d", worktree.checkpoints);
   await git(worktree.projectDir, "worktree", "remove", "--force", worktree.dir);
 }
 

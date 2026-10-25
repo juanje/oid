@@ -109,6 +109,25 @@ export interface RoundEvent {
   failure: string;
 }
 
+/** The FRs a run builds, in order (FR-RUN-05). */
+export interface PlanEvent {
+  event: "plan";
+  frs: string[];
+}
+
+/** An FR built and committed on the run's branch (FR-RUN-05). */
+export interface BuiltEvent {
+  event: "built";
+  fr: string;
+}
+
+/** The scenarios an FR's gate leaves out: of FRs later in the run, or not built yet (FR-GATE-01). */
+export interface ScopeEvent {
+  event: "scope";
+  fr: string;
+  leftOut: Scenario[];
+}
+
 export interface StopEvent {
   event: "stop";
   limit: "turns" | "rounds";
@@ -145,7 +164,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | PlanEvent | BuiltEvent | ScopeEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;

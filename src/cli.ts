@@ -28,5 +28,5 @@ export async function runCli(args: string[], io: CliIo): Promise<number> {
   }
   // The run's modules load only for a run, never for the help or the version (NFR-07).
   const { runFr } = await import("./run.ts");
-  return runFr({ projectDir: io.cwd, fr: parsed.fr, executor: io.executor, out: io.stdout });
+  return runFr({ projectDir: io.cwd, frs: parsed.frs, executor: io.executor, out: io.stdout });
 }

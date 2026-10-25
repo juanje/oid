@@ -3,21 +3,31 @@ import type { AttemptEvent, EndEvent, LogEvent, Measures, StartEvent } from "./r
 
 /**
  * The summary a run prints at its end (FR-CLI-01), from its log's events alone, so that it and the log cannot
- * disagree. Each scenario is marked with the fixed words "built" or "not built".
+ * disagree. Each FR is marked with the fixed words "built", "stopped" or "not started" (FR-RUN-05), and each of its
+ * scenarios with "built" or "not built".
  */
 export function summarize(events: LogEvent[], logPath: string): string {
-  const start = events.find((event): event is StartEvent => event.event === "start");
+  const starts = events.filter((event): event is StartEvent => event.event === "start");
+  const start = starts[0];
   const end = events.find((event): event is EndEvent => event.event === "end");
   const attempts = events.filter((event): event is AttemptEvent => event.event === "attempt");
   const built = new Set(events.flatMap((event) => (event.event === "scenario" ? [location(event)] : [])));
-  const lines = [`Summary of ${start?.fr ?? "the run"}:`];
-  for (const scenario of start?.scenarios ?? []) {
-    if (!built.has(location(scenario))) {
-      lines.push(`  not built  ${describe(scenario)}`);
-      continue;
+  const frsBuilt = new Set(events.flatMap((event) => (event.event === "built" ? [event.fr] : [])));
+  const frs = events.find((event) => event.event === "plan")?.frs ?? starts.map((one) => one.fr);
+  const lines = [`Summary of ${frs.length > 0 ? frs.join(", ") : "the run"}:`];
+  for (const fr of frs) {
+    const started = starts.find((one) => one.fr === fr);
+    // Logs before 0.1.18 have no built event: a run that ended at 0 built its one FR.
+    const done = frsBuilt.has(fr) || (started !== undefined && end?.exitCode === 0);
+    lines.push(`  ${fr}: ${done ? "built" : started !== undefined ? "stopped" : "not started"}`);
+    for (const scenario of started?.scenarios ?? []) {
+      if (!built.has(location(scenario))) {
+        lines.push(`  not built  ${describe(scenario)}`);
+        continue;
+      }
+      const classes = [...new Set(attempts.filter((attempt) => attempt.scenario === scenario.name).flatMap((attempt) => (attempt.reds ?? []).map(redClass)))];
+      lines.push(`  built      ${describe(scenario)}${classes.length > 0 ? `, Reds: ${classes.join(", ")}` : ""}`);
     }
-    const classes = [...new Set(attempts.filter((attempt) => attempt.scenario === scenario.name).flatMap((attempt) => (attempt.reds ?? []).map(redClass)))];
-    lines.push(`  built      ${describe(scenario)}${classes.length > 0 ? `, Reds: ${classes.join(", ")}` : ""}`);
   }
   lines.push(`  ${ending(events, end)}`);
   if (start !== undefined) {
