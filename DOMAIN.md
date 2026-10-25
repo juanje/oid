@@ -20,8 +20,8 @@ Each term has one meaning. The last column names what it must not be confused wi
 | **Run** | One `oid run`, with its own worktree, branch and log. | — |
 | **Attempt** | One agent process that produces one diff of one kind. | A *session* (Pi's object; one per attempt) and a *turn* (one model response inside an attempt). |
 | **Attempt kind** | steps, test, code, refactor-code or refactor-tests. Each has its own write boundary. | — |
-| **Retry** | A new attempt after a refusal, from the last checkpoint, with the refusal in its task; or a new round after a round with no progress. | — |
-| **Round** | In a scenario's inner loop, its test attempts and the code attempts after them. A round makes no progress when its test attempt adds no test, or when after its accepted code the scenario fails the same way: the same step and the same message, without its stack lines (`at …`). | An *attempt*, and a *retry*. |
+| **Retry** | A new attempt after a refusal, from the last checkpoint, with the refusal in its task. | — |
+| **Round** | In a scenario's inner loop, its test attempts and the code attempts after them. A round makes no progress when after it the scenario fails the same way: the same step and the same message, without its stack lines (`at …`). | An *attempt*; and a *retry*: a round with no progress spends none. |
 | **Checkpoint** | A commit in the run's worktree after an accepted attempt: the rollback target. | Evidence. |
 | **Valid Red** | A failure that shows the behaviour or the interface is missing (Red classes, below). | A failure that shows the test is broken. |
 | **Broken version** | The code a new test must fail on: the previous checkpoint's code, or a mutant. | — |
