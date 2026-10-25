@@ -164,7 +164,8 @@ describe("checkpoint", () => {
     await takeAttemptDiff(worktree.dir);
 
     await checkpoint(worktree, "code for a scenario");
-    await finishRun(worktree, "feat(FR-X-01): built");
+    await commitFr(worktree, worktree.start, "feat(FR-X-01): built");
+    await finishRun(worktree, true);
 
     expect(existsSync(mark)).toBe(false);
   });
