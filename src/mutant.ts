@@ -2,11 +2,16 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WRITABLE } from "./boundaries.ts";
+import { runCommand } from "./command.ts";
+import type { Scenario } from "./cucumber-messages.ts";
 import type { Mutant } from "./executor.ts";
+import { git } from "./git.ts";
+import { importedSymbolsOf } from "./imported-symbols.ts";
 import { classifyFailure, classifyScenario } from "./red-class.ts";
 import type { Refusal } from "./refusal.ts";
-import type { ScenarioRun } from "./scenarios.ts";
-import type { UnitRun } from "./unit-tests.ts";
+import { runScenarios, type ScenarioRun } from "./scenarios.ts";
+import { runUnitTests, type UnitRun } from "./unit-tests.ts";
+import { type RunWorktree, scratchCopy } from "./worktree.ts";
 
 // The mutant (FR-EVID-03, D-02): when a scenario or a new test passes before its code, edits to the source that make
 // it fail on an assertion show that it checks the behaviour. oid applies them only in a scratch copy.
@@ -88,4 +93,41 @@ export function judgeTestsUnderMutant(unit: UnitRun, passing: string[], symbolEx
     };
   }
   return { reds: passing.map((test) => `${test}: business_assertion (mutant)`) };
+}
+
+/** Steps whose scenario passes before its code, under a mutant: in a scratch copy, the scenario fails on an assertion. */
+export async function stepsUnderMutant(worktree: RunWorktree, scenario: Scenario, files: string[], mutant: Mutant): Promise<{ reds: string[] } | { refusal: Refusal }> {
+  return underMutant(worktree, files, mutant, async (dir) => {
+    const result = (await runScenarios(dir, [scenario], runCommand))[0]!;
+    const stepFile = result.failure?.definedIn;
+    const exists = await importedSymbolsOf(dir, stepFile === undefined ? [] : [stepFile]);
+    const refusal = judgeScenarioUnderMutant(result, (name) => exists(name, stepFile ?? ""));
+    return refusal === undefined ? { reds: [`${scenario.uri}:${scenario.line} "${scenario.name}": business_assertion (mutant)`] } : { refusal };
+  });
+}
+
+/** New tests that pass before their code, under a mutant: in a scratch copy, each fails on an assertion. */
+export async function testsUnderMutant(worktree: RunWorktree, testFiles: string[], mutant: Mutant, passing: string[]): Promise<{ reds: string[] } | { refusal: Refusal }> {
+  return underMutant(worktree, testFiles, mutant, async (dir) => {
+    const unit = await runUnitTests(dir, testFiles, runCommand);
+    return judgeTestsUnderMutant(unit, passing, await importedSymbolsOf(dir, testFiles));
+  });
+}
+
+/** Runs `judge` in a scratch copy of the current code, with the attempt's files on top and the mutant applied. */
+async function underMutant(
+  worktree: RunWorktree,
+  files: string[],
+  mutant: Mutant,
+  judge: (dir: string) => Promise<{ reds: string[] } | { refusal: Refusal }>,
+): Promise<{ reds: string[] } | { refusal: Refusal }> {
+  const scratch = await scratchCopy(worktree, await git(worktree.dir, "rev-parse", "HEAD"));
+  try {
+    await scratch.put(files, "attempt");
+    const refusal = await applyMutant(scratch.dir, mutant);
+    if (refusal !== undefined) return { refusal };
+    return await judge(scratch.dir);
+  } finally {
+    await scratch.remove();
+  }
 }
