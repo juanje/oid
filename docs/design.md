@@ -97,7 +97,7 @@ No kind writes feature files, `SPEC.md`, the gate's configuration or oid's state
 
 An attempt without a report is refused.
 
-**`try`** runs one test or one scenario, then the type check and the linter on the changed files. It answers in the shape of a refusal and records nothing. oid's judgment comes after it and does not trust it.
+**`try`** runs one test or one scenario, and only when it passes, the type check on the changed files; a failing target gets its failure alone. The linter comes with the MVP. It answers in the shape of a refusal and records nothing. oid's judgment comes after it and does not trust it.
 
 ### Prompts
 
