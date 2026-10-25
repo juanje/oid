@@ -16,6 +16,14 @@ describe("judgeSteps", () => {
     expect(judgment.reds).toEqual([`${SCENARIO.uri}:${SCENARIO.line} "${SCENARIO.name}": missing_implementation`]);
   });
 
+  test("accepts step definitions whose scenario fails in a way oid cannot classify, provisionally", () => {
+    const failure = { step: 'I greet "Ada" with it', kind: "Action" as const, status: "FAILED", message: "Error: greetWith is not there yet" };
+
+    const judgment = judgeSteps({ ...SCENARIO, status: "failed", failure }, nothingExists);
+
+    expect(judgment).toEqual({ refusal: undefined, reds: [`${SCENARIO.uri}:${SCENARIO.line} "${SCENARIO.name}": undecided (provisional)`] });
+  });
+
   test("refuses a scenario that fails while being set up, naming the step and pointing at When and Then", () => {
     const failure = { step: 'the salutation is "Good morning"', kind: "Context" as const, status: "FAILED", message: "TypeError: setSalutation is not a function" };
 
@@ -111,6 +119,16 @@ describe("judgeNewTests", () => {
     const judgment = await judgeNewTests(dir, ["tests/greet-all.test.ts"], run, nothingExists, NONE_KNOWN);
 
     expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: business_assertion"] });
+  });
+
+  test("accepts new tests that fail in a way oid cannot classify, provisionally", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const report = recorded("vitest-greet-02-assert.json").replace(/AssertionError: [^"]*/, "Error: greetAll is not there yet");
+    const run = recordedVitest(dir, ["tests/greet-all.test.ts"], report);
+
+    const judgment = await judgeNewTests(dir, ["tests/greet-all.test.ts"], run, nothingExists, NONE_KNOWN);
+
+    expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: undecided (provisional)"] });
   });
 
   test("refuses a new test file the report does not mention as not_run, naming it", async () => {
