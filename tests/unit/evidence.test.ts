@@ -39,6 +39,13 @@ describe("judgeSteps", () => {
     expect(refusal?.evidence).toContain(SCENARIO.name);
   });
 
+  test("offers a mutant for a scenario that passes before its code only where one is accepted", () => {
+    const offered = judgeSteps({ ...SCENARIO, status: "passed" }, nothingExists, { offerMutant: true }).refusal;
+    const not = judgeSteps({ ...SCENARIO, status: "passed" }, nothingExists).refusal;
+
+    expect([offered?.next, not?.next]).toEqual([expect.stringMatching(/\bmutant\b/), expect.not.stringMatching(/\bmutant\b/)]);
+  });
+
   test("refuses step definitions whose scenario did not run, naming the scenario", () => {
     const { refusal } = judgeSteps({ ...SCENARIO, status: "not run" }, nothingExists);
 
@@ -100,6 +107,14 @@ describe("judgeNewTests", () => {
     const judgment = await judgeNewTests(dir, files, run, nothingExists, new Set(["tests/greet.test.ts > greets a person by name"]));
 
     expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: business_assertion"] });
+  });
+
+  test("offers a mutant for new tests that pass before their code only where one is accepted", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const judge = (offerMutant: boolean) =>
+      judgeNewTests(dir, ["tests/greet.test.ts"], recordedVitest(dir, ["tests/greet.test.ts"], recorded("vitest-greet-02-load.json")), nothingExists, NONE_KNOWN, { offerMutant });
+
+    expect([(await judge(true)).refusal?.next, (await judge(false)).refusal?.next]).toEqual([expect.stringMatching(/\bmutant\b/), expect.not.stringMatching(/\bmutant\b/)]);
   });
 
   test("refuses new tests that pass before their code, naming them", async () => {

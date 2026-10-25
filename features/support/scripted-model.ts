@@ -18,7 +18,7 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { AttemptKind, NextAttempt, TryTarget } from "../../src/executor.ts";
+import type { AttemptKind, Mutant, NextAttempt, TryTarget } from "../../src/executor.ts";
 
 /** A tool call the scripted model makes, as the agent would. */
 export interface Probe {
@@ -42,6 +42,8 @@ export interface ModelAttempt {
   error?: string;
   /** The attempt kind its report asks for next, with its reason (FR-RUN-04). */
   next?: NextAttempt;
+  /** The mutant its report submits (FR-EVID-03). */
+  mutant?: Mutant;
 }
 
 /** What the model was shown in one request. */
@@ -120,7 +122,9 @@ export class ScriptedModel {
     }
     if (prepared.error !== undefined) return fauxAssistantMessage("", { stopReason: "error", errorMessage: prepared.error });
     if (prepared.loops) return fauxAssistantMessage(fauxToolCall("read", { path: "package.json" }));
-    const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt`, ...(prepared.next === undefined ? {} : { next: { kind: prepared.next.kind, reason: prepared.next.reason } }) });
+    const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt`, ...(prepared.next === undefined ? {} : { next: { kind: prepared.next.kind, reason: prepared.next.reason } }),
+      ...(prepared.mutant === undefined ? {} : { mutant: JSON.parse(JSON.stringify(prepared.mutant)) }),
+    });
     const probed = prepared.probes !== undefined && prepared.probes.length > 0;
     if (probed && this.attempts[index]!.length === 1) return fauxAssistantMessage(prepared.probes!.map(({ tool, args }) => fauxToolCall(tool, args)));
     // Its turns once the probes, if any, are answered.

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
-import type { Attempt, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, Mutant, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
 import { piExecutor } from "../../src/pi-executor.ts";
 import { type ModelAttempt, ScriptedModel } from "../../features/support/scripted-model.ts";
 
@@ -24,7 +24,7 @@ afterEach(async () => {
 
 /** One code attempt for GREET-01's scenario, whose try answers `tried` and whose report is kept. */
 function codeAttempt(turns = 40, tried: TryResult = { passed: true }) {
-  const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[] };
+  const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[], mutants: [] as (Mutant | undefined)[] };
   const attempt: Attempt = {
     kind: "code",
     fr: "FR-GREET-01",
@@ -36,9 +36,10 @@ function codeAttempt(turns = 40, tried: TryResult = { passed: true }) {
         calls.tries.push(target);
         return tried;
       },
-      report: (result, next) => {
+      report: (result, next, mutant) => {
         calls.reports.push(result);
         calls.next.push(next);
+        calls.mutants.push(mutant);
       },
     },
   };
@@ -78,6 +79,16 @@ describe("piExecutor", () => {
     await executorOn(model).run(attempt);
 
     expect(calls.next).toEqual([next]);
+  });
+
+  test("gives oid's report the mutant the agent submits", async () => {
+    const mutant = { reason: "A constant code collides", files: [{ path: "src/greet.ts", edits: [{ oldText: "Hello", newText: "Bye" }] }] };
+    const model = await scripted({ dir: attemptDir("code"), mutant });
+    const { attempt, calls } = codeAttempt();
+
+    await executorOn(model).run(attempt);
+
+    expect(calls.mutants).toEqual([mutant]);
   });
 
   test("keeps its agent's whole session as JSONL where the attempt says, creating the directory", async () => {
