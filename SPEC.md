@@ -107,10 +107,10 @@ The skeleton is done when `oid run` builds FR-SHORTEN-01 of the shortener with t
 ### Evidence
 
 #### FR-EVID-01: Classify a failure
-**Skeleton.** oid classifies the failure of a test or scenario from the runner's report. It is a valid Red, an invalid Red, or a case it cannot decide. A case it cannot decide is a refusal in the skeleton and a question to the person in the MVP. Before reading any output, oid checks that the test it asked for exists and ran. *Why:* an import error or an undefined step looks like a Red and proves nothing; a test that never ran must never count.
+**Skeleton.** oid classifies the failure of a test or scenario from the runner's report. It is a valid Red, an invalid Red, or a case it cannot decide. oid refuses only a failure it can prove is not a Red. A failure it cannot classify is accepted provisionally and confirmed when the test passes on the code written for it. A provisional Red is refuted when the code attempts run out with its test or scenario still failing; when they stop for another reason, the run stops as before and nothing is called refuted. A refuted unit test gets at most one repair per run: a test attempt with the refusal, whose tests are judged as new, then the code attempts again. A refuted scenario stops the run. Before reading any output, oid checks that the test it asked for exists and ran. *Why:* an import error or an undefined step looks like a Red and proves nothing; a test that never ran must never count. A judge that refuses what it cannot read makes agents shape the evidence to the judge, and the code is the proof the judge lacks.
 
 #### FR-EVID-02: Judge the evidence of a new test
-**Skeleton.** A new test or scenario counts when oid has seen it fail with a valid Red on a broken version and pass on the current code. In the ordinary case, the broken version is the code at the previous checkpoint. *Why:* this one judgment is what "Red first" stands for, whoever wrote the test and in whatever order.
+**Skeleton.** A new test or scenario counts when oid has seen it fail with a valid Red on a broken version and pass on the current code. In the ordinary case, the broken version is the code at the previous checkpoint, and the passing version is the first code checkpoint that makes the test pass. *Why:* this one judgment is what "Red first" stands for, whoever wrote the test and in whatever order.
 
 #### FR-EVID-03: A mutant where a Red is impossible
 **MVP.** Sometimes the previous checkpoint's code already passes a new test: a guard, behaviour an earlier scenario built, or a test fixed after its code. The agent then proposes a mutant in its report. oid applies it, runs the test, and undoes it. The mutant must touch lines the test covers, and the failure must be a valid Red. The mutant's diff is recorded as the evidence. *Why:* without a legal exit, agents fake a Red; with one, the evidence still means "this test tells correct code from broken code".
@@ -192,6 +192,7 @@ No agent writes feature files, `SPEC.md`, the gate's configuration or oid's stat
 - **interventions** by kind: contract, stuck, other;
 - **attempts and rejections** per attempt kind; a refusal of the gate is a rejection of the attempt kind it goes back to;
 - **blind retries:** a retry that fails with the same failure and evidence as the one before it;
+- **provisional Reds:** how many were accepted, and of those, how many were confirmed and how many refuted;
 - **denied tool calls;**
 - **cost, tokens and time,** with the tokens read from the provider's cache, so that runs launched one after another can be compared on cost;
 - **the model** of each agent;

@@ -65,11 +65,11 @@ That codebase uses some of these words with other meanings. When you port a piec
 | `test_bug` | No | The test does not compile, a step is undefined or pending, a `Given` or `Background` step fails, or the test passes without new code. |
 | `environment` | No | A package that is not installed, a misconfigured runner, a timeout. |
 | `not_run` | No | The test or scenario asked for is not in the runner's report: the runner did not collect it, or stopped before it ran. |
-| `undecided` | — | None of the above can be told from the report. In the skeleton it is a refusal; in the MVP, a question to the person. |
+| `undecided` | Provisional | None of the above can be told from the report. Accepted; confirmed when the test or scenario passes on its code, refuted when the code attempts run out with it still failing. |
 
 - **A failure in a `Given` or `Background` step is `test_bug`, never a Red.** The scenario failed while being set up. The refusal's next step: set the scenario up without code that does not exist yet, or move that behaviour into a `When` or `Then` step. A failure in a `When` or `Then` step is judged by its message.
 - **`ENOENT` reading something the code should produce is undecided.** Tests assert first that the output exists, then check its content, so that a missing behaviour fails as an assertion.
-- **`X is not a function` is a valid Red only if `X` does not exist in the project.** If `X` exists, the test may be using it wrongly.
+- **`X is not a function` is `missing_implementation` only if `X` does not exist in the project; otherwise it is `undecided`.** If `X` exists, the test may be using it wrongly.
   - Called by its name: the failing file imports `X` from a project module that does not export it.
   - Called as a member, through a chain of names (`resolver.resolve`, `this.shortener.resolve`): no source file, under the paths a code attempt writes, declares anything named `X`, and the compiler API types the receiver of every call of that chain in the failing file as the project declares it. `undefined` and `null` are left out of the type first; every other part, and every type it extends, must be declared outside packages and TypeScript's library. A receiver a package types, one typed `any`, and a callee with no chain of names (`(intermediate value).X`) stay undecided.
   - Known false Red: a receiver whose type the project declares but that holds something else at runtime, such as a World typed by shape that holds a package's object.
@@ -113,7 +113,8 @@ What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenari
 | A stage starts | `stage <name>:` | `agent`, `worktree`, `scenarios`, `unit tests`, `gate`, `commit`, in that order |
 | An attempt starts | `attempt <kind> for "<scenario>"` | `, a retry …` when it is one |
 | An attempt ends | `attempt <kind> for "<scenario>": <verdict>` | `accepted`, `refused: <what failed>`, `stopped …` |
-| A Red | `  Red of the scenario` or `  Red of a unit test` | the scenario or test, then `: <class>` |
+| A Red | `  Red of the scenario` or `  Red of a unit test` | the scenario or test, then `: <class>`; `: undecided (provisional)` for one oid cannot classify |
+| A provisional Red is settled | `  Red confirmed by attempt <NN>` or `  Red refuted by attempt <NN>` | `: ` and the scenario or test; `<NN>` is the attempt's transcript number |
 
 ### Configuration
 

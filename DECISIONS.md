@@ -29,13 +29,15 @@ The decisions in force, with their reasons and the options they rule out. Read t
 **Decision.** A new scenario or unit test counts only when oid has seen it fail with a valid Red on a broken version and pass on the current code.
 - The broken version is the previous checkpoint's code.
 - Where that code already passes, it is a mutant the agent proposes and oid applies, runs and undoes. That covers a guard, behaviour an earlier scenario built, and a test fixed after its code.
+- The class of the failure is a recorded signal. oid refuses only a failure it can prove is not a Red; one it cannot read is accepted provisionally and confirmed by the code.
 
-**Why.** Tests written before their code are the constraint that makes the design emerge from the requirements, and they keep tests from being fitted to the code. Without a legal exit, agents fake a Red: v1 saw stashed and moved code. With one judgment, the evidence means the same thing in every case.
+**Why.** Tests written before their code are the constraint that makes the design emerge from the requirements, and they keep tests from being fitted to the code. Without a legal exit, agents fake a Red: v1 saw stashed and moved code. With one judgment, the evidence means the same thing in every case. A judge that refuses what it cannot read makes agents shape the evidence to the judge, and grows a classifier per case.
 
 **Rules out:**
 - Red-first as a guided default only;
 - separate return mechanisms per case (v1's returns, revise, reopen, rewrite_steps);
-- a person accepting guards.
+- a person accepting guards;
+- refusing a failure for being unreadable.
 
 **Follows.** The mutant must touch lines the test covers, must fail with a valid Red, and is recorded as the evidence.
 
