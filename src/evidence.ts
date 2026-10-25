@@ -87,6 +87,11 @@ export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => 
 /** Refuses a code attempt that leaves any unit test failing or turns a green scenario red. The current scenario may still fail. */
 const NO_TEST_SUITE = /^No test suite found in file /;
 
+/** The test files that register no vitest test: not tests there are, so a test attempt that rewrites one adds new tests. */
+export function noTestSuiteFiles(unit: UnitRun): string[] {
+  return (unit.failures ?? []).filter((failure) => NO_TEST_SUITE.test(failure.message)).map((failure) => failure.test);
+}
+
 export function judgeCode(unit: UnitRun, greenScenarios: ScenarioRun[]): Refusal | undefined {
   if (!unit.ran) {
     return {
