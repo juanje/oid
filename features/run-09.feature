@@ -20,3 +20,14 @@ Feature: Limits
     Given the scripted code attempt takes 3 turns
     When I run "oid run FR-GREET-01"
     Then the run succeeds
+
+  Scenario: A scenario that reaches its limit of rounds ends the run, which says which limit, even when every round moves its failure on
+    Given the run allows 2 rounds per scenario
+    And the scripted steps attempt fails its Then step with a message that changes on every run
+    And the scripted attempts build a second round for the scenario, a test and its code
+    When I run "oid run FR-GREET-01"
+    Then the run stops at a limit, not a refusal, an error or a crash
+    And the executor was asked for every prepared attempt, in order
+    And the output names the round limit, the scenario and its last failure
+    And the output gives the last report of each attempt kind
+    And the run's branch has no commit on top of the starting HEAD
