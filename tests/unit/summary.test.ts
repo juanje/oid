@@ -38,6 +38,14 @@ describe("summarize", () => {
     expect(lines.join("\n")).not.toContain("refs/oid/checkpoints/");
   });
 
+  test("gives the provisional Reds among the measures: accepted, confirmed and refuted", () => {
+    const measures = { ...MEASURES, provisional: { accepted: 2, confirmed: 1, refuted: 1 } };
+
+    const text = summarize([START, { event: "end", exitCode: 0, measures }], "/repo/.git/oid/runs/FR-GREET-02-1.jsonl");
+
+    expect(text).toMatch(/provisional Reds 2 \(confirmed 1, refuted 1\)/);
+  });
+
   test("a run that stopped: what is built and not, where it stopped and why, and the ref that keeps its checkpoints", () => {
     const refusal = { failed: "The scenario passes before its code exists: test_bug", evidence: "…", next: "…" };
     const events: LogEvent[] = [

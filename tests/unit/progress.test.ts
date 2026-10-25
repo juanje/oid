@@ -39,6 +39,11 @@ describe("progressLine", () => {
     expect(progressLine(ended("test", { reds: [testRed] }))?.split("\n")[1]).toBe(`  Red of a unit test ${testRed}`);
   });
 
+  test("says when a provisional Red is confirmed or refuted, by the attempt's transcript number", () => {
+    expect(progressLine({ event: "red", what: "tests/a.test.ts > a", verdict: "confirmed", attempt: 5 })).toBe("  Red confirmed by attempt 05: tests/a.test.ts > a");
+    expect(progressLine({ event: "red", what: "tests/a.test.ts > a", verdict: "refuted", attempt: 12 })).toBe("  Red refuted by attempt 12: tests/a.test.ts > a");
+  });
+
   test("gives no line for the events the summary covers", () => {
     expect(progressLine({ event: "stop", limit: "turns" })).toBeUndefined();
   });

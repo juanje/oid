@@ -41,6 +41,17 @@ describe("measuresOf", () => {
     expect(measuresOf(events, 1).rejections).toEqual({ steps: 1 });
   });
 
+  test("counts the provisional Reds accepted, and of those, the ones the code confirmed and refuted", () => {
+    const events: LogEvent[] = [
+      attempt("steps", "accepted", { reds: ['features/greet-03.feature:4 "A person": undecided (provisional)'] }),
+      attempt("test", "accepted", { reds: ["tests/a.test.ts > a: undecided (provisional)", "tests/b.test.ts > b: missing_implementation"] }),
+      { event: "red", what: "tests/a.test.ts > a", verdict: "confirmed", attempt: 3 },
+      { event: "red", what: 'features/greet-03.feature:4 "A person"', verdict: "refuted", attempt: 5 },
+    ];
+
+    expect(measuresOf(events, 1).provisional).toEqual({ accepted: 2, confirmed: 1, refuted: 1 });
+  });
+
   test("totals the tokens read from the provider's cache, apart from the tokens", () => {
     const events = [attempt("steps", "accepted", { tokens: 100, cacheRead: 30 }), attempt("test", "accepted", { tokens: 200, cacheRead: 120 }), attempt("code", "accepted")];
 
