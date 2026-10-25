@@ -45,7 +45,8 @@ Given("the scripted code attempt for the second scenario asks for a steps attemp
     ...this.script.filter((attempt) => attempt.scenario !== SECOND),
     { kind: "steps", scenario: SECOND, dir: greet02AttemptDir("s2-steps") },
     { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test") },
-    { kind: "code", scenario: SECOND, dir: greet02AttemptDir("s2-code"), next: { kind: "steps", reason: "The shared Then step is too strict" } },
+    // The code attempt writes greet-all.ts as it is, so its test still fails: refused, its request is followed.
+    { kind: "code", scenario: SECOND, dir: greet02AttemptDir("s1-code"), next: { kind: "steps", reason: "The shared Then step is too strict" } },
     { kind: "steps", scenario: SECOND, dir: greet02AttemptDir("steps-loosened") },
   ];
 });
