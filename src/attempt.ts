@@ -2,7 +2,7 @@ import { agentError } from "./agent-error.ts";
 import { judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, NextAttempt, TaskContext, TryTarget } from "./executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext, TryTarget } from "./executor.ts";
 import { LimitReached, turnLimitReached } from "./limits.ts";
 import type { Refusal } from "./refusal.ts";
 import { judgeReport } from "./report.ts";
@@ -44,14 +44,16 @@ export async function runAttempt({
   context,
   transcript,
   asked,
-}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string; next?: NextAttempt }> {
+}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string; next?: NextAttempt; mutant?: Mutant }> {
   let reported: string | undefined;
   let next: NextAttempt | undefined;
+  let mutant: Mutant | undefined;
   const tools = {
     try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand),
-    report: (result: string, asks?: NextAttempt) => {
+    report: (result: string, asks?: NextAttempt, submits?: Mutant) => {
       reported = result;
       next = asks;
+      mutant = submits;
     },
   };
   const outcome = await executor.run({
@@ -71,5 +73,5 @@ export async function runAttempt({
   if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns, outcome);
   const diff = await takeAttemptDiff(worktreeDir);
   const refusal = judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff);
-  return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }), ...(next === undefined ? {} : { next }) };
+  return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }), ...(next === undefined ? {} : { next }), ...(mutant === undefined ? {} : { mutant }) };
 }

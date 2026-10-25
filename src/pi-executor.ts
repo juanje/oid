@@ -143,9 +143,15 @@ function oidTools(attempt: Attempt, onReport: () => void) {
       parameters: Type.Object({
         result: Type.String(),
         next: Type.Optional(Type.Object({ kind: Type.Union([Type.Literal("steps"), Type.Literal("test"), Type.Literal("code")]), reason: Type.String() })),
+        mutant: Type.Optional(
+          Type.Object({
+            reason: Type.String(),
+            files: Type.Array(Type.Object({ path: Type.String(), edits: Type.Array(Type.Object({ oldText: Type.String(), newText: Type.String() })) })),
+          }),
+        ),
       }),
-      execute: async (_id, { result, next }) => {
-        attempt.tools.report(result, next);
+      execute: async (_id, { result, next, mutant }) => {
+        attempt.tools.report(result, next, mutant);
         onReport();
         return text("Reported: the attempt ends with this turn.");
       },

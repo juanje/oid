@@ -43,13 +43,14 @@ const NEXT: Record<RedClass, string> = {
 };
 
 /** Accepts a steps attempt only when its scenario ran and failed with a valid Red (D-02). */
-export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => boolean): Judgment {
+export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => boolean, { offerMutant = false }: { offerMutant?: boolean } = {}): Judgment {
   const scenario = describeScenario(result);
   if (result.status === "passed") {
+    const next = "Make the step definitions call the code under test and assert the outcome the scenario states";
     return refused({
       failed: "The scenario passes before its code exists: test_bug",
       evidence: `${scenario} passed with the new step definitions alone`,
-      next: "Make the step definitions call the code under test and assert the outcome the scenario states",
+      next: offerMutant ? `${next}; when the code already has that behaviour, submit a mutant in your report instead` : next,
     });
   }
   if (result.status === "not run") {
@@ -139,6 +140,7 @@ export async function judgeNewTests(
   run: CommandRunner,
   symbolExists: (name: string, file: string) => boolean,
   known: Set<string>,
+  { offerMutant = false, underMutant }: { offerMutant?: boolean; underMutant?: (passing: string[]) => Promise<{ reds: string[] } | { refusal: Refusal }> } = {},
 ): Promise<Judgment> {
   const unit = await runUnitTests(worktreeDir, testFiles, run);
   if (!unit.ran) {
@@ -161,11 +163,15 @@ export async function judgeNewTests(
   }
   const isNew = (test: string): boolean => inFiles(test) && !known.has(test);
   const passing = unit.passed.filter(isNew);
-  if (passing.length > 0) {
+  // New tests that pass before their code count only through a mutant they fail on (FR-EVID-03).
+  const proved = passing.length > 0 && underMutant !== undefined ? await underMutant(passing) : undefined;
+  if (proved !== undefined && "refusal" in proved) return refused(proved.refusal);
+  if (passing.length > 0 && proved === undefined) {
+    const next = "Make each of these tests assert behaviour the code does not have yet";
     return refused({
       failed: "New tests pass before their code exists: test_bug",
       evidence: passing.join("\n"),
-      next: "Make each of these tests assert behaviour the code does not have yet",
+      next: offerMutant ? `${next}; when the code already has it, submit a mutant in your report instead` : next,
     });
   }
   const classified = (unit.failures ?? [])
@@ -183,7 +189,7 @@ export async function judgeNewTests(
       next: NEXT[invalid[0]!.redClass],
     });
   }
-  return accepted(classified.map((failure) => red(failure.test, failure.redClass)));
+  return accepted([...classified.map((failure) => red(failure.test, failure.redClass)), ...(proved?.reds ?? [])]);
 }
 
 function describeScenario(scenario: Scenario): string {

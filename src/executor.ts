@@ -2,6 +2,15 @@ import type { Refusal } from "./refusal.ts";
 
 export type AttemptKind = "steps" | "test" | "code";
 
+/**
+ * What a report can submit when its scenario or new test passes before its code (FR-EVID-03): edits to the source, in
+ * the shape of the edit tool, which oid applies only in a scratch copy, with the reason.
+ */
+export interface Mutant {
+  reason: string;
+  files: { path: string; edits: { oldText: string; newText: string }[] }[];
+}
+
 /** What a report can ask for: another attempt kind next, with its reason (FR-RUN-04). */
 export interface NextAttempt {
   kind: AttemptKind;
@@ -72,7 +81,7 @@ export interface AttemptTools {
   /** Runs the target, then the type check on the files the attempt changed. It records nothing. */
   try(target: TryTarget): Promise<TryResult>;
   /** Ends the attempt with its result in a few words, and may ask for another attempt kind next. An attempt that never calls it is refused. */
-  report(result: string, next?: NextAttempt): void;
+  report(result: string, next?: NextAttempt, mutant?: Mutant): void;
 }
 
 /** Runs one attempt's agent: Pi, or the scripted executor of oid's own tests. oid judges the diff the same way for both. */
