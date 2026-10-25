@@ -1,15 +1,16 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { AttemptKind } from "./executor.ts";
+import type { AttemptKind, Mutant } from "./executor.ts";
 import { git } from "./git.ts";
 import { provisionalOf } from "./evidence.ts";
 import { changesNextKind } from "./requests.ts";
 import type { Refusal } from "./refusal.ts";
 
 // The run log (FR-STATE-02): append-only, one JSON event per line, in the repository's .git/oid/runs. Everything in it
-// is computed by oid; what an agent says of itself never reaches it. The one exception is a request's reason, which is
-// the next attempt's input (FR-RUN-04), as a refusal's evidence is: no measure is computed from it.
+// is computed by oid; what an agent says of itself never reaches it. The exceptions are a request's reason, which is
+// the next attempt's input (FR-RUN-04), and a mutant, which is a Red's evidence (FR-EVID-03), as a refusal's evidence
+// is: no measure is computed from them.
 
 export interface AttemptEvent {
   event: "attempt";
@@ -21,6 +22,8 @@ export interface AttemptEvent {
   refusal?: Refusal;
   /** Another attempt asked for this one (FR-RUN-04). */
   asked?: true;
+  /** The mutant its report submitted (FR-EVID-03): the evidence of the Reds it proved. */
+  mutant?: Mutant;
   /** The valid Reds an accepted steps or test attempt showed, each as `<what failed>: <class>`. */
   reds?: string[];
   /** As the executor reported them. */

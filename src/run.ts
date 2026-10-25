@@ -7,7 +7,7 @@ import { runCommand } from "./command.ts";
 import { ConfigError, readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeCode, judgeNewTests, judgeSteps, noTestSuiteFiles, provisionalOf } from "./evidence.ts";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, NextAttempt } from "./executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
 import { LimitReached, RoundLimitReached } from "./limits.ts";
 import { missingCoverageProvider } from "./coverage.ts";
@@ -17,6 +17,7 @@ import { type Failing, innerLoop, type RoundEnd, withoutStack } from "./inner-lo
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { type Pending, refutedRefusal, whenCodeRunsOut } from "./provisional.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
+import { applyMutant, judgeScenarioUnderMutant, judgeTestsUnderMutant } from "./mutant.ts";
 import { roundLimitMessage } from "./rounds.ts";
 import { git } from "./git.ts";
 import { type Tried, withRetries } from "./retries.ts";
@@ -151,11 +152,12 @@ function attemptEvent(attempt: {
   verdict?: AttemptEvent["verdict"];
   reds?: string[];
   asked?: boolean;
+  mutant?: Mutant;
 }): AttemptEvent {
   const { kind, scenario, refusal, retry, reds = [] } = attempt;
   const { turns, model, tokens, cacheRead, cost, deniedToolCalls } = attempt.outcome;
   const verdict = attempt.verdict ?? (refusal === undefined ? "accepted" : "refused");
-  const shown = { ...(attempt.asked === true ? { asked: true as const } : {}), ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
+  const shown = { ...(attempt.asked === true ? { asked: true as const } : {}), ...(attempt.mutant === undefined ? {} : { mutant: attempt.mutant }), ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
   return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cacheRead, cost, deniedToolCalls };
 }
 
@@ -245,18 +247,23 @@ class ScenarioBuild {
   private passed = false;
   private askedCode: Attempt["asked"];
   private beforeCode: string | undefined;
+  // A mutant proved the scenario's steps, or a test attempt's tests that passed before their code (FR-EVID-03).
+  private stepsByMutant = false;
+  private testsByMutant = false;
 
   constructor(run: FrRun, scenario: Scenario) {
     this.run = run;
     this.scenario = scenario;
     this.description = `${scenario.uri}:${scenario.line} "${scenario.name}"`;
-    this.testOnce = this.once("test", this.judgeTests([]));
+    this.testOnce = this.once("test", this.judgeTests([], { mutants: true }));
   }
 
   async build(): Promise<Refusal | undefined> {
     const { run, scenario } = this;
-    const stepsRefusal = await withRetries(run.retries, this.once("steps", () => this.judgeStepsRun()));
+    const stepsRefusal = await withRetries(run.retries, this.once("steps", (files, mutant) => this.judgeStepsRun(files, mutant)));
     if (stepsRefusal !== undefined) return stepsRefusal;
+    // Steps a mutant proved pass on the current code: the scenario is built, with no further attempt.
+    if (this.stepsByMutant) return undefined;
     this.inRounds = true;
     const end = await innerLoop(
       this.round,
@@ -272,20 +279,29 @@ class ScenarioBuild {
   }
 
   /** One attempt and the judgment of its kind, from the work accepted before it; retried while refused, up to the run's retries (FR-RUN-07). */
-  private once(kind: AttemptKind, judge: (files: string[]) => Promise<Judgment>, asked?: Attempt["asked"]) {
+  private once(kind: AttemptKind, judge: (files: string[], mutant?: Mutant) => Promise<Judgment>, asked?: Attempt["asked"]) {
     return async (previous: Refusal | undefined): Promise<Tried> => {
       const { run, scenario } = this;
       const accepted = await acceptedWork(run.worktree.dir);
       const attempt = await attemptFor(run, kind, scenario, previous, asked);
       if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
-      const judgment = attempt.refusal === undefined ? await judge(attempt.files) : { refusal: attempt.refusal, reds: [] };
+      const judgment = attempt.refusal === undefined ? await judge(attempt.files, attempt.mutant) : { refusal: attempt.refusal, reds: [] };
       const refusal = judgment.refusal;
       // An accepted Red oid cannot classify waits for the code to confirm it.
       const provisional = refusal === undefined ? provisionalOf(judgment.reds) : [];
       if (kind === "steps" && provisional.length > 0) this.pending.scenario = provisional[0];
       if (kind === "test") this.pending.tests.push(...provisional);
       await run.record(
-        attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, reds: judgment.reds, asked: asked !== undefined }),
+        attemptEvent({
+          kind,
+          scenario: scenario.name,
+          refusal,
+          retry: previous !== undefined,
+          outcome: attempt.outcome,
+          reds: judgment.reds,
+          asked: asked !== undefined,
+          ...(attempt.mutant === undefined ? {} : { mutant: attempt.mutant }),
+        }),
       );
       if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
       if (!(await this.asks(kind, attempt.next, refusal === undefined))) return { refusal, rollback: accepted.restore };
@@ -315,6 +331,7 @@ class ScenarioBuild {
   private readonly round = async (request: Asked | undefined): Promise<RoundEnd<Asked>> => {
     this.request = undefined;
     this.passed = false;
+    this.testsByMutant = false;
     // The attempt asked for works on the scenario's failure as it is now.
     if (request !== undefined) await this.runScenario();
     const retries = this.run.retries;
@@ -323,6 +340,8 @@ class ScenarioBuild {
       const refusal = await withRetries(retries, request === undefined ? this.testOnce : this.askedOnce(request.kind, asked!));
       if (this.request !== undefined) return { request: this.request };
       if (refusal !== undefined) return { refusal };
+      // Tests a mutant proved pass on the current code: when the scenario passes too, the round ends there.
+      if (this.testsByMutant) this.passed = (await this.runScenario()).status === "passed";
       if (request?.kind === "steps" || this.passed) return undefined;
     }
     this.askedCode = request?.kind === "code" ? asked : undefined;
@@ -396,22 +415,68 @@ class ScenarioBuild {
   }
 
   /** A steps attempt's judgment: its scenario fails with a Red. */
-  private async judgeStepsRun(): Promise<Judgment> {
+  private async judgeStepsRun(files: string[], mutant: Mutant | undefined): Promise<Judgment> {
     const result = await this.runScenario();
+    if (result.status === "passed" && mutant !== undefined) return this.stepsUnderMutant(files, mutant);
     const stepFile = result.failure?.definedIn;
     const exists = await this.symbolsOf(stepFile === undefined ? [] : [stepFile]);
-    return judgeSteps(result, (name) => exists(name, stepFile ?? ""));
+    return judgeSteps(result, (name) => exists(name, stepFile ?? ""), { offerMutant: true });
+  }
+
+  /** Steps whose scenario passes before its code, proved by a mutant: in a scratch copy, the scenario fails on an assertion. */
+  private async stepsUnderMutant(files: string[], mutant: Mutant): Promise<Judgment> {
+    const judged = await this.underMutant(files, mutant, async (dir) => {
+      const result = (await runScenarios(dir, [this.scenario], runCommand))[0]!;
+      const stepFile = result.failure?.definedIn;
+      const exists = await importedSymbolsOf(dir, stepFile === undefined ? [] : [stepFile]);
+      const refusal = judgeScenarioUnderMutant(result, (name) => exists(name, stepFile ?? ""));
+      return refusal === undefined ? { reds: [`${this.description}: business_assertion (mutant)`] } : { refusal };
+    });
+    if ("refusal" in judged) return { refusal: judged.refusal, reds: [] };
+    this.stepsByMutant = true;
+    return { refusal: undefined, reds: judged.reds };
+  }
+
+  /** Runs `judge` in a scratch copy of the current code, with the attempt's files on top and the mutant applied. */
+  private async underMutant(
+    files: string[],
+    mutant: Mutant,
+    judge: (dir: string) => Promise<{ reds: string[] } | { refusal: Refusal }>,
+  ): Promise<{ reds: string[] } | { refusal: Refusal }> {
+    const scratch = await scratchCopy(this.run.worktree, await git(this.run.worktree.dir, "rev-parse", "HEAD"));
+    try {
+      await scratch.put(files, "attempt");
+      const refusal = await applyMutant(scratch.dir, mutant);
+      if (refusal !== undefined) return { refusal };
+      return await judge(scratch.dir);
+    } finally {
+      await scratch.remove();
+    }
   }
 
   /**
    * A test attempt's judgment: its new tests, in the files it changed and in `also`, a repaired test's file even if left
    * as it was. One that adds no test is accepted, and its round goes on to the code: the wiring path (docs/design.md §2).
    */
-  private judgeTests(also: string[]) {
-    return async (files: string[]): Promise<Judgment> => {
+  private judgeTests(also: string[], { mutants = false }: { mutants?: boolean } = {}) {
+    return async (files: string[], mutant?: Mutant): Promise<Judgment> => {
       const testFiles = [...new Set([...files.filter(isTestFile), ...also])];
       if (testFiles.length === 0) return { refusal: undefined, reds: [] };
-      return judgeNewTests(this.run.worktree.dir, testFiles, runCommand, await this.symbolsOf(testFiles), this.run.known);
+      // Only a round's own test attempts may prove tests that pass before their code with a mutant (FR-EVID-03).
+      const underMutant =
+        mutants && mutant !== undefined
+          ? (passing: string[]) =>
+              this.underMutant(testFiles, mutant, async (dir) => {
+                const unit = await runUnitTests(dir, testFiles, runCommand);
+                return judgeTestsUnderMutant(unit, passing, await importedSymbolsOf(dir, testFiles));
+              })
+          : undefined;
+      const judgment = await judgeNewTests(this.run.worktree.dir, testFiles, runCommand, await this.symbolsOf(testFiles), this.run.known, {
+        offerMutant: mutants,
+        ...(underMutant === undefined ? {} : { underMutant }),
+      });
+      if (judgment.refusal === undefined && judgment.reds.some((red) => red.endsWith(" (mutant)"))) this.testsByMutant = true;
+      return judgment;
     };
   }
 
