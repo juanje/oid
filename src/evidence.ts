@@ -12,6 +12,24 @@ export interface Judgment {
 }
 
 const accepted = (reds: string[]): Judgment => ({ refusal: undefined, reds });
+
+// A failure oid cannot classify is accepted, and the code confirms or refutes it (D-02).
+const PROVISIONAL = ": undecided (provisional)";
+
+/** A Red as the run records it: `<what failed>: <class>`, marked provisional when oid cannot classify the failure. */
+function red(what: string, redClass: RedClass): string {
+  return redClass === "undecided" ? `${what}${PROVISIONAL}` : `${what}: ${redClass}`;
+}
+
+/** What failed, for each of `reds` that is provisional. */
+export function provisionalOf(reds: string[]): string[] {
+  return reds.filter((one) => one.endsWith(PROVISIONAL)).map((one) => one.slice(0, -PROVISIONAL.length));
+}
+
+/** Whether a failure of this class is accepted: as a valid Red, or provisionally when oid cannot classify it. */
+function isAccepted(redClass: RedClass): boolean {
+  return isValidRed(redClass) || redClass === "undecided";
+}
 const refused = (refusal: Refusal): Judgment => ({ refusal, reds: [] });
 
 // What the agent can do about a failure that is not a valid Red, by its class.
@@ -21,8 +39,7 @@ const NEXT: Record<RedClass, string> = {
   test_bug: "Fix the test itself so that it runs and fails only because the behaviour is missing",
   environment: "Use only what the project already has installed; the gate's configuration, package.json included, is not yours to change",
   not_run: "Put the test where the runner collects it, and check that it loads",
-  undecided:
-    "oid cannot tell that this failure shows missing behaviour: make the test fail on an assertion about the behaviour, or on the code under test not existing yet",
+  undecided: "",
 };
 
 /** Accepts a steps attempt only when its scenario ran and failed with a valid Red (D-02). */
@@ -43,7 +60,7 @@ export function judgeSteps(result: ScenarioRun, symbolExists: (name: string) => 
     });
   }
   const redClass = classifyScenario(result, symbolExists);
-  if (isValidRed(redClass)) return accepted([`${scenario}: ${redClass}`]);
+  if (isAccepted(redClass)) return accepted([red(scenario, redClass)]);
   const failure = result.failure;
   const where = `${scenario}, step "${failure?.step ?? "?"}"`;
   if (failure?.kind === "Context") {
@@ -153,7 +170,7 @@ export async function judgeNewTests(
       const file = failure.test.split(" > ")[0]!;
       return { ...failure, redClass: classifyFailure(failure.message, (name) => symbolExists(name, file)) };
     });
-  const invalid = classified.filter((failure) => !isValidRed(failure.redClass));
+  const invalid = classified.filter((failure) => !isAccepted(failure.redClass));
   if (invalid.length > 0) {
     return refused({
       failed: `New tests fail, but not with a valid Red: ${[...new Set(invalid.map((failure) => failure.redClass))].join(", ")}`,
@@ -161,7 +178,7 @@ export async function judgeNewTests(
       next: NEXT[invalid[0]!.redClass],
     });
   }
-  return accepted(classified.map((failure) => `${failure.test}: ${failure.redClass}`));
+  return accepted(classified.map((failure) => red(failure.test, failure.redClass)));
 }
 
 function describeScenario(scenario: Scenario): string {
