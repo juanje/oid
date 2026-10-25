@@ -20,6 +20,21 @@ Feature: Classify a failure
     And the output names the test
     And the run's branch has no commit on top of the starting HEAD
 
+  Scenario: Steps and a test that call a method an existing class does not have yet are Reds
+    Given the module of FR-GREET-01 also has a greeter class
+    And the scripted executor builds FR-GREET-03 as a new method of the greeter class, its steps typing the World by shape
+    When I run "oid run FR-GREET-03"
+    Then the run succeeds
+    And the output gives the scenario's failure the class missing_implementation
+    And the output gives the new test's failure the class missing_implementation
+
+  Scenario: A new test that calls a function a package does not have is undecided
+    Given the scripted test attempt calls a function the assertion package does not have
+    When I run "oid run FR-GREET-03"
+    Then the run stops with a refusal, not a crash
+    And the output gives the failure the class undecided
+    And the run's branch has no commit on top of the starting HEAD
+
   Scenario: Step definitions that leave a step undefined are not accepted
     Given the scripted steps attempt leaves the Then step of FR-GREET-03 undefined
     When I run "oid run FR-GREET-03"
