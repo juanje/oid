@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { cp, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
 import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
@@ -60,6 +61,8 @@ export class ScriptedExecutor implements Executor {
   asked = 0;
   readonly tried: Tried[] = [];
   readonly requests: Request[] = [];
+  /** What each attempt's agent would have been told: oid's system prompt for its kind, and its task. */
+  readonly told: { system: string; task: string }[] = [];
   readonly #projectDir: string;
   readonly #script: PreparedAttempt[];
 
@@ -83,6 +86,7 @@ export class ScriptedExecutor implements Executor {
       throw new Error(`Expected the ${next.kind} attempt for "${next.scenario}", got ${asked}`);
     }
     this.asked += 1;
+    this.told.push({ system: systemPromptFor(attempt.kind), task: taskFor(attempt) });
     // The executor counts its agent's turns and ends it between turns at the limit, as the Pi executor does with
     // finishTurn; an agent ended before it finished leaves no diff and no report.
     const wanted = next.turns ?? 1;
