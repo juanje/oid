@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { cp, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
 export interface PreparedAttempt {
@@ -14,6 +14,8 @@ export interface PreparedAttempt {
   report?: string | null;
   /** The attempt kind its report asks for next, with its reason (FR-RUN-04). */
   next?: NextAttempt;
+  /** The mutant its report submits (FR-EVID-03). */
+  mutant?: Mutant;
   /** How many turns its agent would take to finish; 1 when left out. */
   turns?: number;
   /** What the executor reports of the agent's use: its model, tokens, cost and denied tool calls. */
@@ -99,7 +101,7 @@ export class ScriptedExecutor implements Executor {
     if (outcome.stoppedAtLimit) return outcome;
     await cp(next.dir, attempt.worktree, { recursive: true });
     for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
-    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`, next.next);
+    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`, next.next, next.mutant);
     return outcome;
   }
 }
