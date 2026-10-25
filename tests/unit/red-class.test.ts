@@ -23,17 +23,9 @@ describe("classifyFailure", () => {
     expect(classifyFailure("TypeError: greetWith is not a function", greetExists)).toBe("missing_implementation");
   });
 
-  test("X is not a function, reached as a member, asks the project about the whole callee", () => {
-    // The receiver chains of the shortener's runs: a unit test's local, and a step definition's World.
-    const missing = new Set(["resolver.resolve", "this.shortener.resolve"]);
-    const exists = (name: string): boolean => !missing.has(name);
-
-    expect(classifyFailure("TypeError: resolver.resolve is not a function", exists)).toBe("missing_implementation");
-    expect(classifyFailure("TypeError: this.shortener.resolve is not a function\n    at World.<anonymous> (/work/features/steps/shorten-02.steps.ts:15:44)", exists)).toBe(
-      "missing_implementation",
-    );
-    expect(classifyFailure("TypeError: assert.matchs is not a function", exists)).toBe("undecided");
-    // No chain of names reaches the member: nothing to ask the project about.
+  test("X is not a function, reached as a member, is undecided whatever the project declares: oid cannot say the member is missing", () => {
+    expect(classifyFailure("TypeError: resolver.resolve is not a function", nothingExists)).toBe("undecided");
+    expect(classifyFailure("TypeError: this.shortener.resolve is not a function\n    at World.<anonymous> (/work/features/steps/shorten-02.steps.ts:15:44)", nothingExists)).toBe("undecided");
     expect(classifyFailure("TypeError: (intermediate value).resolve is not a function", nothingExists)).toBe("undecided");
   });
 
