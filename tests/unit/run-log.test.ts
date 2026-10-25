@@ -52,16 +52,18 @@ describe("measuresOf", () => {
     expect(measuresOf(events, 1).provisional).toEqual({ accepted: 2, confirmed: 1, refuted: 1 });
   });
 
-  test("counts the requests for another attempt kind, and the attempts asked for that were accepted", () => {
+  test("counts every request, those followed that change the next kind, and the attempts asked for that were accepted", () => {
+    const request = (by: "steps" | "test" | "code", kind: "steps" | "test" | "code", followed = true): LogEvent => ({ event: "request", scenario: "A person", by, kind, reason: "why", followed });
     const events: LogEvent[] = [
-      { event: "request", scenario: "A person", by: "code", kind: "steps", reason: "the step" },
+      request("steps", "code", false),
+      request("code", "steps"),
       attempt("steps", "refused", { asked: true, refusal: REFUSED }),
       attempt("steps", "accepted", { asked: true, retry: true }),
-      { event: "request", scenario: "A person", by: "test", kind: "code", reason: "wiring" },
+      request("test", "code"),
       attempt("code", "accepted", { asked: true }),
     ];
 
-    expect(measuresOf(events, 1).requests).toEqual({ asked: 2, accepted: 2 });
+    expect(measuresOf(events, 1).requests).toEqual({ asked: 3, changing: 1, accepted: 2 });
   });
 
   test("counts the rounds with no progress", () => {

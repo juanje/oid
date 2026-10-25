@@ -54,10 +54,10 @@ describe("summarize", () => {
     expect(ending).toMatch(new RegExp(`round limit.*${FIRST.name}`));
   });
 
-  test("counts the requests among the measures, and the attempts asked for accepted", () => {
-    const text = summarize([START, { event: "end", exitCode: 0, measures: { ...MEASURES, requests: { asked: 2, accepted: 1 } } }], "/repo/log.jsonl");
+  test("counts the requests that changed the next kind among the measures, of all asked, and the attempts asked for accepted", () => {
+    const text = summarize([START, { event: "end", exitCode: 0, measures: { ...MEASURES, requests: { asked: 5, changing: 2, accepted: 1 } } }], "/repo/log.jsonl");
 
-    expect(text).toMatch(/\brequests 2 \(accepted 1\)/);
+    expect(text).toMatch(/\brequests that changed the next kind 2 of 5 \(accepted 1\)/);
   });
 
   test("counts the rounds with no progress among the measures", () => {

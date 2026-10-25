@@ -57,7 +57,7 @@ Then("the steps attempt asked for was given the reason and the scenario's failur
 });
 
 Then("the summary counts one request, and one attempt asked for accepted", function (this: RunWorld) {
-  assert.match(this.output, /\brequests 1 \(accepted 1\)/, `The summary does not count one request and one accepted:\n${this.output}`);
+  assert.match(this.output, /\brequests that changed the next kind 1 of \d+ \(accepted 1\)/, `The summary does not count one request and one accepted:\n${this.output}`);
 });
 
 /** The refusal the run stopped with. */
@@ -110,7 +110,7 @@ Then("the test attempt asked for was given the reason", function (this: RunWorld
 });
 
 Then("the summary counts two requests, and two attempts asked for accepted", function (this: RunWorld) {
-  assert.match(this.output, /\brequests 2 \(accepted 2\)/, `The summary does not count two requests and two accepted:\n${this.output}`);
+  assert.match(this.output, /\brequests that changed the next kind 2 of \d+ \(accepted 2\)/, `The summary does not count two requests and two accepted:\n${this.output}`);
 });
 
 Then("the output names the second test as passing before its code", function (this: RunWorld) {
