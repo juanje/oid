@@ -23,6 +23,20 @@ describe("classifyFailure", () => {
     expect(classifyFailure("TypeError: greetWith is not a function", greetExists)).toBe("missing_implementation");
   });
 
+  test("X is not a function, reached as a member, asks the project about the whole callee", () => {
+    // The receiver chains of the shortener's runs: a unit test's local, and a step definition's World.
+    const missing = new Set(["resolver.resolve", "this.shortener.resolve"]);
+    const exists = (name: string): boolean => !missing.has(name);
+
+    expect(classifyFailure("TypeError: resolver.resolve is not a function", exists)).toBe("missing_implementation");
+    expect(classifyFailure("TypeError: this.shortener.resolve is not a function\n    at World.<anonymous> (/work/features/steps/shorten-02.steps.ts:15:44)", exists)).toBe(
+      "missing_implementation",
+    );
+    expect(classifyFailure("TypeError: assert.matchs is not a function", exists)).toBe("undecided");
+    // No chain of names reaches the member: nothing to ask the project about.
+    expect(classifyFailure("TypeError: (intermediate value).resolve is not a function", nothingExists)).toBe("undecided");
+  });
+
   test("a test file vitest cannot transform is test_bug", () => {
     expect(classifyFailure("Transform failed with 1 error:", nothingExists)).toBe("test_bug");
   });
