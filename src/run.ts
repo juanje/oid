@@ -1,34 +1,33 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { AgentError } from "./agent-error.ts";
-import { runAttempt } from "./attempt.ts";
 import { WRITABLE, isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import { ConfigError, readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { type Judgment, judgeCode, judgeNewTests, judgeSteps, noTestSuiteFiles, provisionalOf } from "./evidence.ts";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt } from "./executor.ts";
+import { type Judgment, judgeNewTests, judgeSteps, provisionalOf } from "./evidence.ts";
+import type { Attempt, AttemptKind, Executor, Mutant, NextAttempt } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
 import { LimitReached, RoundLimitReached } from "./limits.ts";
 import { missingCoverageProvider } from "./coverage.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
-import { type Failing, innerLoop, type RoundEnd, withoutStack } from "./inner-loop.ts";
+import { innerLoop, type RoundEnd, withoutStack } from "./inner-loop.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { type Pending, refutedRefusal, whenCodeRunsOut } from "./provisional.ts";
+import { attemptEvent, attemptFor, checkpointedAttempt, codeAttempt, failingOf, type FrRun, locationOf, testCount } from "./run-attempts.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { applyMutant, judgeScenarioUnderMutant, judgeTestsUnderMutant } from "./mutant.ts";
 import { roundLimitMessage } from "./rounds.ts";
 import { git } from "./git.ts";
 import { type Tried, withRetries } from "./retries.ts";
-import { type AttemptEvent, type LogEvent, startRunLog } from "./run-log.ts";
+import { type LogEvent, startRunLog } from "./run-log.ts";
 import { progressLine } from "./progress.ts";
 import { summarize, transcriptsOf } from "./summary.ts";
 import { oidVersion } from "./version.ts";
-import { type FrTexts, frTexts, taskContext } from "./task-context.ts";
+import { frTexts } from "./task-context.ts";
 import { frScenarios, runAllScenarios, runScenarios, type ScenarioRun } from "./scenarios.ts";
-import { runUnitTests, testsIn, type UnitRun } from "./unit-tests.ts";
-import type { TestFailure } from "./vitest-report.ts";
+import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { acceptedWork, checkpoint, createRunWorktree, finishRun, freeRunId, type RunWorktree, scratchCopy } from "./worktree.ts";
 
 export interface RunOptions {
@@ -39,43 +38,6 @@ export interface RunOptions {
   out: (text: string) => void;
 }
 
-
-/** What every scenario of one FR's run shares. */
-interface FrRun {
-  executor: Executor;
-  fr: string;
-  worktree: RunWorktree;
-  out: (text: string) => void;
-  /** The scenarios already built, which every code attempt must keep green. */
-  green: Scenario[];
-  /** The tests there are, so that a test attempt is judged on its new tests only. */
-  known: Set<string>;
-  /** How many unit tests the last run of the whole suite ran: an attempt asked for must not leave fewer (FR-RUN-04). */
-  tests: number;
-  /** How many times a refused attempt is retried. */
-  retries: number;
-  /** How many turns an attempt's agent may take. */
-  turns: number;
-  /** How many rounds of test and code attempts a scenario may take (FR-RUN-09). */
-  rounds: number;
-  /** The last report of each attempt kind, for the person when the scenario reaches its limit of rounds. */
-  reports: Map<AttemptKind, string>;
-  /** Appends to the run log. */
-  record: (event: LogEvent) => Promise<void>;
-  /** The FR's text and the project's domain and conventions, for every task (FR-AGENT-03). */
-  texts: FrTexts;
-  /** Each scenario's steps, by `<uri>:<line>`. */
-  steps: Map<string, string[]>;
-  /** Each scenario's latest run, by `<uri>:<line>`: where it fails now. */
-  latest: Map<string, ScenarioRun>;
-  /** Where the attempts' transcripts go, beside the run's log, and how many attempts have run. */
-  transcripts: string;
-  attempts: number;
-  /** The provisional tests already sent to their one repair in this run (FR-EVID-01). */
-  repaired: Set<string>;
-  /** The unit tests still failing when the last code attempt was refused for them; none when it was refused for another reason. */
-  unsatisfied?: TestFailure[];
-}
 
 /** Builds one FR in its own worktree and commits it on the run's branch; returns the exit code. */
 export async function runFr(options: RunOptions): Promise<number> {
@@ -140,25 +102,6 @@ export async function runFr(options: RunOptions): Promise<number> {
       options.out(summarize(log.events, log.path));
     }
   }
-}
-
-/** An attempt as the run log keeps it: its verdict, and what the executor reported of it. */
-function attemptEvent(attempt: {
-  kind: AttemptKind;
-  scenario: string;
-  refusal: Refusal | undefined;
-  retry: boolean;
-  outcome: AttemptOutcome;
-  verdict?: AttemptEvent["verdict"];
-  reds?: string[];
-  asked?: boolean;
-  mutant?: Mutant;
-}): AttemptEvent {
-  const { kind, scenario, refusal, retry, reds = [] } = attempt;
-  const { turns, model, tokens, cacheRead, cost, deniedToolCalls } = attempt.outcome;
-  const verdict = attempt.verdict ?? (refusal === undefined ? "accepted" : "refused");
-  const shown = { ...(attempt.asked === true ? { asked: true as const } : {}), ...(attempt.mutant === undefined ? {} : { mutant: attempt.mutant }), ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
-  return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cacheRead, cost, deniedToolCalls };
 }
 
 async function buildFr(
@@ -559,33 +502,6 @@ class ScenarioBuild {
   }
 }
 
-/** How a scenario's run fails, or nothing when it passes. */
-function failingOf(result: ScenarioRun | undefined): Failing | undefined {
-  if (result === undefined || result.status === "passed") return undefined;
-  return { step: result.failure?.step ?? "?", message: result.failure?.message ?? result.status };
-}
-
-/** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
-async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"]) {
-  const location = locationOf(scenario);
-  const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location), { asked: asked !== undefined });
-  await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined });
-  run.attempts += 1;
-  const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context, transcript, asked });
-}
-
-function locationOf(scenario: Scenario): string {
-  return `${scenario.uri}:${scenario.line}`;
-}
-
-/** One code attempt and its judgment: the whole unit suite, and the scenarios built so far. */
-function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"]): Promise<Tried & { next?: NextAttempt }> {
-  // Refused before its judgment, at its boundary or its turn limit, it leaves no test unsatisfied.
-  run.unsatisfied = undefined;
-  return checkpointedAttempt(run, "code", scenario, previous, () => judgeCodeAttempt(run), asked);
-}
-
 /**
  * An attempt the gate sent back. A code attempt is judged as any code attempt. A test or steps attempt is judged by
  * its boundary and its report only, with no new Red: its tests have theirs, and the gate runs again after it.
@@ -593,39 +509,6 @@ function codeAttempt(run: FrRun, scenario: Scenario, previous: Refusal | undefin
 function attemptAfterGate(run: FrRun, kind: AttemptKind, scenario: Scenario, refusal: Refusal): Promise<Tried> {
   if (kind === "code") return codeAttempt(run, scenario, refusal);
   return checkpointedAttempt(run, kind, scenario, refusal, async () => undefined);
-}
-
-/** One attempt judged by what holds for every kind, then by `judge`; logged, and checkpointed when accepted. */
-async function checkpointedAttempt(
-  run: FrRun,
-  kind: AttemptKind,
-  scenario: Scenario,
-  previous: Refusal | undefined,
-  judge: () => Promise<Refusal | undefined>,
-  asked?: Attempt["asked"],
-): Promise<Tried & { next?: NextAttempt }> {
-  const accepted = await acceptedWork(run.worktree.dir);
-  const attempt = await attemptFor(run, kind, scenario, previous, asked);
-  if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
-  const refusal = attempt.refusal ?? (await judge());
-  await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, asked: asked !== undefined }));
-  if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
-  return { refusal, rollback: accepted.restore, ...(attempt.next === undefined ? {} : { next: attempt.next }) };
-}
-
-/** A code attempt's judgment: the whole unit suite, and the scenarios built so far. */
-async function judgeCodeAttempt(run: FrRun): Promise<Refusal | undefined> {
-  const { worktree, green, known } = run;
-  const greenRuns = green.length === 0 ? [] : await runScenarios(worktree.dir, green, runCommand);
-  const unit = await runUnitTests(worktree.dir, [], runCommand);
-  for (const test of testsIn(unit)) known.add(test);
-  if (unit.ran) run.tests = testCount(unit);
-  // A file with no vitest test goes back to a test attempt, whose tests in it are new.
-  for (const file of noTestSuiteFiles(unit)) known.delete(file);
-  const refusal = judgeCode(unit, greenRuns);
-  // Refused for its failing unit tests, and not for a test file the code cannot fix, which goes back to a test attempt.
-  if (refusal !== undefined && refusal.sendTo === undefined && unit.ran && unit.failed.length > 0) run.unsatisfied = unit.failures ?? [];
-  return refusal;
 }
 
 /** What a round ended asking for: the kind asked for, which kind asked, and why (FR-RUN-04). */
@@ -645,11 +528,6 @@ function turnedRedRefusal(scenarios: ScenarioRun[]): Refusal {
     evidence: scenarios.map((scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}": ${scenario.status}`).join("\n"),
     next: "Keep every scenario that passed passing: the step definitions you change must hold for each scenario that uses them",
   };
-}
-
-/** How many unit tests a run of the suite ran, passing or failing. */
-function testCount(unit: UnitRun): number {
-  return unit.passed.length + (unit.failures ?? []).length;
 }
 
 function runId(fr: string): string {
