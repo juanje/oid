@@ -9,17 +9,22 @@ const CONFIG_FILE = ".oid.json";
 const PERSONAL_CONFIG_FILE = "config.json";
 const DEFAULT_RETRIES = 2;
 const DEFAULT_TURNS = 40;
+// Built scenarios have needed at most 2 rounds in the runs so far.
+const DEFAULT_ROUNDS = 6;
 
 export interface Limits {
   /** How many times a refused attempt is retried (docs/design.md §2). */
   retries: number;
   /** How many turns an attempt's agent may take (docs/design.md §2, Limits). */
   turns: number;
+  /** How many rounds of test and code attempts a scenario may take, however its failure moves (FR-RUN-09). */
+  rounds: number;
 }
 
 export async function readLimits(dir: string): Promise<Limits> {
   const config = await readConfig(dir);
-  return { retries: config.limits?.retries ?? DEFAULT_RETRIES, turns: config.limits?.turns ?? DEFAULT_TURNS };
+  const limits = config.limits;
+  return { retries: limits?.retries ?? DEFAULT_RETRIES, turns: limits?.turns ?? DEFAULT_TURNS, rounds: limits?.rounds ?? DEFAULT_ROUNDS };
 }
 
 /** The project's own files a task reads, when `.oid.json` names them (FR-AGENT-03). */

@@ -78,9 +78,21 @@ export interface RedEvent {
   attempt: number;
 }
 
+/** A round of a scenario's inner loop that made no progress, with the step where the scenario still fails (FR-RUN-03). */
+export interface RoundEvent {
+  event: "round";
+  scenario: string;
+  verdict: "no progress";
+  step: string;
+  /** The failure's message, without its stack lines. */
+  failure: string;
+}
+
 export interface StopEvent {
   event: "stop";
-  limit: "turns";
+  limit: "turns" | "rounds";
+  /** The scenario that reached the round limit. */
+  scenario?: string;
 }
 
 export interface Measures {
@@ -105,7 +117,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;

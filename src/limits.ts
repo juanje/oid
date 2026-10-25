@@ -18,3 +18,13 @@ export class LimitReached extends Error {
     this.outcome = outcome;
   }
 }
+
+/** A scenario reached its limit of rounds (FR-RUN-09): the run ends at the work accepted so far. */
+export class RoundLimitReached extends Error {
+  readonly scenario: string;
+
+  constructor(message: string, scenario: string) {
+    super(message);
+    this.scenario = scenario;
+  }
+}

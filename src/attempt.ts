@@ -41,7 +41,7 @@ export async function runAttempt({
   turns,
   context,
   transcript,
-}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome }> {
+}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string }> {
   let reported: string | undefined;
   const tools = {
     try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand),
@@ -64,5 +64,6 @@ export async function runAttempt({
   if (error !== undefined) throw error;
   if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns, outcome);
   const diff = await takeAttemptDiff(worktreeDir);
-  return { refusal: judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff), files: diff.files, outcome };
+  const refusal = judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff);
+  return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }) };
 }
