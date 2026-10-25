@@ -74,3 +74,50 @@ Then("the output names the second scenario as passing on the code from before it
   const refusal = finalRefusal(this);
   assert.ok(refusal.includes(SECOND) && /\bpass/.test(refusal), `The refusal does not name "${SECOND}" as passing on the code from before its own:\n${this.output}`);
 });
+
+const TEST_ASKED = "Two tests contradict each other: one wants no comma before and, the other a comma; a test attempt must make them agree";
+const CONTRADICTING = "greets three people with a comma before and";
+
+Given("the scripted test attempt for the second scenario writes two tests that contradict each other, and its code attempt asks for a test attempt, saying why", function (this: RunWorld) {
+  this.script = [
+    ...this.script.filter((attempt) => attempt.scenario !== SECOND),
+    { kind: "steps", scenario: SECOND, dir: greet02AttemptDir("s2-steps") },
+    { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test-contradicting") },
+    { kind: "code", scenario: SECOND, dir: greet02AttemptDir("s2-code"), next: { kind: "test", reason: TEST_ASKED } },
+  ];
+});
+
+Given("the scripted test attempt it asks for changes the second test so that it agrees with the first and still fails on the code from before", function (this: RunWorld) {
+  this.script = [
+    ...this.script,
+    { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test-agreeing") },
+    { kind: "code", scenario: SECOND, dir: greet02AttemptDir("s2-code") },
+  ];
+});
+
+Given("the scripted test attempt it asks for loosens the second test so that it passes on the code from before", function (this: RunWorld) {
+  this.script = [...this.script, { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test-loosened") }];
+});
+
+Given("the scripted test attempt it asks for removes the second test", function (this: RunWorld) {
+  // The second scenario's usual test file holds the first test alone.
+  this.script = [...this.script, { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test") }];
+});
+
+Then("the test attempt asked for was given the reason", function (this: RunWorld) {
+  const asked = requestsOf(this, "test", 3)[2]!;
+  assert.deepEqual(asked.asked, { by: "code", reason: TEST_ASKED }, "The test attempt asked for did not come with who asked for it and why");
+});
+
+Then("the summary counts two requests, and two attempts asked for accepted", function (this: RunWorld) {
+  assert.match(this.output, /\brequests 2 \(accepted 2\)/, `The summary does not count two requests and two accepted:\n${this.output}`);
+});
+
+Then("the output names the second test as passing before its code", function (this: RunWorld) {
+  const refusal = finalRefusal(this);
+  assert.ok(refusal.includes(CONTRADICTING) && /\bpass/.test(refusal), `The refusal does not name "${CONTRADICTING}" as passing before its code:\n${this.output}`);
+});
+
+Then("the output says the attempt left fewer unit tests", function (this: RunWorld) {
+  assert.match(finalRefusal(this), /\bfewer unit tests\b/, `The refusal does not say the attempt left fewer unit tests:\n${this.output}`);
+});
