@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { OID_ROOT, createGreetProjectWith, greet03AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
+import { OID_ROOT, createGreetProjectWith, git, greet03AttemptDir, scenarioNames, testNames } from "../support/fixture.ts";
 import { assertOutputNames } from "../support/run.ts";
 import { lastAttempt, type PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -21,6 +22,11 @@ Given("a scripted executor that builds FR-GREET-03 with a new function in the mo
 Then("the output gives the new test's failure the class {word}", function (this: RunWorld, failureClass: string) {
   const line = this.output.split("\n").find((text) => text.includes(NEW_TEST) && new RegExp(`\\b${failureClass}\\b`).test(text));
   assert.ok(line !== undefined, `No line of the output gives "${NEW_TEST}" the class ${failureClass}:\n${this.output}`);
+});
+
+Then("the output gives the scenario's failure the class {word}", function (this: RunWorld, failureClass: string) {
+  const line = this.output.split("\n").find((text) => text.includes(`"${SCENARIO}"`) && new RegExp(`\\b${failureClass}\\b`).test(text));
+  assert.ok(line !== undefined, `No line of the output gives the scenario "${SCENARIO}" the class ${failureClass}:\n${this.output}`);
 });
 
 Then("the output gives the failure the class {word}", function (this: RunWorld, failureClass: string) {
@@ -43,6 +49,20 @@ function replaceAttempt(world: RunWorld, kind: PreparedAttempt["kind"], name: st
 
 Given("the scripted test attempt calls the existing greeting function in a way that fails as {string}", function (this: RunWorld, _message: string) {
   replaceAttempt(this, "test", "test-wrong-call");
+});
+
+Given("the module of FR-GREET-01 also has a greeter class", async function (this: RunWorld) {
+  await cp(join(OID_ROOT, "fixtures/greet/greet-03/greeter"), this.projectDir, { recursive: true });
+  git(this.projectDir, "add", "--all");
+  git(this.projectDir, "commit", "-q", "-m", "feat: a greeter class");
+});
+
+Given("the scripted executor builds FR-GREET-03 as a new method of the greeter class, its steps typing the World by shape", function (this: RunWorld) {
+  this.script = (["steps", "test", "code"] as const).map((kind): PreparedAttempt => ({ kind, scenario: SCENARIO, dir: greet03AttemptDir(`greeter-${kind}`) }));
+});
+
+Given("the scripted test attempt calls a function the assertion package does not have", function (this: RunWorld) {
+  replaceAttempt(this, "test", "test-package-call");
 });
 
 Given("the scripted steps attempt leaves the Then step of FR-GREET-03 undefined", function (this: RunWorld) {
