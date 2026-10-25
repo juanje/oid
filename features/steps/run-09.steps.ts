@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
-import { GREET_01_SCENARIO } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, attemptDir, greet02AttemptDir } from "../support/fixture.ts";
 import { assertOutputNames, requestsOf } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -36,4 +36,23 @@ Then("the output names the turn limit and the code attempt", function (this: Run
   assert.match(this.output, /\bturns?\b/i, `The output does not name the turn limit:\n${this.output}`);
   assertOutputNames(this, "code attempt");
   assertOutputNames(this, GREET_01_SCENARIO);
+});
+
+Given("the scripted steps attempt fails its Then step with a message that changes on every run", function (this: RunWorld) {
+  this.script = this.script.map((attempt) => (attempt.kind === "steps" ? { ...attempt, dir: attemptDir("steps-moving-failure"), report: "Wrote the steps of greeting a person" } : attempt));
+});
+
+Given("the scripted attempts build a second round for the scenario, a test and its code", function (this: RunWorld) {
+  this.script = [
+    ...this.script,
+    { kind: "test", scenario: GREET_01_SCENARIO, dir: greet02AttemptDir("s1-test-names"), report: "Tested listing two names" },
+    { kind: "code", scenario: GREET_01_SCENARIO, dir: greet02AttemptDir("s1-code-names"), report: "listNames joins two names with and" },
+  ];
+});
+
+Then("the output names the round limit, the scenario and its last failure", function (this: RunWorld) {
+  assert.match(this.output, /\brounds?\b/i, `The output does not name the round limit:\n${this.output}`);
+  assertOutputNames(this, GREET_01_SCENARIO);
+  assertOutputNames(this, 'I get "Hello, Ada!"');
+  assertOutputNames(this, "No greeting yet");
 });

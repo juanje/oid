@@ -18,7 +18,7 @@ Given("a scripted executor whose steps, test and code attempts build FR-GREET-01
 });
 
 /** Sets one limit in the project's oid config, keeping the others, committed as the person's repository would have it. */
-async function setLimit(world: RunWorld, limit: "retries" | "turns", value: number): Promise<void> {
+async function setLimit(world: RunWorld, limit: "retries" | "turns" | "rounds", value: number): Promise<void> {
   const path = join(world.projectDir, ".oid.json");
   const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
   config.limits = { ...config.limits, [limit]: value };
@@ -162,4 +162,16 @@ Then("the run created no branch", function (this: RunWorld) {
 
 Then("the executor was asked for no attempt", function (this: RunWorld) {
   assert.equal(this.executor?.asked ?? 0, 0, `The executor was asked for ${this.executor?.asked} attempts`);
+});
+
+Given("the run allows {int} rounds per scenario", async function (this: RunWorld, rounds: number) {
+  await setLimit(this, "rounds", rounds);
+});
+
+Then("the output gives the last report of each attempt kind", function (this: RunWorld) {
+  for (const kind of ["steps", "test", "code"] as const) {
+    const last = this.script.filter((attempt) => attempt.kind === kind).at(-1);
+    assert.ok(last !== undefined, `No ${kind} attempt was prepared`);
+    assertOutputNames(this, last.report ?? `scripted ${kind} attempt`);
+  }
 });
