@@ -53,7 +53,8 @@ export function addedLines(diff: string): Map<string, Set<number>> {
   return added;
 }
 
-const PLACEHOLDER = "the function (empty-report), which no test calls";
+// vitest's provider reports a file no unit test loaded as a placeholder function and a branch, which stand for it.
+const PLACEHOLDER = "(empty-report)";
 
 /** A range of the source with how often it ran: a branch, or a function's body. */
 interface Ran extends Place {
@@ -61,6 +62,8 @@ interface Ran extends Place {
   what: string;
   /** A function a transform adds, which is not in the source (such as `__name`). */
   synthetic: boolean;
+  /** It stands for the whole file: taken when any part of the file ran elsewhere. */
+  whole: boolean;
 }
 
 /**
@@ -74,10 +77,8 @@ export function untaken(reports: CoverageReport[], root: string): Untaken[] {
   ranges.forEach((files, index) => {
     for (const [file, ran] of files) {
       for (const range of ran.filter((candidate) => candidate.count === 0 && !candidate.synthetic)) {
-        // vitest's provider reports a file no unit test loaded as one placeholder function, which stands for the file.
-        const whole = range.what === PLACEHOLDER;
         const takenElsewhere = ranges.some(
-          (other, at) => at !== index && (whole ? (other.get(file) ?? []).some((ran) => ran.count > 0) : (innermost(other.get(file) ?? [], range)?.count ?? 0) > 0),
+          (other, at) => at !== index && (range.whole ? (other.get(file) ?? []).some((ran) => ran.count > 0) : (innermost(other.get(file) ?? [], range)?.count ?? 0) > 0),
         );
         if (takenElsewhere) continue;
         const { line, column } = range.start;
@@ -99,12 +100,13 @@ function rangesOf(report: CoverageReport, root: string): Map<string, Ran[]> {
   const files = new Map<string, Ran[]>();
   for (const data of Object.values(report)) {
     const file = relative(real(root), real(data.path));
+    const whole = Object.values(data.fnMap).some((fn) => fn.name === PLACEHOLDER);
     const ran: Ran[] = [];
     for (const [id, branch] of Object.entries(data.branchMap)) {
-      (data.b[id] ?? []).forEach((count, index) => ran.push({ ...(branch.locations?.[index] ?? branch.loc), count, what: "a branch no test takes", synthetic: false }));
+      (data.b[id] ?? []).forEach((count, index) => ran.push({ ...(branch.locations?.[index] ?? branch.loc), count, what: "a branch no test takes", synthetic: false, whole }));
     }
     for (const [id, fn] of Object.entries(data.fnMap)) {
-      ran.push({ ...fn.loc, count: data.f[id] ?? 0, what: `the function ${fn.name}, which no test calls`, synthetic: fn.name.startsWith("__") });
+      ran.push({ ...fn.loc, count: data.f[id] ?? 0, what: `the function ${fn.name}, which no test calls`, synthetic: fn.name.startsWith("__"), whole });
     }
     files.set(file, [...(files.get(file) ?? []), ...ran]);
   }
