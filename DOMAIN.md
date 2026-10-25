@@ -17,7 +17,7 @@ Each term has one meaning. The last column names what it must not be confused wi
 | **Step definition** | TypeScript that runs a step, with real assertions. | — |
 | **Effective tags** | A scenario's own tags plus those of its `Feature` (and `Rule`). Traceability uses them. | Only the tag line above `Scenario:`. |
 | **Contract** | `SPEC.md` and the approved feature files. Only the person changes them. | Step definitions and tests, which agents write. |
-| **Run** | One `oid run`, with its own worktree, branch and log. | — |
+| **Run** | One `oid run` of one FR or several, with its own worktree, branch and log; one commit per FR built. Its id is the FR's, or `<first>-to-<last>` for several, with the time it started. | — |
 | **Attempt** | One agent process that produces one diff of one kind. | A *session* (Pi's object; one per attempt) and a *turn* (one model response inside an attempt). |
 | **Attempt kind** | steps, test, code, refactor-code or refactor-tests. Each has its own write boundary. | — |
 | **Retry** | A new attempt after a refusal, from the last checkpoint, with the refusal in its task. | — |
@@ -109,7 +109,8 @@ What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenari
 
 | Event | Line starts with | Then |
 |:--|:--|:--|
-| A stage starts | `stage <name>:` | `agent`, `worktree`, `scenarios`, `unit tests`, `gate`, `commit`, in that order |
+| A stage starts | `stage <name>:` | `agent`, `worktree`, `scenarios`, `unit tests`, then `gate` and `commit` for each FR, in that order |
+| An FR's gate leaves scenarios out | `gate of <FR> leaves out:` | each scenario as `<uri>:<line> "<name>"`, of FRs later in the run or not built yet |
 | An attempt starts | `attempt <kind> for "<scenario>"` | `, a retry …` when it is one |
 | An attempt ends | `attempt <kind> for "<scenario>": <verdict>` | `accepted`, `refused: <what failed>`, `stopped …` |
 | A Red | `  Red of the scenario` or `  Red of a unit test` | the scenario or test, then `: <class>`; `: undecided (provisional)` for one oid cannot classify |

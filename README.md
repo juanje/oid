@@ -45,7 +45,7 @@ The run works in its own worktree, beside the repository, and never touches your
 
 ## Commands
 
-- `oid run <FR>`: builds one FR.
+- `oid run <FR…>`: builds the FRs given, in order, one commit each on the run's branch.
 - `oid help`: lists the commands.
 
 For their usage and options, and the version: `oid --help`.
