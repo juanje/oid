@@ -31,6 +31,14 @@ Given("the scripted {word} attempt adds a line with {}", function (this: RunWorl
   this.script = lastAttempt(this.script, kind, GREET_01_SCENARIO, attemptDir(prepared));
 });
 
+Given("the scripted code attempt also writes .oid\\/progress.json", function (this: RunWorld) {
+  this.script = lastAttempt(this.script, "code", GREET_01_SCENARIO, attemptDir("code-writes-oid-state"));
+});
+
+Then("the output names .oid\\/progress.json", function (this: RunWorld) {
+  assertOutputNames(this, ".oid/progress.json");
+});
+
 Then("the output names the source file the test attempt wrote", function (this: RunWorld) {
   assertOutputNames(this, "src/greet.ts");
 });
