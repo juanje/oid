@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { GREET_01_SCENARIO, OID_ROOT, attemptDir, git } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, OID_ROOT, attemptDir, commitProjectConfig, git } from "../support/fixture.ts";
 import { assertOutputNames, requestsOf } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -53,4 +53,18 @@ Then("the output names @vitest\\/coverage-v8", function (this: RunWorld) {
 
 Given("the scripted steps attempt writes a step definition with a branch no run takes", function (this: RunWorld) {
   this.script = greet01("steps-untaken-branch", "test", "code");
+});
+
+Given("the project's .oid.json gives the source the paths src\\/ and shared\\/", async function (this: RunWorld) {
+  await commitProjectConfig(this.projectDir, (config) => (config.paths = { ...config.paths, code: ["src/", "shared/"] }), "chore: the source in src/ and shared/");
+});
+
+Given("the scripted code attempt also adds, under shared\\/, a branch no test takes, and its attempt after the gate removes it", function (this: RunWorld) {
+  this.script = greet01("steps", "test", "code-shared-untaken-branch", "code-shared");
+});
+
+Then("the code attempt after the gate was given the uncovered branch, naming its file under shared\\/ and its line", function (this: RunWorld) {
+  const refusal = requestsOf(this, "code", 2)[1]!.refusal;
+  assert.ok(refusal !== undefined, "The code attempt after the gate came without the gate's refusal");
+  assert.match(refusal.evidence, /shared\/salutation\.ts:3\b/, `The refusal does not name shared/salutation.ts and the branch's line, 3:\n${refusal.evidence}`);
 });
