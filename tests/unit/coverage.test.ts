@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
-import { addedLines, scenarioCoverage, untaken, uncoveredNew } from "../../src/coverage.ts";
+import { type CoverageReport, addedLines, scenarioCoverage, untaken, uncoveredNew } from "../../src/coverage.ts";
 
 const DIFF = `diff --git a/src/greet.ts b/src/greet.ts
 index 1111111..2222222 100644
@@ -173,5 +173,56 @@ describe("scenarioCoverage", () => {
     const report = await scenarioCoverage(v8, root, ["src/"]);
 
     expect(Object.keys(report).map((path) => relative(root, path))).toEqual(["src/greet.js"]);
+  });
+});
+
+describe("scenarioCoverage on vitest 5", () => {
+  const RECORDED = join(import.meta.dirname, "recorded/vitest5-greet");
+
+  /** The recorded project in a new directory, with vitest 5 installed in it, and the recordings' /work made its path. */
+  function project(): { root: string; v8: string; unit: CoverageReport } {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "oid-vitest5-")));
+    cpSync(join(RECORDED, "src"), join(root, "src"), { recursive: true });
+    mkdirSync(join(root, "node_modules"));
+    symlinkSync(join(import.meta.dirname, "../../fixtures/vitest5/node_modules/@vitest"), join(root, "node_modules/@vitest"));
+    symlinkSync(join(import.meta.dirname, "../../fixtures/vitest5/node_modules/vitest"), join(root, "node_modules/vitest"));
+    const v8 = join(root, "v8");
+    mkdirSync(v8);
+    for (const name of readdirSync(join(RECORDED, "scenario-v8"))) {
+      writeFileSync(join(v8, name), readFileSync(join(RECORDED, "scenario-v8", name), "utf8").replaceAll("/work", root));
+    }
+    const unit = JSON.parse(readFileSync(join(RECORDED, "unit-coverage.json"), "utf8").replaceAll("/work", root)) as CoverageReport;
+    return { root, v8, unit };
+  }
+
+  const places = (report: CoverageReport) =>
+    Object.values(report).map((file) => ({
+      functions: Object.values(file.fnMap).map((fn) => fn.loc),
+      branches: Object.values(file.branchMap).map((branch) => branch.locations),
+    }));
+
+  test("maps the scenarios' coverage at the places vitest 5's provider maps the unit tests', leaving out tsx's helpers", async () => {
+    const { root, v8, unit } = project();
+
+    const scenarios = await scenarioCoverage(v8, root, ["src/"], 5);
+
+    expect(places(scenarios)).toEqual(places(unit));
+  });
+
+  test("joined with the unit tests', leaves what no test runs: a side the scenario takes is taken", async () => {
+    const { root, v8, unit } = project();
+
+    expect(untaken([unit, await scenarioCoverage(v8, root, ["src/"], 5)], root, 5)).toEqual([
+      { file: "src/greet.ts", line: 2, column: 2, what: "a branch no test takes" },
+      { file: "src/greet.ts", line: 6, column: 47, what: "the function farewell, which no test calls" },
+      { file: "src/greet.ts", line: 10, column: 59, what: "the function later, which no test calls" },
+    ]);
+  });
+
+  test("refuses a source file whose run code the hook did not keep, naming it", async () => {
+    const { root, v8 } = project();
+    for (const name of readdirSync(v8).filter((file) => file.startsWith("oid-source-"))) rmSync(join(v8, name));
+
+    await expect(scenarioCoverage(v8, root, ["src/"], 5)).rejects.toThrow(/src\/greet\.ts/);
   });
 });

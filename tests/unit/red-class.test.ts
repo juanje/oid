@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { classifyFailure, classifyScenario } from "../../src/red-class.ts";
 import { nothingExists } from "./support/symbols.ts";
+import { recorded } from "./support/recorded.ts";
+import { testFailures } from "../../src/vitest-report.ts";
 
 // Messages as vitest 3.2.7 and cucumber-js 13.3.0 gave them on the greet fixtures.
 const greetExists = (name: string): boolean => name === "greet";
@@ -66,5 +68,17 @@ describe("classifyScenario", () => {
   test("a scenario that passes before its code is test_bug, and one that did not run is not_run", () => {
     expect(classifyScenario({ ...SCENARIO, status: "passed" }, nothingExists)).toBe("test_bug");
     expect(classifyScenario({ ...SCENARIO, status: "not run" }, nothingExists)).toBe("not_run");
+  });
+});
+
+describe("classifyFailure, on vitest 5's messages", () => {
+  test("reads them as vitest 5 writes them: a missing export and an assertion after .resolves are undecided, accepted provisionally", () => {
+    const failures = testFailures(JSON.parse(recorded("vitest5-greet/unit-report.json")), "/work");
+
+    expect(failures.map(({ message }) => message)).toEqual([
+      "TypeError: (0 , __vite_ssr_import_1__.farewel) is not a function",
+      "Error: expected 'Hello, Ada!' to be 'Hi, Ada!' // Object.is equality",
+    ]);
+    expect(failures.map(({ message }) => classifyFailure(message, nothingExists))).toEqual(["undecided", "undecided"]);
   });
 });
