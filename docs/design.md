@@ -78,7 +78,7 @@ An attempt is the unit of work (D-04):
 
 **Containment** (FR-AGENT-05). Every file tool checks its path before the call runs: a path that resolves outside the worktree, with symlinks resolved, or a secret-shaped name inside it, is refused, naming the path and why. The diff check cannot see what an agent read, or wrote outside the worktree.
 
-**Write boundaries** (D-05):
+**Write boundaries** (D-05), at the paths the project's `.oid.json` names (`DOMAIN.md`, Configuration), which must not overlap:
 
 | Kind | May write |
 |:--|:--|
@@ -88,7 +88,7 @@ An attempt is the unit of work (D-04):
 | refactor-code | source |
 | refactor-tests | unit tests and step definitions |
 
-No kind writes feature files, `SPEC.md`, the gate's configuration or oid's state. The forbidden patterns in added lines are `.only`, `.skip`, and branches on a test environment.
+No kind writes feature files, the spec, the gate's configuration (with the files a runner's configuration loads) or oid's state, `.oid/`, wherever the paths put them. The forbidden patterns in added lines are `.only`, `.skip`, and branches on a test environment.
 
 **The report** ends every attempt. It holds a result in a few words, and may also hold:
 - a request for the next kind;
@@ -138,6 +138,8 @@ One function, two entry points (D-06): the loop step before each commit, and `oi
 | Scenarios, all not shelved | Yes | Yes | Code attempt; a contract change shelves the FR |
 | Coverage of the FR's new branches, unit tests and scenarios together | Yes | Yes | Code attempt: remove the branch no test runs |
 | Traceability | — | Yes | Shown to the person |
+
+Coverage joins the two sides by place, so both must be mapped the same way: on vitest 3, the provider and the scenarios both go through `v8-to-istanbul`; on vitest 5, whose provider maps through the syntax tree, the scenarios go through the project's own `ast-v8-to-istanbul`, over the code tsx gave Node. oid reads the project's vitest by its installed version, 3 or 5.
 
 The gate also runs at the start of a run as the baseline. A red test stops the run and asks; findings are recorded. A check that ran nothing, or got an unknown option, fails.
 

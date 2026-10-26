@@ -2,7 +2,7 @@
 
 What the words mean here, the formats oid reads and writes, and how the tools oid drives behave.
 
-The tool behaviour below was observed on Pi 1.1.0, cucumber-js 13 and vitest 3; the Pi section says what was checked against 1.4.0. If a pinned version differs from these, check a behaviour before you rely on it, and update this file when it changed.
+The tool behaviour below was observed on Pi 1.1.0, cucumber-js 13 and vitest 3.2.7; the Pi section says what was checked against 1.4.0, and the vitest section what differs on 5.0.3. If a pinned version differs from these, check a behaviour before you rely on it, and update this file when it changed.
 
 ## Terms
 
@@ -78,14 +78,15 @@ That codebase uses some of these words with other meanings. When you port a piec
 
 ## Formats
 
-### `SPEC.md` requirement headings
+### Requirements in the spec
 
 ```markdown
 #### FR-RUN-01: Run one FR on approved features
 ### NFR-01: Every refusal says what failed, the evidence and the next step
+**FR-NET-01 — Fetch URL content**
 ```
 
-The patterns are `^#{3,4} (FR-[A-Z][A-Z0-9]*-\d{2,3}[a-z]?): (.+)$` and `^#{3,4} (NFR-\d{2,3}): (.+)$`. The body runs to the next heading of the same level or above. An FR split off another keeps its number and adds one lowercase letter.
+The heading patterns are `^#{3,4} (FR-[A-Z][A-Z0-9]*-\d{2,3}[a-z]?): (.+)$` and `^#{3,4} (NFR-\d{2,3}): (.+)$`; the body runs to the next heading of the same level or above. A spec may instead start an FR with a line in bold, `^\*\*(FR-…) — (.+)\*\*$`, as Buddy's does under its tables of requirements; its body runs to the next such line or the next heading. oid's own `SPEC.md` uses headings. An FR split off another keeps its number and adds one lowercase letter.
 
 A requirement holds no acceptance criteria: no `Scenario:` line, and no `Given` … `Then` sequence. A sentence that starts with "When" is not one.
 
@@ -123,14 +124,31 @@ What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenari
 | File | Whose | Holds | Read from |
 |:--|:--|:--|:--|
 | `<config dir>/config.json` | The person's | `model`, as `<provider>/<model>` (later the effort and the notifications) | `$OID_CONFIG_DIR`, else `$XDG_CONFIG_HOME/oid`, else `~/.config/oid` |
-| `.oid.json` | The project's, committed | `limits` (`retries`, `turns`, `rounds`) and `paths` (`domain`, `conventions`); later the stack and the commands | The run's `HEAD`, never the working copy |
+| `.oid.json` | The project's, committed | `limits` (`retries`, `turns`, `rounds`) and `paths` (below); later the stack and the commands | The run's `HEAD`, never the working copy |
 
 A `model` in `.oid.json` is an error: the model is personal (NFR-08).
 
+`paths` in `.oid.json`, each with its default (FR-AGENT-04):
+
+| Key | Holds | Default |
+|:--|:--|:--|
+| `spec` | The spec file | `"SPEC.md"` |
+| `features` | The feature files' directory | `"features/"` |
+| `steps` | Where step definitions and their support files live; a steps attempt writes here | `["features/steps/", "features/support/"]` |
+| `tests` | Where unit tests live; a test attempt writes here | `["tests/"]` |
+| `code` | Where the source lives; a code attempt writes here, coverage and the mutant look here | `["src/"]` |
+| `domain`, `conventions` | The files a task reads as the project's domain and conventions | none |
+
+- **A path is a directory with its trailing `/`, or a file.**
+- **The paths of `steps`, `tests` and `code` must not overlap:** one equal to, or inside, a path of another kind is an error (exit 2) that names both. `steps` may sit inside `features`, as in cucumber-js's own layout.
+- **The contract and the gate's configuration are unwritable whatever the paths say.** The contract is the spec, every `.feature` file, and every file under `features` outside the `steps` paths. The gate's configuration is these files wherever they are: `package.json`, `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `pnpm-lock.yaml`, `bun.lock`, `bun.lockb`, `tsconfig*.json`, `jsconfig*.json`, `vitest.config.*`, `vitest.workspace.*`, `vite.config.*`, `cucumber.*`, `eslint.config.*`, `.eslintrc*`, `prettier.config.*`, `.prettierrc*`, `biome.json`, `biome.jsonc` and `.oid.json`, and the files a vitest configuration names in `setupFiles` and `globalSetup`, which run with every unit test.
+- **oid's state is `.oid/`** (later `.oid/progress.json`, FR-STATE-03): unwritable by every kind, and noise to read.
+- **oid reads the feature files only through the project's cucumber-js configuration,** which names them (`paths`) and its step definitions (`import`). `features` marks them as the contract; it does not tell cucumber-js where they are.
+
 ### What a task reads from the project
 
-- **Domain:** the file `paths.domain` names in `.oid.json`, else `DOMAIN.md`, else the `## Domain` section of `SPEC.md`. Optional.
-- **Conventions:** the file `paths.conventions` names, else `CONVENTIONS.md`, else the `## Conventions` section of `SPEC.md`. Optional.
+- **Domain:** the file `paths.domain` names in `.oid.json`, else `DOMAIN.md`, else the `## Domain` section of the spec (`paths.spec`). Optional.
+- **Conventions:** the file `paths.conventions` names, else `CONVENTIONS.md`, else the `## Conventions` section of the spec. Optional.
 - **Never `AGENTS.md` or `CLAUDE.md`.** They hold process instructions for other agents (how to commit, when to stop, which tools to use), which contradict oid's procedure.
 
 ### Refusal
@@ -202,25 +220,47 @@ Observed on 1.1.0; the 1.4.0 code was compared and is the same unless a line say
 
 ### vitest
 
+Checked on 3.2.7 and 5.0.3, side by side on the same files. Read the version from the project's installed `vitest/package.json`; other major versions are not checked.
+
 With `--reporter=json --outputFile=<file>`:
 
-| Case | Where it appears | Message |
-|:--|:--|:--|
-| The test imports an export that does not exist | Test, `failureMessages` | `TypeError: (0 , generateCode) is not a function` |
-| The test calls a member of an imported binding that does not have it | Test, `failureMessages` | `TypeError: default.matchs is not a function`: vitest renames the binding; a local keeps its name (`resolver.resolve`) |
-| The test imports a module that does not exist | File, `message`, no tests listed | `Cannot find module '../../src/redirect' imported from '<test file>'` |
-| A syntax error in a test file | File, `message`, no tests listed | `Transform failed with 1 error: …` |
-| A failing expectation | Test, `failureMessages` | `AssertionError: expected 2 to be 4 // Object.is equality` |
-| A file that loads and registers no vitest test, such as one written with `node:test` | File, `message`, no tests listed, exit 1 | `No test suite found in file <path>` |
+| Case | Where it appears | 3.2.7 | 5.0.3 |
+|:--|:--|:--|:--|
+| The test imports an export that does not exist | Test, `failureMessages` | `TypeError: (0 , generateCode) is not a function` | `TypeError: (0 , __vite_ssr_import_1__.generateCode) is not a function` |
+| The test calls a member of an imported binding that does not have it | Test, `failureMessages` | `TypeError: default.matchs is not a function` | `TypeError: __vite_ssr_import_1__.default.matchs is not a function` |
+| The test calls a member of a local that does not have it | Test, `failureMessages` | `TypeError: resolver.resolv is not a function` | the same |
+| The test imports a module that does not exist | File, `message`, no tests listed | `Cannot find module '../../src/redirect' imported from '<test file>'` | the same, with the test file's path unquoted |
+| The test imports a package that is not installed | File, `message`, no tests listed | `Cannot find package 'nanoid' imported from '<test file>'` | the same, with the test file's path unquoted |
+| A syntax error in a test file | File, `message`, no tests listed | `Transform failed with 1 error: …` | the same |
+| A failing expectation | Test, `failureMessages` | `AssertionError: expected 2 to be 4 // Object.is equality` | the same |
+| A failing matcher after `.rejects` or `.resolves` | Test, `failureMessages` | `AssertionError: expected [Function] to throw error including 'other' but got 'not ok'` | `Error: expected [Function] to throw error including 'other' but got 'not ok'`, with an `Assertion.__VITEST_REJECTS__` (or `__VITEST_RESOLVES__`) frame in the stack |
+| `.rejects` on a promise that resolves, `.resolves` on one that rejects | Test, `failureMessages` | `Error: promise resolved "'done'" instead of rejecting` | the same |
+| A file that loads and registers no vitest test, such as one written with `node:test` | File, `message`, no tests listed, exit 1 | `No test suite found in file <path>` | the same |
 
+- **The report's shape is the same on both:** `testResults[]` with `name`, `status`, `message` and `assertionResults[]` with `fullName`, `status` and `failureMessages`. 5.0.3 adds `tags` and `benchmarks` to each test.
+- **5.0.3 names an imported binding after the module runner's import** (`__vite_ssr_import_<n>__.`). Without that prefix, the message is 3.2.7's. oid does not translate it: on 5.0.3 a missing export reads as a call on a member, `undecided`, accepted provisionally and confirmed by its code (FR-EVID-01).
+- **5.0.3 reports a matcher that fails after `.rejects` or `.resolves` as `Error:`, not `AssertionError:`.** Its first line is the assertion's message; the stack's `__VITEST_REJECTS__` or `__VITEST_RESOLVES__` frame tells it from an error the code threw. Every other assertion is `AssertionError:` on both, `expect.poll` aside. oid does not translate it either: on 5.0.3 it is `undecided`.
 - **A missing export does not fail the file load:** it arrives as `undefined`.
-- **A test file that registers no vitest test is `test_bug`** (checked on 3.2.7). Before its code exists, its import fails and it looks like `missing_implementation`; once the code exists, it fails with `No test suite found`. That is the test attempt's to fix, never the code's: tests come from `vitest`'s `describe`, `it` and `test`.
+- **A test file that registers no vitest test is `test_bug`** (checked on 3.2.7 and 5.0.3). Before its code exists, its import fails and it looks like `missing_implementation`; once the code exists, it fails with `No test suite found`. That is the test attempt's to fix, never the code's: tests come from `vitest`'s `describe`, `it` and `test`.
 - **vitest does not type-check.** `tsc --noEmit` does.
-- **Pass the test name as one argument: `--testNamePattern=<escaped name>`.** As two arguments, a name that starts with `-` is read as an option.
+- **Pass the test name as one argument: `--testNamePattern=<escaped name>`.** As two arguments, a name that starts with `-` is read as an option. A name that matches nothing leaves the test `skipped` and exits 0, on both.
+- **A file argument that matches no test file exits 1 with an empty report**, on both.
 - **`passWithNoTests` makes a run where nothing ran pass.** Check that the test asked for ran.
-- **`--exclude` on the command line is added to the configured excludes.** Use it to keep oid's own files out of a project's run.
-- **Coverage of the unit tests needs vitest's provider, `@vitest/coverage-v8` at vitest's version** (checked on 3.2.7). Node's own coverage (`NODE_V8_COVERAGE`) does not give it: with the `forks` pool, the default, the workers end without writing it; with `threads` or `vmThreads` it is there, without a source map, because vite-node transforms the code in memory.
-- **On macOS the JSON report gives real paths** (`/private/var/…` for `/var/…`). Resolve both sides with `realpath` before you compute relative paths.
+- **`--exclude` on the command line is added to the configured excludes**, on both. Use it to keep oid's own files out of a project's run.
+- **`--coverage.include` can be given more than once**, one source path each, on both.
+- **On macOS the JSON report gives real paths** (`/private/var/…` for `/var/…`), on both. Resolve both sides with `realpath` before you compute relative paths.
+
+#### vitest's coverage
+
+- **Coverage of the unit tests needs vitest's provider, `@vitest/coverage-v8` at vitest's version.** Node's own coverage (`NODE_V8_COVERAGE`) does not give it: on 3.2.7, with the `forks` pool, the default, the workers end without writing it; with `threads` or `vmThreads` it is there, without a source map, because vite-node transforms the code in memory.
+- **A failing test run writes no coverage report** (`coverage.reportOnFailure` is off), on both.
+- **3.2.7's provider maps V8's ranges with `v8-to-istanbul`:** only the ranges that ran a different number of times than the range around them, each starting at the token before it (V8 coverage, below). A file no unit test loads is one placeholder function, `(empty-report)`, plus one branch, which stand for the whole file.
+- **5.0.3's provider maps them with `ast-v8-to-istanbul` over the transformed code's syntax tree.** The report is istanbul's whole map: every function and every side of every branch, each with its count, a side taken included. Places differ from 3.2.7's:
+  - a function starts at its body's `{`, not at `function` (`greet` at 1:44, not 1:7), and an arrow function is named `(anonymous_<n>)`;
+  - an `if`'s first side is the whole `if` statement, and a missing `else` is a side with an empty place (`{}`);
+  - an end column can be `null`: the end of its line.
+- **A file no unit test loads is mapped whole on 5.0.3,** with its real functions and branches at count 0; there is no placeholder. Its branches are listed inside the function as well, so a function no test calls and the branches inside it are separate entries.
+- **5.0.3's places do not line up with `v8-to-istanbul`'s,** so a scenario's coverage mapped that way cannot be joined with them by place: a function `v8-to-istanbul` starts at `function` is not inside the one vitest starts at `{`. Mapped with the same `ast-v8-to-istanbul` (the project's own, which its provider loads) and parsed with vitest's `parseAstAsync` (from `vitest/node`), a scenario's V8 coverage gives exactly vitest's places. It needs the code Node ran, which `NODE_V8_COVERAGE` does not keep: a `module.registerHooks` load hook imported after tsx sees tsx's output, with its inline source map (checked on Node 26.0.0 with tsx 4.23.15). tsx's helper `__name` then comes out as a function `(anonymous_0)` at the place of the first name it wraps.
 
 ### git
 
@@ -234,7 +274,7 @@ With `--reporter=json --outputFile=<file>`:
 ### V8 coverage
 
 - **V8 lists only the ranges that ran a different number of times than the range around them.** A side of a branch a run took is not listed at all: its count is the enclosing range's. To join two reports, a range one leaves untaken is taken when, in the other, the smallest range around it ran (FR-GATE-02).
-- **Mapped through a source map, a range starts at the token before it** (a ternary's side starts at the token before it). Both vitest's provider and `v8-to-istanbul` over tsx's maps shift it the same way, so one range left untaken by both reports comes out at the same place in both.
+- **Mapped through a source map, a range starts at the token before it** (a ternary's side starts at the token before it). vitest 3.2.7's provider and `v8-to-istanbul` over tsx's maps shift it the same way, so one range left untaken by both reports comes out at the same place in both. vitest 5.0.3's provider does not (vitest's coverage, above).
 - **A function no run calls is one range**, its branches inside it unlisted: say it as the function.
 
 ### Node child processes
@@ -254,7 +294,7 @@ With `--reporter=json --outputFile=<file>`:
 - **`os.homedir()` follows `$HOME`.** The account's real home is `os.userInfo().homedir`, which throws when the account has no passwd entry.
 - **Resolve symlinks before checking for secrets.** Match secret-shaped names (`.env.alias`), not only exact ones.
 - **Secret-shaped names** (FR-AGENT-05), matched on the path asked for and on where it leads: `.env`, `.env.*`, `.npmrc`, `.netrc`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `auth.json`, and anything under a `secrets/` directory. `.npmrc` often holds a registry token in TypeScript projects. Home's `.ssh`, `.aws` and `.gnupg` need no rule: they are outside every worktree.
-- **Noise:** `.git`, which in a worktree is a file naming the gitdir, not a directory, and oid's own state. Agents never read it, and listings and searches leave it out, as they leave out secret-shaped files.
+- **Noise:** `.git`, which in a worktree is a file naming the gitdir, not a directory, and oid's own state, `.oid/`. Agents never read it, and listings and searches leave it out, as they leave out secret-shaped files.
 
 ## Edge cases
 
