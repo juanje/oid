@@ -39,3 +39,57 @@ Feature: Write boundaries, checked on the diff
       | test    | .only              |
       | test    | .skip              |
       | code    | process.env.VITEST |
+
+  Scenario: A .oid.json whose paths for two kinds of attempt overlap is an error that names them
+    Given the project's .oid.json gives the unit tests the path tests/ and the step definitions the path tests/steps/
+    When I run "oid run FR-GREET-01"
+    Then the run stops with an error, not a refusal and not a crash
+    And the output names tests/ and tests/steps/
+    And the executor was asked for no attempt
+
+  Scenario: A code attempt that writes under .oid/ is not committed
+    Given the scripted code attempt also writes .oid/progress.json
+    When I run "oid run FR-GREET-01"
+    Then the run stops with a refusal, not a crash
+    And the output names .oid/progress.json
+    And the run's branch has no commit on top of the starting HEAD
+
+  Rule: Each kind of attempt writes where the project's .oid.json says
+
+    Background:
+      Given the project's files are where its .oid.json places them:
+        | kind     | paths                        |
+        | spec     | specs/SPEC.md                |
+        | features | specs/features/              |
+        | steps    | tests/steps/, tests/support/ |
+        | tests    | tests/unit/                  |
+        | code     | src/, shared/                |
+      And the scripted attempts write their files under those paths
+
+    Scenario: The FR is built within the paths its project names
+      When I run "oid run FR-GREET-01"
+      Then the run succeeds
+      And the FR's commit has its step definitions under tests/steps/, its unit tests under tests/unit/, and its source under src/ and shared/
+      And every attempt's task gives FR-GREET-01's text from specs/SPEC.md
+
+    Scenario: A test attempt that writes under the step definitions' paths is not committed
+      Given the scripted test attempt also writes a file under tests/steps/
+      When I run "oid run FR-GREET-01"
+      Then the run stops with a refusal, not a crash
+      And the output names the file the test attempt wrote under tests/steps/
+      And the run's branch has no commit on top of the starting HEAD
+
+    Scenario: A code attempt that writes a runner's configuration under a source path is not committed
+      Given the scripted code attempt also writes shared/vitest.config.ts
+      When I run "oid run FR-GREET-01"
+      Then the run stops with a refusal, not a crash
+      And the output names shared/vitest.config.ts
+      And the run's branch has no commit on top of the starting HEAD
+
+    Scenario: A steps attempt that changes a file vitest's configuration loads is not committed
+      Given the project's vitest configuration loads tests/support/setup.ts before the unit tests
+      And the scripted steps attempt also changes tests/support/setup.ts
+      When I run "oid run FR-GREET-01"
+      Then the run stops with a refusal, not a crash
+      And the output names tests/support/setup.ts
+      And the run's branch has no commit on top of the starting HEAD
