@@ -2,6 +2,7 @@ import { readlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { STATE_DIR } from "./boundaries.ts";
 import type { Refusal } from "./refusal.ts";
 
 // What keeps an agent's file tools inside the run's worktree and away from secrets and noise (FR-AGENT-05, DOMAIN.md:
@@ -22,6 +23,8 @@ const SECRET_NAMES = new Set([".env", ".npmrc", ".netrc", "auth.json"]);
 const SECRET_EXTENSIONS = [".pem", ".key", ".p12", ".pfx"];
 const SECRET_DIRECTORY = "secrets";
 const NOISE = ".git";
+// oid's own state (D-05), the directory boundaries.ts names STATE_DIR.
+const STATE = STATE_DIR.replace(/\/$/, "");
 
 /** Why a file tool's call must not run, naming the path and why; none when every path-like argument is allowed. */
 export function toolCallRefusal(worktree: string, tool: string, args: Record<string, unknown>): Refusal | undefined {
@@ -51,6 +54,7 @@ function pathRefusal(root: string, asked: string): string | undefined {
   const named = relative(root, resolve(root, wanted));
   for (const path of new Set([named, inside])) {
     if (isNoise(path)) return `${path} is ${NOISE}, the worktree's link to the repository's history, which no agent reads`;
+    if (isState(path)) return `${path} is oid's own state, which no agent reads`;
     if (isSecretShaped(path)) return `${path} is secret-shaped, and no agent reads secrets`;
   }
   return undefined;
@@ -121,6 +125,10 @@ function isNoise(path: string): boolean {
   return path.split("/")[0] === NOISE;
 }
 
+function isState(path: string): boolean {
+  return path.split("/")[0] === STATE;
+}
+
 /** What ls, find and grep answer, without the lines that name a secret-shaped file or .git; other tools' answers as they are. */
 export function withoutHidden(tool: string, text: string): string {
   const pathOf = LINE_PATH[tool];
@@ -129,7 +137,7 @@ export function withoutHidden(tool: string, text: string): string {
     .split("\n")
     .filter((line) => {
       const path = pathOf(line);
-      return path === undefined || !(isNoise(path) || isSecretShaped(path));
+      return path === undefined || !(isNoise(path) || isState(path) || isSecretShaped(path));
     })
     .join("\n");
 }
