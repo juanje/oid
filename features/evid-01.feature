@@ -12,6 +12,20 @@ Feature: Classify a failure
     And the output gives the new test's failure the class missing_implementation
     And every scenario of FR-GREET-03 passes on the run's branch
 
+  Scenario: On vitest 5, a new test that asks for a function its module does not have yet is accepted provisionally, and confirmed when its code makes it pass
+    Given the project's vitest is version 5
+    When I run "oid run FR-GREET-03"
+    Then the run succeeds
+    And the output gives the new test's failure the class undecided, provisional
+    And the output says the new test's Red is confirmed
+
+  Scenario: A project whose vitest is neither version 3 nor version 5 is an error before any attempt
+    Given the project's vitest is version 4
+    When I run "oid run FR-GREET-03"
+    Then the run stops with an error, not a refusal and not a crash
+    And the output names the project's vitest version and the versions oid reads
+    And the executor was asked for no attempt
+
   Scenario: A new test whose failure oid cannot classify is accepted provisionally, and confirmed when its code makes it pass
     Given the scripted test attempt fails with an error of its own while the function it asks for does not exist yet
     When I run "oid run FR-GREET-03"
