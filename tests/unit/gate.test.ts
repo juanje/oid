@@ -134,6 +134,13 @@ describe("gateError", () => {
     expect(error).toContain("noSuchCompilerOption");
   });
 
+  test("a check that could not read what its runner wrote is an error that names the check and why", () => {
+    const error = gateError([{ name: "coverage", passed: false, output: "", error: "oid cannot map the scenarios' coverage of src/greet.ts" }]);
+
+    expect(error).toContain("coverage");
+    expect(error).toContain("src/greet.ts");
+  });
+
   test("no error when every runner knew its options", () => {
     expect(gateError([{ name: "types", passed: false, output: TYPE_ERROR }])).toBeUndefined();
   });
