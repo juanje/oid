@@ -27,9 +27,9 @@ export function definitionSource(source: string, line: number): string | undefin
  * The pattern of every step definition the project has, as `<file>: <pattern>`, from the files a steps attempt may
  * write: what a steps attempt reuses instead of defining a step twice, which cucumber-js reports as ambiguous.
  */
-export async function stepPatterns(dir: string): Promise<string[]> {
+export async function stepPatterns(dir: string, stepPaths: string[] = WRITABLE.steps): Promise<string[]> {
   const patterns: string[] = [];
-  for (const path of await typescriptFilesUnder(dir, WRITABLE.steps)) {
+  for (const path of await typescriptFilesUnder(dir, stepPaths)) {
     const file = ts.createSourceFile(path, await readFile(join(dir, path), "utf8"), ts.ScriptTarget.Latest, true);
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && DEFINERS.has(node.expression.text)) {

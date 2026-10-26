@@ -121,10 +121,10 @@ describe("judgeBoundary", () => {
 
 describe("ownerOf", () => {
   test("the attempt kind that writes a file owns it", () => {
-    expect(["features/steps/greet.steps.ts", "features/support/world.ts", "tests/greet.test.ts", "src/greet.ts"].map(ownerOf)).toEqual(["steps", "steps", "test", "code"]);
+    expect(["features/steps/greet.steps.ts", "features/support/world.ts", "tests/greet.test.ts", "src/greet.ts"].map((file) => ownerOf(file))).toEqual(["steps", "steps", "test", "code"]);
   });
 
   test("a file no kind writes goes to a code attempt: the cause of its error is almost always in the source", () => {
-    expect(["scripts/build.ts", "vitest.config.ts", "features/greet-01.feature"].map(ownerOf)).toEqual(["code", "code", "code"]);
+    expect(["scripts/build.ts", "vitest.config.ts", "features/greet-01.feature"].map((file) => ownerOf(file))).toEqual(["code", "code", "code"]);
   });
 });

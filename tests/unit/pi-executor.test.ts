@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
+import { DEFAULT_LAYOUT } from "../../src/boundaries.ts";
 import type { Attempt, Mutant, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
 import { piExecutor } from "../../src/pi-executor.ts";
 import { type ModelAttempt, ScriptedModel } from "../../features/support/scripted-model.ts";
@@ -30,6 +31,7 @@ function codeAttempt(turns = 40, tried: TryResult = { passed: true }) {
     fr: "FR-GREET-01",
     scenario: SCENARIO,
     worktree,
+    layout: DEFAULT_LAYOUT,
     limits: { turns },
     tools: {
       try: async (target) => {

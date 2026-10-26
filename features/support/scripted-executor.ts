@@ -86,7 +86,7 @@ export class ScriptedExecutor implements Executor {
       throw new Error(`Expected the ${next.kind} attempt for "${next.scenario}", got ${asked}`);
     }
     this.asked += 1;
-    this.told.push({ system: systemPromptFor(attempt.kind), task: taskFor(attempt) });
+    this.told.push({ system: systemPromptFor(attempt.kind, attempt.layout), task: taskFor(attempt) });
     // The executor counts its agent's turns and ends it between turns at the limit, as the Pi executor does with
     // finishTurn; an agent ended before it finished leaves no diff and no report.
     const wanted = next.turns ?? 1;

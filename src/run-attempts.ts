@@ -85,11 +85,11 @@ export function failingOf(result: ScenarioRun | undefined): Failing | undefined 
 /** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
 export async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"]) {
   const location = locationOf(scenario);
-  const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location), { asked: asked !== undefined });
+  const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location), { asked: asked !== undefined, layout: run.layout });
   await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined });
   run.attempts += 1;
   const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, refusal: previous, turns: run.turns, context, transcript, asked });
+  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, layout: run.layout, refusal: previous, turns: run.turns, context, transcript, asked });
 }
 
 export function locationOf(scenario: Scenario): string {

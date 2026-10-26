@@ -7,9 +7,9 @@ import { readPaths } from "./config.ts";
 // AGENTS.md or CLAUDE.md: they hold process instructions for other agents, which contradict oid's procedure.
 
 /** The project's domain and conventions, each from the file .oid.json names, its default file, or the spec's section. */
-export async function projectTexts(dir: string): Promise<{ domain?: string; conventions?: string }> {
+export async function projectTexts(dir: string, specFile = "SPEC.md"): Promise<{ domain?: string; conventions?: string }> {
   const paths = await readPaths(dir);
-  const spec = await readIfThere(dir, "SPEC.md");
+  const spec = await readIfThere(dir, specFile);
   const domain = (await readIfThere(dir, paths.domain)) ?? (await readIfThere(dir, "DOMAIN.md")) ?? specSection(spec, "Domain");
   const conventions = (await readIfThere(dir, paths.conventions)) ?? (await readIfThere(dir, "CONVENTIONS.md")) ?? specSection(spec, "Conventions");
   return { ...(domain === undefined ? {} : { domain }), ...(conventions === undefined ? {} : { conventions }) };

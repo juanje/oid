@@ -1,5 +1,5 @@
 import { agentError } from "./agent-error.ts";
-import { judgeBoundary } from "./boundaries.ts";
+import { type Layout, judgeBoundary } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext, TryTarget } from "./executor.ts";
@@ -15,6 +15,8 @@ export interface AttemptRequest {
   fr: string;
   scenario: Scenario;
   worktreeDir: string;
+  /** Where the project keeps each kind of file (FR-AGENT-04). */
+  layout: Layout;
   /** The refusal of the attempt before it, when this one is a retry. */
   refusal: Refusal | undefined;
   /** The turns its agent may take. */
@@ -39,6 +41,7 @@ export async function runAttempt({
   fr,
   scenario,
   worktreeDir,
+  layout,
   refusal: previous,
   turns,
   context,
@@ -61,6 +64,7 @@ export async function runAttempt({
     fr,
     scenario: scenario.name,
     worktree: worktreeDir,
+    layout,
     tools,
     limits: { turns },
     ...(previous === undefined ? {} : { refusal: previous }),
@@ -72,6 +76,6 @@ export async function runAttempt({
   if (error !== undefined) throw error;
   if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns, outcome);
   const diff = await takeAttemptDiff(worktreeDir);
-  const refusal = judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff);
+  const refusal = judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff, layout);
   return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }), ...(next === undefined ? {} : { next }), ...(mutant === undefined ? {} : { mutant }) };
 }

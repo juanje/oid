@@ -1,3 +1,4 @@
+import type { Layout } from "./boundaries.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { AgentTurnDecision } from "@earendil-works/pi-agent-core";
@@ -50,7 +51,7 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
     customTools: oidTools(attempt, () => {
       reported = true;
     }),
-    resourceLoader: resourcesFor(attempt.kind),
+    resourceLoader: resourcesFor(attempt.kind, attempt.layout),
     sessionManager,
     // Neither the person's nor the project's Pi settings reach the agent; cache warming would send requests of its own.
     settingsManager: SettingsManager.inMemory({ cacheWarming: "off", ...(retry === undefined ? {} : { retry: { enabled: true, ...retry } }) }),
@@ -163,7 +164,7 @@ function oidTools(attempt: Attempt, onReport: () => void) {
  * What the agent loads besides its tools: oid's system prompt for its kind, and nothing of the project's or the
  * person's Pi setup (extensions, skills, prompt templates, context files such as AGENTS.md).
  */
-function resourcesFor(kind: AttemptKind): ResourceLoader {
+function resourcesFor(kind: AttemptKind, layout: Layout): ResourceLoader {
   const extensions = { extensions: [], errors: [], runtime: createExtensionRuntime() };
   return {
     getExtensions: () => extensions,
@@ -171,7 +172,7 @@ function resourcesFor(kind: AttemptKind): ResourceLoader {
     getPrompts: () => ({ prompts: [], diagnostics: [] }),
     getThemes: () => ({ themes: [], diagnostics: [] }),
     getAgentsFiles: () => ({ agentsFiles: [] }),
-    getSystemPrompt: () => systemPromptFor(kind),
+    getSystemPrompt: () => systemPromptFor(kind, layout),
     getSystemPromptSource: () => undefined,
     getAppendSystemPrompt: () => [],
     getAppendSystemPromptSources: () => [],

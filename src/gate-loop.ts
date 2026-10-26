@@ -23,6 +23,7 @@ export async function gateLoop(
   gate: () => Promise<CheckResult[]>,
   afterGate: (kind: AttemptKind, refusal: Refusal) => Promise<Tried>,
   onGate: (refusal: Refusal | undefined, sendTo: AttemptKind | undefined) => Promise<void> = async () => {},
+  owner: (file: string) => AttemptKind = (file) => ownerOf(file),
 ): Promise<GateOutcome> {
   let error: string | undefined;
   let kind: AttemptKind = "code";
@@ -43,22 +44,22 @@ export async function gateLoop(
       return { refusal: fewer, rollback: KEEP_THE_CODE };
     }
     tests = ran ?? tests;
-    const owner = ownerOfFailures(results);
-    if (owner !== undefined) kind = owner;
-    const refusal = gateRefusal(results, owner);
-    await onGate(refusal, refusal === undefined ? undefined : owner);
-    return { refusal, rollback: KEEP_THE_CODE, final: owner === undefined };
+    const sendTo = ownerOfFailures(results, owner);
+    if (sendTo !== undefined) kind = sendTo;
+    const refusal = gateRefusal(results, sendTo);
+    await onGate(refusal, refusal === undefined ? undefined : sendTo);
+    return { refusal, rollback: KEEP_THE_CODE, final: sendTo === undefined };
   });
   return error === undefined ? { refusal } : { error };
 }
 
 /** The kind the gate's failures go back to, outside-in, or none when a failure is not one an attempt can be sent to fix. */
-function ownerOfFailures(results: CheckResult[]): AttemptKind | undefined {
+function ownerOfFailures(results: CheckResult[], owner: (file: string) => AttemptKind): AttemptKind | undefined {
   const failed = results.filter((result) => !result.passed);
   const kinds = failed.map((result) => {
     // A branch no test runs is code no test asks for: a code attempt removes it (FR-GATE-02).
     if (result.name === "unit" || result.name === "scenarios" || result.name === "coverage") return ["code" as const];
-    if (result.name === "types" && (result.failedFiles?.length ?? 0) > 0) return result.failedFiles!.map(ownerOf);
+    if (result.name === "types" && (result.failedFiles?.length ?? 0) > 0) return result.failedFiles!.map(owner);
     return undefined;
   });
   if (kinds.includes(undefined)) return undefined;

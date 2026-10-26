@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { StepFailure } from "./cucumber-messages.ts";
+import { DEFAULT_LAYOUT, type Layout } from "./boundaries.ts";
 import type { AttemptKind, TaskContext } from "./executor.ts";
 import { frText, projectTexts } from "./project-texts.ts";
 import { relevantCode } from "./relevant-code.ts";
@@ -14,9 +15,9 @@ const CODE_BUDGET = 40_000;
 /** What every task of an FR's run shares: the FR's text and the project's domain and conventions. */
 export type FrTexts = Pick<TaskContext, "fr" | "domain" | "conventions">;
 
-export async function frTexts(dir: string, fr: string): Promise<FrTexts> {
-  const spec = existsSync(join(dir, "SPEC.md")) ? frText(await readFile(join(dir, "SPEC.md"), "utf8"), fr) : undefined;
-  return { ...(spec === undefined ? {} : { fr: spec }), ...(await projectTexts(dir)) };
+export async function frTexts(dir: string, fr: string, specFile: string): Promise<FrTexts> {
+  const spec = existsSync(join(dir, specFile)) ? frText(await readFile(join(dir, specFile), "utf8"), fr) : undefined;
+  return { ...(spec === undefined ? {} : { fr: spec }), ...(await projectTexts(dir, specFile)) };
 }
 
 /**
@@ -30,19 +31,19 @@ export async function taskContext(
   shared: FrTexts,
   steps: string[],
   latest: ScenarioRun | undefined,
-  { asked = false }: { asked?: boolean } = {},
+  { asked = false, layout = DEFAULT_LAYOUT }: { asked?: boolean; layout?: Layout } = {},
 ): Promise<TaskContext> {
   // A steps attempt another one asked for gets the failure it is asked to fix (FR-RUN-04); the first one has none.
   if (kind === "steps") {
     const failure = asked && latest?.failure !== undefined ? { failure: await failureContext(dir, latest.failure) } : {};
-    return { ...shared, steps, ...failure, patterns: await stepPatterns(dir) };
+    return { ...shared, steps, ...failure, patterns: await stepPatterns(dir, layout.writable.steps) };
   }
   const stepFiles = latest?.stepFiles ?? [];
   return {
     ...shared,
     steps,
     ...(latest?.failure === undefined ? {} : { failure: await failureContext(dir, latest.failure) }),
-    ...(stepFiles.length === 0 ? {} : { code: await relevantCode(dir, stepFiles, CODE_BUDGET) }),
+    ...(stepFiles.length === 0 ? {} : { code: await relevantCode(dir, stepFiles, CODE_BUDGET, layout.writable.test) }),
   };
 }
 

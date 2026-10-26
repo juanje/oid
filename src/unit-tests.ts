@@ -3,11 +3,7 @@ import { readFile, realpath, rm } from "node:fs/promises";
 import { type CommandRunner, projectBin } from "./command.ts";
 import { reportPath } from "./git.ts";
 import { failedTests, passedTests, type TestFailure, testFailures } from "./vitest-report.ts";
-import { WRITABLE } from "./boundaries.ts";
 import { RUNNERS } from "./runners.ts";
-
-// The source the FR's code is in: what the coverage of its new branches looks at.
-const [SOURCE] = WRITABLE.code;
 
 export interface UnitRun {
   /** False when vitest wrote no report: nothing it says counts. */
@@ -19,16 +15,25 @@ export interface UnitRun {
   output: string;
 }
 
-/** Runs the given test files with the project's vitest, or the whole suite when there are none. */
-export async function runUnitTests(dir: string, files: string[], run: CommandRunner, coverageDir?: string): Promise<UnitRun> {
+/**
+ * Runs the given test files with the project's vitest, or the whole suite when there are none; with `coverage`, it
+ * measures the coverage of the source paths into its dir.
+ */
+export async function runUnitTests(dir: string, files: string[], run: CommandRunner, coverage?: { dir: string; source: string[] }): Promise<UnitRun> {
   const report = await reportPath(dir, "oid-unit-tests.json");
   await rm(report, { force: true });
   // With a coverage dir, vitest's provider writes the source's coverage there as istanbul JSON (FR-GATE-02).
-  const coverage =
-    coverageDir === undefined
+  const measured =
+    coverage === undefined
       ? []
-      : ["--coverage.enabled", "--coverage.provider=v8", "--coverage.reporter=json", `--coverage.reportsDirectory=${coverageDir}`, `--coverage.include=${SOURCE}**`];
-  const { output } = await run(projectBin(dir, RUNNERS.unit.bin), ["run", ...files, "--reporter=json", `--outputFile=${report}`, ...coverage], { cwd: dir });
+      : [
+          "--coverage.enabled",
+          "--coverage.provider=v8",
+          "--coverage.reporter=json",
+          `--coverage.reportsDirectory=${coverage.dir}`,
+          ...coverage.source.map((path) => `--coverage.include=${path}**`),
+        ];
+  const { output } = await run(projectBin(dir, RUNNERS.unit.bin), ["run", ...files, "--reporter=json", `--outputFile=${report}`, ...measured], { cwd: dir });
   if (!existsSync(report)) return { ran: false, passed: [], failed: [], output };
   const parsed = JSON.parse(await readFile(report, "utf8"));
   // vitest reports real paths, and the worktree may sit behind a symlink such as macOS's /var.

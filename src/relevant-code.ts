@@ -14,11 +14,11 @@ export interface RelevantCode {
  * The code relevant to a scenario, chosen by imports (FR-AGENT-03): the files that define its steps, the project's
  * modules they import, and the unit tests that import those modules, in that order, within `budget` characters.
  */
-export async function relevantCode(dir: string, stepFiles: string[], budget: number): Promise<RelevantCode> {
+export async function relevantCode(dir: string, stepFiles: string[], budget: number, testPaths: string[] = WRITABLE.test): Promise<RelevantCode> {
   const modules = new Set<string>();
   for (const file of stepFiles) for (const module of await importedModules(dir, file)) modules.add(module);
   const tests: string[] = [];
-  for (const test of await typescriptFilesUnder(dir, WRITABLE.test)) {
+  for (const test of await typescriptFilesUnder(dir, testPaths)) {
     if ((await importedModules(dir, test)).some((module) => modules.has(module))) tests.push(test);
   }
   const relevant: RelevantCode = { files: [], cut: [] };

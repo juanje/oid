@@ -8,6 +8,7 @@ import { LimitReached, RoundLimitReached } from "./limits.ts";
 import { missingCoverageProvider } from "./coverage.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
+import { ownerOf } from "./boundaries.ts";
 import { attemptEvent, checkpointedAttempt, codeAttempt, type FrRun, locationOf, testCount } from "./run-attempts.ts";
 import { buildScenario } from "./scenario-build.ts";
 import { brokenBaseRefusal, gateScope, runIdOf, startingScenarios } from "./run-plan.ts";
@@ -146,7 +147,7 @@ async function buildFrs(
     rounds,
     reports: new Map(),
     record,
-    texts: await frTexts(worktree.dir, listed[0]!.fr),
+    texts: await frTexts(worktree.dir, listed[0]!.fr, layout.spec),
     steps: listed[0]!.steps,
     latest: new Map(),
     transcripts,
@@ -157,7 +158,7 @@ async function buildFrs(
   let since = worktree.start;
   for (const { fr, scenarios, steps } of listed) {
     await record({ event: "start", oid: oidVersion(), fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
-    Object.assign(run, { fr, steps, texts: await frTexts(worktree.dir, fr) });
+    Object.assign(run, { fr, steps, texts: await frTexts(worktree.dir, fr, layout.spec) });
     const exitCode = await buildOneFr(run, scenarios, all, start.passing, since);
     if (exitCode !== EXIT_BUILT) return exitCode;
     await record({ event: "stage", stage: "commit" });
@@ -180,10 +181,11 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   await record({ event: "scope", fr, leftOut });
   const gate = await gateLoop(
     retries,
-    () => runGate(worktree.dir, runCommand, { start: since, scenarios: scope }),
+    () => runGate(worktree.dir, runCommand, { start: since, scenarios: scope, source: run.layout.writable.code }),
     (kind, refusal) => attemptAfterGate(run, kind, last, refusal),
     (refusal, sendTo) =>
       record({ event: "gate", verdict: refusal === undefined ? "passed" : "refused", ...(refusal === undefined ? {} : { refusal }), ...(sendTo === undefined ? {} : { sendTo }) }),
+    (file) => ownerOf(file, run.layout),
   );
   if ("error" in gate) return stop(gate.error, out);
   if (gate.refusal !== undefined) return refuse(gate.refusal, out);

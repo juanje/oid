@@ -1,5 +1,5 @@
 import { AGENT_TOOLS } from "./agent-tools.ts";
-import { WRITABLE } from "./boundaries.ts";
+import { DEFAULT_LAYOUT, type Layout } from "./boundaries.ts";
 import { RUNNERS, runnerText } from "./runners.ts";
 import type { Attempt, AttemptKind, TaskContext } from "./executor.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
@@ -7,9 +7,9 @@ import { formatRefusal, type Refusal } from "./refusal.ts";
 // A system prompt is parts separated by blank lines: the common facts, then the kind's identity, its limits and its
 // procedure (D-09). Tests check how they are put together, never their wording: runs judge the wording (NFR-05).
 
-/** What every agent needs to know of oid, from this one source. */
-export const OID_FACTS = [
-  "oid builds software Outside-In, from a contract the person approved: the feature files and SPEC.md.",
+/** What every agent needs to know of oid, from this one source, naming the project's spec. */
+export const oidFacts = (spec: string): string => [
+  `oid builds software Outside-In, from a contract the person approved: the feature files and ${spec}.`,
   "Each scenario is built Red first: step definitions that fail for the right reason, then unit tests that fail before their code exists, then the code that makes them pass.",
   "Each attempt is one agent writing one kind of change, and oid, not the agent, decides whether it counts:",
   "it checks that the diff stays within the attempt's paths, that new tests and scenarios fail with a valid Red before their code exists, that nothing green turns red,",
@@ -17,6 +17,9 @@ export const OID_FACTS = [
   "The run is one team's work, judged as a whole: the FR built, with every behaviour proved by a test that failed first.",
   "Each agent does only its part, because the next agent's work starts where it stops.",
 ].join(" ");
+
+/** The common facts of a project that keeps its spec in SPEC.md. */
+export const OID_FACTS = oidFacts(DEFAULT_LAYOUT.spec);
 
 /**
  * A value of the agents that write a Red before its code exists (H25): call the code as it will be offered, since
@@ -28,7 +31,7 @@ export const CALL_AS_OFFERED: Partial<Record<AttemptKind, string>> = {
   test: "You value calling the piece exactly as the code will offer it, even before it exists and while its types do not match yet: oid checks types only once the code attempt has written it, and a cast written for a check that has not run stays in the test after the code exists.",
 };
 
-const IDENTITY: Record<AttemptKind, string> = {
+const IDENTITY = (spec: string): Record<AttemptKind, string> => ({
   steps: [
     "You are oid's steps agent. You write the step definitions of one scenario, so that it fails for the right reason before its code exists. You do not write unit tests or source.",
     "You value a failure that points at the missing behaviour over a step that merely runs: a scenario that fails for the wrong reason proves nothing.",
@@ -42,14 +45,14 @@ const IDENTITY: Record<AttemptKind, string> = {
   ].join(" "),
   code: [
     "You are oid's code agent. You write the source that makes the failing test pass, and the scenario once its parts exist. You do not change tests, step definitions or feature files.",
-    "You value stopping at the failing test, even when SPEC.md describes more: code for a behaviour no test asks for yet leaves the next test agent nothing that can fail, so that behaviour can no longer be proved Red first. The other requirements come later, each with its scenario and its tests.",
+    `You value stopping at the failing test, even when ${spec} describes more: code for a behaviour no test asks for yet leaves the next test agent nothing that can fail, so that behaviour can no longer be proved Red first. The other requirements come later, each with its scenario and its tests.`,
   ].join(" "),
-};
+});
 
-const PROCEDURE: Record<AttemptKind, string[]> = {
+const PROCEDURE = (spec: string): Record<AttemptKind, string[]> => ({
   steps: [
     "Read the feature file and the step definitions that exist, so that you reuse the steps that already match instead of defining them twice.",
-    "Write the step definitions the scenario lacks, with real assertions in its Then steps that check what each step's text states and nothing more, even when SPEC.md describes more: the other behaviours come with their own scenarios. Reach the code the scenario needs through a dynamic import inside the step, so that a missing piece fails that step and not the whole run. Do not write that code.",
+    `Write the step definitions the scenario lacks, with real assertions in its Then steps that check what each step's text states and nothing more, even when ${spec} describes more: the other behaviours come with their own scenarios. Reach the code the scenario needs through a dynamic import inside the step, so that a missing piece fails that step and not the whole run. Do not write that code.`,
     "Check with try (scenario: true) that the scenario fails in a When or Then step, on a missing piece or an assertion. A failure in a Given step, an undefined step or a load error is not a valid Red.",
   ],
   test: [
@@ -62,7 +65,7 @@ const PROCEDURE: Record<AttemptKind, string[]> = {
     "Write the simplest code that makes it pass, and stop there: code no test asks for yet costs the run extra cycles and leaves code that no test checks. Do not change tests, step definitions or feature files: if one looks wrong, say so in your report.",
     "Check with try the failing test, then your scenario (scenario: true), and fix the type errors in the files you changed.",
   ],
-};
+});
 
 const SUCCESS: Record<AttemptKind, string> = {
   steps: "The scenario runs and fails, for the reason its missing behaviour gives.",
@@ -71,32 +74,32 @@ const SUCCESS: Record<AttemptKind, string> = {
 };
 
 /** The system prompt of an attempt's agent: the common facts, then its kind's identity, limits and procedure (FR-AGENT-02). */
-export function systemPromptFor(kind: AttemptKind): string {
-  return [OID_FACTS, IDENTITY[kind], limitsOf(kind), procedureOf(kind)].join("\n\n");
+export function systemPromptFor(kind: AttemptKind, layout: Layout = DEFAULT_LAYOUT): string {
+  return [oidFacts(layout.spec), IDENTITY(layout.spec)[kind], limitsOf(kind, layout), procedureOf(kind, layout)].join("\n\n");
 }
 
 // The runner that runs the files each kind writes: the code agent's source is run by both, through the tests.
 const RUNS: Partial<Record<AttemptKind, (typeof RUNNERS)[keyof typeof RUNNERS]>> = { test: RUNNERS.unit, steps: RUNNERS.scenarios };
 
 /** The kind's limits, generated from the boundary, the tools and the runners that enforce them (NFR-04). */
-function limitsOf(kind: AttemptKind): string {
+function limitsOf(kind: AttemptKind, { writable, spec }: Layout): string {
   const tools = AGENT_TOOLS.map((tool) => `${tool.name} ${tool.does}`).join("; ");
   return [
-    `You may write only under ${WRITABLE[kind].join(", ")}. No agent writes feature files, SPEC.md, the gate's configuration or oid's state: a diff outside your paths is refused, naming the files.`,
+    `You may write only under ${writable[kind].join(", ")}. No agent writes feature files, ${spec}, the gate's configuration or oid's state: a diff outside your paths is refused, naming the files.`,
     `Your tools: ${tools}. You have no shell.`,
     ...(RUNS[kind] === undefined ? [] : [runnerText(RUNS[kind])]),
   ].join("\n");
 }
 
 /** How to ask for the attempt kind that owns a cause outside the kind's paths, from the paths each kind writes (FR-RUN-04). */
-function askFor(kind: AttemptKind): string {
-  const others = (Object.keys(WRITABLE) as AttemptKind[]).filter((other) => other !== kind);
-  const owners = others.map((other) => `a ${other} attempt writes ${WRITABLE[other].join(", ")}`).join("; ");
+function askFor(kind: AttemptKind, { writable }: Layout): string {
+  const others = (Object.keys(writable) as AttemptKind[]).filter((other) => other !== kind);
+  const owners = others.map((other) => `a ${other} attempt writes ${writable[other].join(", ")}`).join("; ");
   return `If the cause of the failure lies outside your paths, change nothing to work around it: end with report asking, in next, for the kind of attempt that owns those paths, and say why (${owners}).`;
 }
 
-function procedureOf(kind: AttemptKind): string {
-  const steps = [...PROCEDURE[kind], askFor(kind)].map((step, index) => `${index + 1}. ${step}`);
+function procedureOf(kind: AttemptKind, layout: Layout): string {
+  const steps = [...PROCEDURE(layout.spec)[kind], askFor(kind, layout)].map((step, index) => `${index + 1}. ${step}`);
   return [
     "Step 0. Read your task: the FR, the scenario, and the refusal of the attempt before yours, or why it asked for yours, if there is one.",
     ...steps,

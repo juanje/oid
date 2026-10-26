@@ -16,19 +16,17 @@ import { type RunWorktree, scratchCopy } from "./worktree.ts";
 // The mutant (FR-EVID-03, D-02): when a scenario or a new test passes before its code, edits to the source that make
 // it fail on an assertion show that it checks the behaviour. oid applies them only in a scratch copy.
 
-const SOURCE = WRITABLE.code.join(", ");
-
 /**
  * Applies a mutant's edits in `dir`, a scratch copy, or refuses it: every file must be source, and each edit's old
  * text must be in its file, as it is, exactly once. Nothing is applied unless every edit applies.
  */
-export async function applyMutant(dir: string, mutant: Mutant): Promise<Refusal | undefined> {
-  const notSource = mutant.files.map((file) => file.path).filter((path) => !WRITABLE.code.some((source) => path.startsWith(source)));
+export async function applyMutant(dir: string, mutant: Mutant, source: string[] = WRITABLE.code): Promise<Refusal | undefined> {
+  const notSource = mutant.files.map((file) => file.path).filter((path) => !source.some((prefix) => path.startsWith(prefix)));
   if (notSource.length > 0) {
     return {
       failed: "The mutant edits files that are not source",
       evidence: notSource.join("\n"),
-      next: `A mutant changes only the source, under ${SOURCE}: oid applies it in a copy to show that the test checks the behaviour`,
+      next: `A mutant changes only the source, under ${source.join(", ")}: oid applies it in a copy to show that the test checks the behaviour`,
     };
   }
   const changed: [string, string][] = [];
@@ -96,8 +94,8 @@ export function judgeTestsUnderMutant(unit: UnitRun, passing: string[], symbolEx
 }
 
 /** Steps whose scenario passes before its code, under a mutant: in a scratch copy, the scenario fails on an assertion. */
-export async function stepsUnderMutant(worktree: RunWorktree, scenario: Scenario, files: string[], mutant: Mutant): Promise<{ reds: string[] } | { refusal: Refusal }> {
-  return underMutant(worktree, files, mutant, async (dir) => {
+export async function stepsUnderMutant(worktree: RunWorktree, source: string[], scenario: Scenario, files: string[], mutant: Mutant): Promise<{ reds: string[] } | { refusal: Refusal }> {
+  return underMutant(worktree, source, files, mutant, async (dir) => {
     const result = (await runScenarios(dir, [scenario], runCommand))[0]!;
     const stepFile = result.failure?.definedIn;
     const exists = await importedSymbolsOf(dir, stepFile === undefined ? [] : [stepFile]);
@@ -107,8 +105,8 @@ export async function stepsUnderMutant(worktree: RunWorktree, scenario: Scenario
 }
 
 /** New tests that pass before their code, under a mutant: in a scratch copy, each fails on an assertion. */
-export async function testsUnderMutant(worktree: RunWorktree, testFiles: string[], mutant: Mutant, passing: string[]): Promise<{ reds: string[] } | { refusal: Refusal }> {
-  return underMutant(worktree, testFiles, mutant, async (dir) => {
+export async function testsUnderMutant(worktree: RunWorktree, source: string[], testFiles: string[], mutant: Mutant, passing: string[]): Promise<{ reds: string[] } | { refusal: Refusal }> {
+  return underMutant(worktree, source, testFiles, mutant, async (dir) => {
     const unit = await runUnitTests(dir, testFiles, runCommand);
     return judgeTestsUnderMutant(unit, passing, await importedSymbolsOf(dir, testFiles));
   });
@@ -117,6 +115,7 @@ export async function testsUnderMutant(worktree: RunWorktree, testFiles: string[
 /** Runs `judge` in a scratch copy of the current code, with the attempt's files on top and the mutant applied. */
 async function underMutant(
   worktree: RunWorktree,
+  source: string[],
   files: string[],
   mutant: Mutant,
   judge: (dir: string) => Promise<{ reds: string[] } | { refusal: Refusal }>,
@@ -124,7 +123,7 @@ async function underMutant(
   const scratch = await scratchCopy(worktree, await git(worktree.dir, "rev-parse", "HEAD"));
   try {
     await scratch.put(files, "attempt");
-    const refusal = await applyMutant(scratch.dir, mutant);
+    const refusal = await applyMutant(scratch.dir, mutant, source);
     if (refusal !== undefined) return { refusal };
     return await judge(scratch.dir);
   } finally {

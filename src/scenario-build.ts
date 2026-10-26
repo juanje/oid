@@ -170,7 +170,7 @@ class ScenarioBuild {
     const result = await this.runScenario();
     const takes = takesMutant("steps", this.state.phase, "own");
     if (result.status === "passed" && mutant !== undefined && takes) {
-      const judged = await stepsUnderMutant(this.run.worktree, this.scenario, files, mutant);
+      const judged = await stepsUnderMutant(this.run.worktree, this.run.layout.writable.code, this.scenario, files, mutant);
       if ("refusal" in judged) return { refusal: judged.refusal, reds: [] };
       this.state = { ...this.state, provedByMutant: { ...this.state.provedByMutant, steps: true } };
       return { refusal: undefined, reds: judged.reds };
@@ -186,10 +186,10 @@ class ScenarioBuild {
    */
   private judgeTests(also: string[], origin: "own" | "repair") {
     return async (files: string[], mutant?: Mutant): Promise<Judgment> => {
-      const testFiles = [...new Set([...files.filter(isTestFile), ...also])];
+      const testFiles = [...new Set([...files.filter((file) => isTestFile(file, this.run.layout)), ...also])];
       if (testFiles.length === 0) return { refusal: undefined, reds: [] };
       const takes = takesMutant("test", this.state.phase, origin);
-      const underMutant = takes && mutant !== undefined ? (passing: string[]) => testsUnderMutant(this.run.worktree, testFiles, mutant, passing) : undefined;
+      const underMutant = takes && mutant !== undefined ? (passing: string[]) => testsUnderMutant(this.run.worktree, this.run.layout.writable.code, testFiles, mutant, passing) : undefined;
       const judgment = await judgeNewTests(this.run.worktree.dir, testFiles, runCommand, await this.symbolsOf(testFiles), this.run.known, {
         offerMutant: takes,
         ...(underMutant === undefined ? {} : { underMutant }),
@@ -260,9 +260,9 @@ class ScenarioBuild {
   private async refuted(what: string[], withFailure: (test: string) => string): Promise<Refusal> {
     await this.settle(what, "refuted", this.state.lastCode);
     const scenario = this.state.pending.scenario;
-    if (what[0] !== scenario) return refutedRefusal("tests", what.map(withFailure));
+    if (what[0] !== scenario) return refutedRefusal("tests", what.map(withFailure), this.run.layout.writable.code);
     const failure = this.run.latest.get(locationOf(this.scenario))?.failure;
-    return refutedRefusal("scenario", [failure === undefined ? scenario : `${scenario}, step "${failure.step}": ${failure.message}`]);
+    return refutedRefusal("scenario", [failure === undefined ? scenario : `${scenario}, step "${failure.step}": ${failure.message}`], this.run.layout.writable.code);
   }
 
   /** A refuted test's one repair: a test attempt with the refusal, from the code before the last code attempt; its refusal, if any. */
@@ -276,6 +276,6 @@ class ScenarioBuild {
     this.state = onRepair(this.state, tests);
     await this.undoLastCode();
     const repairOnce = this.once("test", this.judgeTests([...new Set(tests.map((test) => test.split(" > ")[0]!))], "repair"));
-    return (await repairOnce(refutedRefusal("tests", tests.map(withFailure)))).refusal;
+    return (await repairOnce(refutedRefusal("tests", tests.map(withFailure), this.run.layout.writable.code))).refusal;
   }
 }

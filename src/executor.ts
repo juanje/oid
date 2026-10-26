@@ -1,3 +1,4 @@
+import type { Layout } from "./boundaries.ts";
 import type { Refusal } from "./refusal.ts";
 
 export type AttemptKind = "steps" | "test" | "code";
@@ -24,6 +25,8 @@ export interface Attempt {
   scenario: string;
   /** The run's worktree, where the attempt writes its diff. */
   worktree: string;
+  /** Where the project keeps each kind of file: what the attempt may write, as its prompt states it (FR-AGENT-04). */
+  layout: Layout;
   tools: AttemptTools;
   /** The refusal that led to this attempt, when it is a retry: the most useful part of its task (FR-AGENT-03). */
   refusal?: Refusal;

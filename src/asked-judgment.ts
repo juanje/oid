@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { WRITABLE, isTestFile } from "./boundaries.ts";
+import { isTestFile } from "./boundaries.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeNewTests, judgeSteps } from "./evidence.ts";
@@ -26,7 +26,7 @@ export async function passingScenarios(dir: string): Promise<Set<string>> {
  * valid or provisional Red, on the code at `base`, in a scratch copy.
  */
 export async function judgeAsked(run: FrRun, scenario: Scenario, kind: AttemptKind, files: string[], passing: Set<string>, base: string): Promise<Judgment> {
-  const written = files.filter((file) => WRITABLE[kind].some((path) => file.startsWith(path)));
+  const written = files.filter((file) => run.layout.writable[kind].some((path) => file.startsWith(path)));
   if (kind === "test") {
     const unit = await runUnitTests(run.worktree.dir, [], runCommand);
     if (unit.ran && testCount(unit) < run.tests) return { refusal: fewerTests(run.tests, testCount(unit)), reds: [] };
@@ -44,7 +44,7 @@ export async function judgeAsked(run: FrRun, scenario: Scenario, kind: AttemptKi
       const exists = await importedSymbolsOf(scratch.dir, stepFile === undefined ? [] : [stepFile]);
       return judgeSteps(result, (name) => exists(name, stepFile ?? ""));
     }
-    const testFiles = written.filter(isTestFile);
+    const testFiles = written.filter((file) => isTestFile(file, run.layout));
     if (testFiles.length === 0) return { refusal: undefined, reds: [] };
     // The tests that passed there as they were before this attempt are not its to prove; any other must fail.
     await scratch.put(testFiles, "checkpoint");

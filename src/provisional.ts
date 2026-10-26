@@ -27,8 +27,8 @@ export function whenCodeRunsOut(pending: Pending, repaired: Set<string>, unsatis
 }
 
 /** The refusal of provisional Reds the code never satisfied: for tests, it goes back to a test attempt. */
-export function refutedRefusal(what: "tests" | "scenario", evidence: string[]): Refusal {
-  const source = WRITABLE.code.join(", ");
+export function refutedRefusal(what: "tests" | "scenario", evidence: string[], sourcePaths: string[] = WRITABLE.code): Refusal {
+  const source = sourcePaths.join(", ");
   if (what === "scenario") {
     return {
       failed: "A provisional Red was refuted: no code attempt made this scenario pass",
