@@ -47,6 +47,12 @@ describe("outsideBoundary, at the paths the project names", () => {
     ]);
   });
 
+  test("no kind writes a file a runner's configuration loads, wherever it sits", () => {
+    const loading: Layout = { ...layout, loaded: ["tests/support/setup.ts"] };
+
+    expect(outsideBoundary("steps", ["tests/support/setup.ts", "tests/support/world.ts"], loading)).toEqual(["tests/support/setup.ts"]);
+  });
+
   test("steps inside the features' directory are the steps', as cucumber-js lays them out", () => {
     expect(outsideBoundary("steps", ["features/steps/greet.steps.ts", "features/notes.md"], DEFAULT_LAYOUT)).toEqual(["features/notes.md"]);
   });

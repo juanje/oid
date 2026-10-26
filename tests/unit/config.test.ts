@@ -51,6 +51,12 @@ describe("readLayout", () => {
     await expect(readLayout(same)).rejects.toThrow(/"src\/"/);
   });
 
+  test("holds the files vitest's configuration loads, which are the gate's configuration", async () => {
+    const dir = await tempRepo({ "vitest.config.ts": 'export default { test: { setupFiles: ["tests/support/setup.ts"] } };\n' });
+
+    expect((await readLayout(dir)).loaded).toEqual(["tests/support/setup.ts"]);
+  });
+
   test("lets the steps sit inside the features' directory, as cucumber-js lays them out", async () => {
     const dir = await tempRepo({ ".oid.json": JSON.stringify({ paths: { features: "specs/", steps: ["specs/steps/"] } }) });
 
