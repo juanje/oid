@@ -18,8 +18,8 @@ describe("the source capture hook", () => {
     mkdirSync(join(dir, "src"));
     writeFileSync(join(dir, "src/greet.ts"), "export const greet = (name: string): string => `Hello, ${name}!`;\n");
     writeFileSync(join(dir, "main.mjs"), 'const { greet } = await import("./src/greet.ts");\ngreet("Ada");\n');
+    // Not there yet, as NODE_V8_COVERAGE's directory is until Node exits.
     const sources = join(dir, "sources");
-    mkdirSync(sources);
 
     await promisify(execFile)(process.execPath, ["main.mjs"], {
       cwd: dir,
