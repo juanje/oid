@@ -18,6 +18,26 @@ Feature: Coverage of the FR's new branches
     When I run "oid run FR-GREET-01"
     Then the run succeeds
 
+  Scenario: On vitest 5, a branch the FR added that no test runs is refused at the gate
+    Given the project's vitest is version 5
+    And the scripted code attempt adds a branch on a line its test covers, which no test takes, and its attempt after the gate removes it
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the code attempt after the gate was given the uncovered branch, naming its file and line
+
+  Scenario: On vitest 5, a branch only a scenario runs is covered
+    Given the project's vitest is version 5
+    And the scripted code attempt adds a branch that only a scenario of the FR takes
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+
+  Scenario: A branch the FR added in any of the project's source paths, which no test runs, is refused at the gate
+    Given the project's .oid.json gives the source the paths src/ and shared/
+    And the scripted code attempt also adds, under shared/, a branch no test takes, and its attempt after the gate removes it
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the code attempt after the gate was given the uncovered branch, naming its file under shared/ and its line
+
   Scenario: A branch that was there before the FR is not the FR's to cover
     Given the project already has a branch that no test takes
     When I run "oid run FR-GREET-01"
