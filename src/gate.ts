@@ -1,12 +1,14 @@
 import { rm } from "node:fs/promises";
-import { type CommandRunner, projectBin } from "./command.ts";
-import { addedLines, scenarioCoverage, uncoveredNew, unitCoverage, untaken } from "./coverage.ts";
+import { type CommandRunner, TYPESCRIPT_STEPS_ENV, projectBin } from "./command.ts";
+import { type CoverageReport, addedLines, scenarioCoverage, uncoveredNew, unitCoverage, untaken } from "./coverage.ts";
 import type { ScenarioResult } from "./cucumber-messages.ts";
 import type { AttemptKind } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
 import { git, reportPath } from "./git.ts";
 import { runAllScenarios } from "./scenarios.ts";
+import { SOURCE_CAPTURE, sourceCaptureEnv } from "./source-capture.ts";
 import { runUnitTests } from "./unit-tests.ts";
+import type { VitestDialect } from "./vitest-dialect.ts";
 
 export interface CheckResult {
   name: string;
@@ -42,22 +44,41 @@ function unknownOptionIn(output: string): { unknownOption?: string } {
  * Runs every check of the gate over the whole project in `dir`, with the project's own runners. Given the commit a run
  * started from, it also checks the coverage of the branches the run added (FR-GATE-02).
  */
-export async function runGate(dir: string, run: CommandRunner, since?: { start: string; scenarios?: string[]; source: string[] }): Promise<CheckResult[]> {
+export async function runGate(
+  dir: string,
+  run: CommandRunner,
+  since?: { start: string; scenarios?: string[]; source: string[]; vitest: VitestDialect },
+): Promise<CheckResult[]> {
   if (since === undefined) return [await typesCheck(dir, run), await unitCheck(dir, run), await scenariosCheck(dir, run)];
   const unitDir = await reportPath(dir, "oid-coverage-unit");
   const v8Dir = await reportPath(dir, "oid-coverage-scenarios");
   await rm(unitDir, { recursive: true, force: true });
   await rm(v8Dir, { recursive: true, force: true });
-  const checks = [await typesCheck(dir, run), await unitCheck(dir, run, { dir: unitDir, source: since.source }), await scenariosCheck(dir, run, v8Dir, since.scenarios)];
-  return [...checks, await coverageCheck(dir, since.start, since.source, unitDir, v8Dir)];
+  const checks = [await typesCheck(dir, run), await unitCheck(dir, run, { dir: unitDir, source: since.source }), await scenariosCheck(dir, run, v8Dir, since.scenarios, scenarioCoverageEnv(v8Dir, since))];
+  return [...checks, await coverageCheck(dir, since, unitDir, v8Dir)];
+}
+
+/**
+ * On vitest 5, cucumber-js also runs the hook that keeps the code tsx gives Node, which mapping the scenarios' coverage
+ * as vitest maps the unit tests' needs (DOMAIN.md, vitest's coverage).
+ */
+function scenarioCoverageEnv(v8Dir: string, { source, vitest }: { source: string[]; vitest: VitestDialect }): Record<string, string> {
+  if (vitest !== 5) return {};
+  return { NODE_OPTIONS: `${TYPESCRIPT_STEPS_ENV.NODE_OPTIONS} --import "${SOURCE_CAPTURE}"`, ...sourceCaptureEnv(v8Dir, source) };
 }
 
 /** The branches the run added since `start` that no test runs, unit test or scenario, joined by place (FR-GATE-02). */
-async function coverageCheck(dir: string, start: string, source: string[], unitDir: string, v8Dir: string): Promise<CheckResult> {
+async function coverageCheck(dir: string, { start, source, vitest }: { start: string; source: string[]; vitest: VitestDialect }, unitDir: string, v8Dir: string): Promise<CheckResult> {
   const unit = unitCoverage(unitDir);
   if (unit === undefined) return checkResult("coverage", { ran: false, ranNothing: false, output: "vitest wrote no coverage report", failures: [] });
   const added = addedLines(await git(dir, "diff", "-U0", "--no-color", start, "--", ...source));
-  const left = uncoveredNew(untaken([unit, await scenarioCoverage(v8Dir, dir, source)], dir), added);
+  let scenarios: CoverageReport;
+  try {
+    scenarios = await scenarioCoverage(v8Dir, dir, source, vitest);
+  } catch (error) {
+    return { name: "coverage", passed: false, output: "", error: (error as Error).message };
+  }
+  const left = uncoveredNew(untaken([unit, scenarios], dir, vitest), added);
   const failures = left.map((item) => `${item.file}:${item.line}:${item.column + 1}: ${item.what}`);
   return checkResult("coverage", { ran: true, ranNothing: false, output: failures.join("\n"), failures });
 }
@@ -104,8 +125,8 @@ async function unitCheck(dir: string, run: CommandRunner, coverage?: { dir: stri
   return unit.ran ? { ...result, tests: unit.passed.length + failures.length } : result;
 }
 
-async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: string, scope?: string[]): Promise<CheckResult> {
-  const { ran, results, steps, output } = await runAllScenarios(dir, run, v8CoverageDir, scope);
+async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: string, scope?: string[], env: Record<string, string> = {}): Promise<CheckResult> {
+  const { ran, results, steps, output } = await runAllScenarios(dir, run, v8CoverageDir, scope, env);
   const failedScenarios = results
     .filter((result) => result.status !== "passed")
     .map((result) => {

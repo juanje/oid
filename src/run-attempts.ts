@@ -1,4 +1,5 @@
 import type { Layout } from "./boundaries.ts";
+import type { VitestDialect } from "./vitest-dialect.ts";
 import { join } from "node:path";
 import { runAttempt } from "./attempt.ts";
 import { runCommand } from "./command.ts";
@@ -25,6 +26,8 @@ export interface FrRun {
   worktree: RunWorktree;
   /** Where the project keeps each kind of file (FR-AGENT-04). */
   layout: Layout;
+  /** The project's vitest, whose output oid reads as that version writes it (FR-EVID-01). */
+  vitest: VitestDialect;
   out: (text: string) => void;
   /** The scenarios already built, which every code attempt must keep green. */
   green: Scenario[];
