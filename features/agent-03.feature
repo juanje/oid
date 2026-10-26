@@ -13,6 +13,23 @@ Feature: What each agent sees
     Then the run succeeds
     And every attempt's task gives FR-GREET-01's text from SPEC.md and the steps of its scenario
 
+  Scenario: The task gives the FR's text from a spec that writes each requirement as a bold paragraph
+    Given a project with an approved feature file for FR-GREET-01
+    And the run allows no retries
+    And the project's spec writes FR-GREET-01 as a bold paragraph, "**FR-GREET-01 — Greet a person by name**", under a table of requirements
+    And the scripted model builds FR-GREET-01, writing each attempt's files and ending with a report
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And every attempt's task gives FR-GREET-01's text from SPEC.md and the steps of its scenario
+
+  Scenario: An FR whose text oid cannot find in the spec is an error before any attempt, naming the forms oid reads
+    Given a project with an approved feature file for FR-GREET-01
+    And the project's spec has no text for FR-GREET-01
+    When I run "oid run FR-GREET-01"
+    Then the run stops with an error, not a refusal and not a crash
+    And the output names FR-GREET-01 and the forms of requirement oid reads
+    And the scripted model was asked for nothing
+
   Scenario: Once the steps fail, the task gives their failure and the step definition it points to
     Given a project with an approved feature file for FR-GREET-01
     And the run allows no retries
