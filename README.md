@@ -2,7 +2,7 @@
 
 oid (Outside-In Development) has coding agents build software from a contract you approve. You write the requirements in `SPEC.md` and the acceptance scenarios as feature files. oid runs agents that write the step definitions, the unit tests and the code, one scenario at a time, and accepts their work only on evidence: a test counts when oid has seen it fail without its code and pass with it, and an FR is done when the gate passes (types, the whole unit suite and every scenario). You get back a branch with one commit for the FR.
 
-It is an early version: it builds one FR per run, in TypeScript projects that use vitest and cucumber-js.
+It is an early version: it builds the FRs you name, in TypeScript projects that use vitest 3 or 5 and cucumber-js 13.
 
 ## Install
 
@@ -15,9 +15,13 @@ npm install
 npm link
 ```
 
-`npm link` puts the `oid` command on your `PATH`. Building oid as a JavaScript package comes later.
+`npm link` puts the `oid` command on your `PATH`. Building oid as a JavaScript package comes later. oid's own gate (`npm run gate`) also needs the vitest 5 its scenarios run a project on:
 
-A project oid runs on needs vitest's coverage provider, `@vitest/coverage-v8`, at its vitest's version: the gate refuses a branch the FR added that no test runs.
+```bash
+npm ci --prefix fixtures/vitest5
+```
+
+A project oid runs on needs vitest's coverage provider, `@vitest/coverage-v8`, at its vitest's version: the gate refuses a branch the FR added that no test runs. On vitest 5, the project must be an ES module (`"type": "module"`), so that oid can map its scenarios' coverage as vitest maps its unit tests'.
 
 oid runs its agents with [Pi](https://github.com/earendil-works/pi). Pi must already have credentials for the provider you use, and its `rg` and `fd` binaries, in `~/.pi/agent/bin` or on your `PATH`: oid runs Pi offline, so Pi will not download them.
 
@@ -31,7 +35,7 @@ Name the model the agents run on, as Pi lists it (`pi --list-models`), in your o
 
 The model is yours, not the project's: a project's `.oid.json` that names one is an error.
 
-The project may commit a `.oid.json` with its `limits` (`retries`, `turns`, `rounds`) and the `paths` of its domain and conventions. oid reads it from the commit the run starts from, never from your uncommitted changes, and says so when you have some. Then, with the FR's feature files approved and committed:
+The project may commit a `.oid.json` with its `limits` (`retries`, `turns`, `rounds`) and its `paths`: where it keeps its spec, feature files, step definitions, unit tests and source, and its domain and conventions; [`DOMAIN.md`](DOMAIN.md) gives the defaults, which are `SPEC.md`, `features/`, `features/steps/` and `features/support/`, `tests/` and `src/`. Each FR's text is read from the spec, under a heading `#### FR-AREA-01: <title>` (or `###`) or after a line in bold, `**FR-AREA-01 — <title>**`. oid reads it from the commit the run starts from, never from your uncommitted changes, and says so when you have some. Then, with the FR's feature files approved and committed:
 
 ```bash
 oid run FR-AREA-01
