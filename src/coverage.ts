@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import v8ToIstanbul from "v8-to-istanbul";
+import type { VitestDialect } from "./vitest-dialect.ts";
 
 // Coverage of the FR's new branches (FR-GATE-02): what the unit tests and the scenarios took, joined by place in the
 // source, and what of the rest the FR's diff added.
@@ -17,12 +18,18 @@ interface Place {
   end: Position;
 }
 
+/** A place as an istanbul map writes it: vitest 5 may give a null end column, the end of its line, or no place at all, for a missing else. */
+interface MapPlace {
+  start: { line?: number; column?: number | null };
+  end: { line?: number; column?: number | null };
+}
+
 /** One file's coverage as istanbul gives it: where each branch and function starts and ends, and how often each ran. */
 export interface FileCoverage {
   path: string;
-  branchMap: Record<string, { loc: Place; locations?: Place[] }>;
+  branchMap: Record<string, { loc: MapPlace; locations?: MapPlace[] }>;
   b: Record<string, number[]>;
-  fnMap: Record<string, { name: string; loc: Place }>;
+  fnMap: Record<string, { name: string; loc: MapPlace }>;
   f: Record<string, number>;
 }
 
@@ -66,12 +73,17 @@ interface Ran extends Place {
   whole: boolean;
 }
 
+/** What no report took, joined by place, as the project's vitest maps its coverage (DOMAIN.md, vitest's coverage). */
+export function untaken(reports: CoverageReport[], root: string, dialect: VitestDialect = 3): Untaken[] {
+  return dialect === 5 ? untakenAtSamePlace(reports, root) : untakenByRanges(reports, root);
+}
+
 /**
- * What no report took, joined by place. V8 lists only the ranges that ran a different number of times than the range
- * around them, so a side a report took is not in it: what one report leaves untaken counts as taken when, in another
- * report, the smallest range around it ran. Functions a transform adds, which are not in the source, are left out.
+ * vitest 3: V8 lists only the ranges that ran a different number of times than the range around them, so a side a
+ * report took is not in it: what one report leaves untaken counts as taken when, in another report, the smallest range
+ * around it ran. Functions a transform adds, which are not in the source, are left out.
  */
-export function untaken(reports: CoverageReport[], root: string): Untaken[] {
+function untakenByRanges(reports: CoverageReport[], root: string): Untaken[] {
   const ranges = reports.map((report) => rangesOf(report, root));
   const left = new Map<string, Untaken>();
   ranges.forEach((files, index) => {
@@ -95,6 +107,52 @@ export function untaken(reports: CoverageReport[], root: string): Untaken[] {
     .sort((one, other) => one.file.localeCompare(other.file) || one.line - other.line || one.column - other.column);
 }
 
+/**
+ * vitest 5: every report maps every function and every side of every branch, with its count, at the places of the
+ * syntax tree, the same in each report mapped the same way: what no report took at the same place. A function no test
+ * calls is said once, for what is inside it.
+ */
+function untakenAtSamePlace(reports: CoverageReport[], root: string): Untaken[] {
+  const taken = new Set<string>();
+  const left = new Map<string, Untaken & { end: Position; isFunction: boolean }>();
+  const note = (key: string, count: number, at: MapPlace, what: string, file: string, isFunction: boolean) => {
+    const item = { file, line: at.start.line ?? 0, column: at.start.column ?? 0, end: endOf(at.end), what, isFunction };
+    if (count > 0) taken.add(key);
+    else if (!left.has(key)) left.set(key, item);
+  };
+  for (const report of reports) {
+    for (const data of Object.values(report)) {
+      const file = relative(real(root), real(data.path));
+      for (const [id, fn] of Object.entries(data.fnMap)) {
+        note(`${file} function ${placeKey(fn.loc)}`, data.f[id] ?? 0, fn.loc, `the function ${fn.name}, which no test calls`, file, true);
+      }
+      for (const [id, branch] of Object.entries(data.branchMap)) {
+        (branch.locations ?? [branch.loc]).forEach((side, index) => {
+          // A missing else has no place of its own: it is said at its if.
+          const at = side.start.line === undefined ? branch.loc : side;
+          note(`${file} branch ${placeKey(branch.loc)} ${index}`, data.b[id]?.[index] ?? 0, at, "a branch no test takes", file, false);
+        });
+      }
+    }
+  }
+  const items = [...left].filter(([key]) => !taken.has(key)).map(([, item]) => item);
+  const functions = items.filter((item) => item.isFunction);
+  const inside = (item: (typeof items)[number], fn: (typeof items)[number]) => item !== fn && item.file === fn.file && !after(fn, item) && !after(item, fn.end);
+  return items
+    .filter((item) => !functions.some((fn) => inside(item, fn)))
+    .map(({ file, line, column, what }) => ({ file, line, column, what }))
+    .sort((one, other) => one.file.localeCompare(other.file) || one.line - other.line || one.column - other.column);
+}
+
+function placeKey({ start, end }: MapPlace): string {
+  return `${start.line}:${start.column}-${end.line}:${end.column}`;
+}
+
+/** An end as vitest 5 may write it, its column null for the end of its line. */
+function endOf(end: MapPlace["end"]): Position {
+  return { line: end.line ?? 0, column: end.column ?? Number.POSITIVE_INFINITY };
+}
+
 /** Every branch and function of a report as a range of its file, by the file's path from `root`. */
 function rangesOf(report: CoverageReport, root: string): Map<string, Ran[]> {
   const files = new Map<string, Ran[]>();
@@ -103,10 +161,10 @@ function rangesOf(report: CoverageReport, root: string): Map<string, Ran[]> {
     const whole = Object.values(data.fnMap).some((fn) => fn.name === PLACEHOLDER);
     const ran: Ran[] = [];
     for (const [id, branch] of Object.entries(data.branchMap)) {
-      (data.b[id] ?? []).forEach((count, index) => ran.push({ ...(branch.locations?.[index] ?? branch.loc), count, what: "a branch no test takes", synthetic: false, whole }));
+      (data.b[id] ?? []).forEach((count, index) => ran.push({ ...((branch.locations?.[index] ?? branch.loc) as Place), count, what: "a branch no test takes", synthetic: false, whole }));
     }
     for (const [id, fn] of Object.entries(data.fnMap)) {
-      ran.push({ ...fn.loc, count: data.f[id] ?? 0, what: `the function ${fn.name}, which no test calls`, synthetic: fn.name.startsWith("__"), whole });
+      ran.push({ ...(fn.loc as Place), count: data.f[id] ?? 0, what: `the function ${fn.name}, which no test calls`, synthetic: fn.name.startsWith("__"), whole });
     }
     files.set(file, [...(files.get(file) ?? []), ...ran]);
   }
