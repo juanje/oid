@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
 import { attemptDir, git, greet02AttemptDir, greet03AttemptDir, scenarioNames } from "../support/fixture.ts";
-import { scriptedModel } from "../support/run.ts";
+import { assertOutputNames, scriptedModel } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
 /** Each attempt's task, as its agent got it at its first request, with the attempt's kind and scenario. */
@@ -15,12 +15,12 @@ function tasksOf(world: RunWorld): { kind: string; scenario: string; task: strin
   return model.attempts.map((requests, index) => ({ ...model.script[index]!, task: requests[0]!.task }));
 }
 
-/** The body of an FR in the project's SPEC.md, without its heading. */
+/** The first line of an FR's body in the project's SPEC.md, after its heading or its line in bold. */
 function frBody(projectDir: string, fr: string): string {
-  const spec = readFileSync(join(projectDir, "SPEC.md"), "utf8");
-  const heading = spec.split("\n").findIndex((line) => line.startsWith(`#### ${fr}:`));
-  assert.notEqual(heading, -1, `No ${fr} in the project's SPEC.md`);
-  return spec.split("\n")[heading + 1]!.trim();
+  const lines = readFileSync(join(projectDir, "SPEC.md"), "utf8").split("\n");
+  const start = lines.findIndex((line) => line.startsWith(`#### ${fr}:`) || line.startsWith(`**${fr} — `));
+  assert.notEqual(start, -1, `No ${fr} in the project's SPEC.md`);
+  return lines.slice(start + 1).find((line) => line.trim() !== "")!.trim();
 }
 
 /** The text of a feature file's steps, without their keywords. */
@@ -250,3 +250,45 @@ function frOf(task: string): string {
   assert.ok(fr !== undefined, `The task's opening names no FR:\n${task}`);
   return fr;
 }
+
+// FR-GREET-01 in the form of a spec that lists its requirements in a table, then gives each one under a line in bold.
+const BOLD_SPEC = `# greet — Specification
+
+## Functional requirements
+
+| ID | Description |
+|----|-------------|
+| FR-GREET-01 | Greet a person by name |
+| FR-GREET-02 | Greet a group |
+
+**FR-GREET-01 — Greet a person by name**
+
+\`greet(name)\` returns a greeting with the person's name. *Why:* people like to be called by their name.
+
+**FR-GREET-02 — Greet a group**
+
+\`greetAll(names)\` greets everyone at once.
+`;
+
+Given("the project's spec writes FR-GREET-01 as a bold paragraph, {string}, under a table of requirements", async function (this: RunWorld, line: string) {
+  assert.ok(BOLD_SPEC.includes(`\n${line}\n`), `The spec does not start FR-GREET-01 with ${line}`);
+  await writeFile(join(this.projectDir, "SPEC.md"), BOLD_SPEC);
+  git(this.projectDir, "add", "SPEC.md");
+  git(this.projectDir, "commit", "-q", "-m", "docs: requirements as a table and paragraphs");
+});
+
+Given("the project's spec has no text for FR-GREET-01", async function (this: RunWorld) {
+  await writeFile(join(this.projectDir, "SPEC.md"), "# greet — Specification\n\nRequirements come later.\n");
+  git(this.projectDir, "add", "SPEC.md");
+  git(this.projectDir, "commit", "-q", "-m", "docs: a spec without FR-GREET-01");
+});
+
+Then("the output names FR-GREET-01 and the forms of requirement oid reads", function (this: RunWorld) {
+  assertOutputNames(this, "FR-GREET-01");
+  assertOutputNames(this, "#### FR-");
+  assertOutputNames(this, "**FR-");
+});
+
+Then("the scripted model was asked for nothing", function (this: RunWorld) {
+  assert.equal(scriptedModel(this).attempts.length, 0, "The scripted model was asked for an attempt");
+});
