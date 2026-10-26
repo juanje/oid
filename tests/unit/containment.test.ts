@@ -56,6 +56,11 @@ describe("toolCallRefusal", () => {
     expect(toolCallRefusal(worktree, "read", { path: ".git/config" })).toBeDefined();
   });
 
+  test("refuses .oid, oid's own state, and anything under it, naming the path and why", () => {
+    expect(toolCallRefusal(worktree, "read", { path: ".oid/progress.json" })?.evidence ?? "").toMatch(/\.oid\/progress\.json: .*oid's/);
+    expect(toolCallRefusal(worktree, "ls", { path: ".oid" })).toBeDefined();
+  });
+
   test("lets every other path in the worktree through, written as Pi accepts it", () => {
     for (const path of ["src/greet.ts", "@src/greet.ts", join(worktree, "src/greet.ts"), "src/new/file.ts", "."]) {
       expect(toolCallRefusal(worktree, "read", { path }), path).toBeUndefined();
@@ -72,6 +77,12 @@ describe("withoutHidden", () => {
     expect(withoutHidden("find", ".env\n.git\nsrc/\nsrc/a.ts\nsub/.npmrc")).toBe("src/\nsrc/a.ts");
     const grep = 'src/a.ts:1: export const a = "sesame";\nsrc/a.ts-2- \n.env:1: SECRET=sesame-42\n.env-2- \nsub/.npmrc:1: sesame too\n[100 matches limit reached]';
     expect(withoutHidden("grep", grep)).toBe('src/a.ts:1: export const a = "sesame";\nsrc/a.ts-2- \n[100 matches limit reached]');
+  });
+
+  test("leaves oid's state out of what ls, find and grep answer", () => {
+    expect(withoutHidden("ls", ".oid/\nsrc/")).toBe("src/");
+    expect(withoutHidden("find", ".oid/progress.json\nsrc/a.ts")).toBe("src/a.ts");
+    expect(withoutHidden("grep", '.oid/progress.json:1: { "frs": {} }\nsrc/a.ts:1: x')).toBe("src/a.ts:1: x");
   });
 
   test("leaves what other tools answer as it is", () => {
