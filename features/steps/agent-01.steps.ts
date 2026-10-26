@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { AttemptKind } from "../../src/executor.ts";
-import { GREET_01_SCENARIO, OID_ROOT, attemptDir, git } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, OID_ROOT, attemptDir, commitProjectConfig, git } from "../support/fixture.ts";
 import { assertOutputNames, attemptsIn, configDirOf, noteBeforeRun, runLog, runOid, scriptedModel } from "../support/run.ts";
 import { type ModelAttempt, ScriptedModel } from "../support/scripted-model.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -149,12 +149,7 @@ Then("the run's log gives each attempt the real model's id, its turns, and token
 
 /** Writes `model` into the project's .oid.json, keeping the rest; committed, as the person would. */
 async function projectModel(world: RunWorld, model: string): Promise<void> {
-  const path = join(world.projectDir, ".oid.json");
-  const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
-  config.model = model;
-  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
-  git(world.projectDir, "add", ".oid.json");
-  git(world.projectDir, "commit", "-q", "-m", "chore: a model in the project's config");
+  await commitProjectConfig(world.projectDir, (config) => (config.model = model), "chore: a model in the project's config");
 }
 
 /** Writes my personal config, in this scenario's own config dir, naming `model` or none. */

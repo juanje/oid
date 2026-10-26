@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then, When } from "@cucumber/cucumber";
-import { GREET_01_SCENARIO, attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, testNames } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, attemptDir, branches, commitProjectConfig, createGreetProject, filesUnder, git, runScenariosAt, testNames } from "../support/fixture.ts";
 import { assertOutputNames, attemptOf, noteBeforeRun, runBranch, runOid } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
 import { useVitest } from "../support/runners.ts";
@@ -31,12 +30,7 @@ Given("a scripted executor whose steps, test and code attempts build FR-GREET-01
 
 /** Sets one limit in the project's oid config, keeping the others, committed as the person's repository would have it. */
 async function setLimit(world: RunWorld, limit: "retries" | "turns" | "rounds", value: number): Promise<void> {
-  const path = join(world.projectDir, ".oid.json");
-  const config = existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
-  config.limits = { ...config.limits, [limit]: value };
-  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
-  git(world.projectDir, "add", ".oid.json");
-  git(world.projectDir, "commit", "-q", "-m", "chore: oid config");
+  await commitProjectConfig(world.projectDir, (config) => (config.limits = { ...config.limits, [limit]: value }), "chore: oid config");
 }
 
 Given("the run allows no retries", async function (this: RunWorld) {
