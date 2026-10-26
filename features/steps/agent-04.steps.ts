@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
-import { GREET_01_SCENARIO, attemptDir, filesUnder } from "../support/fixture.ts";
+import { GREET_01_SCENARIO, attemptDir, commitProjectConfig, filesUnder } from "../support/fixture.ts";
 import { assertOutputNames } from "../support/run.ts";
 import { lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
@@ -47,4 +47,13 @@ Then("the output names {} and the file that has it", async function (this: RunWo
   assertOutputNames(this, pattern);
   const [file] = await filesUnder(attemptDir(PATTERN_ATTEMPTS[pattern]!));
   assertOutputNames(this, file);
+});
+
+Given("the project's .oid.json gives the unit tests the path tests\\/ and the step definitions the path tests\\/steps\\/", async function (this: RunWorld) {
+  await commitProjectConfig(this.projectDir, (config) => (config.paths = { ...config.paths, tests: ["tests/"], steps: ["tests/steps/"] }), "chore: paths that overlap");
+});
+
+Then("the output names tests\\/ and tests\\/steps\\/", function (this: RunWorld) {
+  assertOutputNames(this, '"tests/"');
+  assertOutputNames(this, '"tests/steps/"');
 });

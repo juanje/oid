@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { DEFAULT_LAYOUT, type Layout } from "./boundaries.ts";
+import type { AttemptKind } from "./executor.ts";
 import { git } from "./git.ts";
 
 // The project's oid config, written by hand in the skeleton (FR-CLI-02 writes it later).
@@ -31,6 +33,32 @@ export async function readLimits(dir: string): Promise<Limits> {
 export interface Paths {
   domain?: string;
   conventions?: string;
+}
+
+/** The keys of `paths` in .oid.json that name what an attempt kind writes. */
+const KIND_KEYS: Record<AttemptKind, "steps" | "tests" | "code"> = { steps: "steps", test: "tests", code: "code" };
+
+/**
+ * Where the project keeps each kind of file, from .oid.json's `paths` and oid's defaults (FR-AGENT-04). Paths of two
+ * kinds where one holds the other are a ConfigError: a file there would belong to both.
+ */
+export async function readLayout(dir: string): Promise<Layout> {
+  const { paths } = await readConfig(dir);
+  const kinds = Object.keys(KIND_KEYS) as AttemptKind[];
+  const writable = Object.fromEntries(kinds.map((kind) => [kind, paths?.[KIND_KEYS[kind]] ?? DEFAULT_LAYOUT.writable[kind]])) as Layout["writable"];
+  for (const [index, kind] of kinds.entries()) {
+    for (const other of kinds.slice(index + 1)) {
+      for (const one of writable[kind]) {
+        const held = writable[other].find((path) => path.startsWith(one) || one.startsWith(path));
+        if (held === undefined) continue;
+        const [outer, inner] = held.startsWith(one) ? [[kind, one], [other, held]] : [[other, held], [kind, one]];
+        throw new ConfigError(
+          `${CONFIG_FILE}: paths.${KIND_KEYS[outer[0] as AttemptKind]} "${outer[1]}" holds paths.${KIND_KEYS[inner[0] as AttemptKind]} "${inner[1]}": a file there would belong to two kinds of attempt. Give each kind paths of its own.`,
+        );
+      }
+    }
+  }
+  return { spec: paths?.spec ?? DEFAULT_LAYOUT.spec, features: paths?.features ?? DEFAULT_LAYOUT.features, writable };
 }
 
 export async function readPaths(dir: string): Promise<Paths> {
@@ -70,7 +98,7 @@ export async function uncommittedProjectConfig(projectDir: string): Promise<bool
   return (await git(projectDir, "status", "--porcelain", "--", CONFIG_FILE)) !== "";
 }
 
-async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; paths?: Paths }> {
+async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; paths?: Paths & { spec?: string; features?: string; steps?: string[]; tests?: string[]; code?: string[] } }> {
   const path = join(dir, CONFIG_FILE);
   return existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
 }

@@ -1,12 +1,21 @@
 import type { AttemptKind } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
 
-// What each attempt kind may write (D-05). The one place the paths live: the config of FR-CLI-02 replaces it.
+// What each attempt kind may write (D-05), when the project's .oid.json does not say otherwise.
 export const WRITABLE: Record<AttemptKind, string[]> = {
   steps: ["features/steps/", "features/support/"],
   test: ["tests/"],
   code: ["src/"],
 };
+
+/** Where a project keeps each kind of file (FR-AGENT-04): the spec and feature files, and what each attempt kind may write. */
+export interface Layout {
+  spec: string;
+  features: string;
+  writable: Record<AttemptKind, string[]>;
+}
+
+export const DEFAULT_LAYOUT: Layout = { spec: "SPEC.md", features: "features/", writable: WRITABLE };
 
 /** The files an attempt of `kind` wrote outside what it may write. Feature files are the contract: no kind writes them. */
 export function outsideBoundary(kind: AttemptKind, files: string[]): string[] {

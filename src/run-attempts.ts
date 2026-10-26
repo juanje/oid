@@ -1,3 +1,4 @@
+import type { Layout } from "./boundaries.ts";
 import { join } from "node:path";
 import { runAttempt } from "./attempt.ts";
 import { runCommand } from "./command.ts";
@@ -22,6 +23,8 @@ export interface FrRun {
   executor: Executor;
   fr: string;
   worktree: RunWorktree;
+  /** Where the project keeps each kind of file (FR-AGENT-04). */
+  layout: Layout;
   out: (text: string) => void;
   /** The scenarios already built, which every code attempt must keep green. */
   green: Scenario[];

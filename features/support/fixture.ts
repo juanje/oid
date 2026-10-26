@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { cp, mkdtemp, readdir, symlink } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { cp, mkdtemp, readdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -116,4 +116,14 @@ async function runAt(dir: string, ref: string, args: string[]): Promise<{ exitCo
   } finally {
     git(dir, "worktree", "remove", "--force", checkout);
   }
+}
+
+/** Changes the project's .oid.json with `change`, keeping the rest, and commits it, as the person would. */
+export async function commitProjectConfig(dir: string, change: (config: Record<string, any>) => void, message: string): Promise<void> {
+  const path = join(dir, ".oid.json");
+  const config = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
+  change(config);
+  await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
+  git(dir, "add", ".oid.json");
+  git(dir, "commit", "-q", "-m", message);
 }

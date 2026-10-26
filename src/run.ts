@@ -1,6 +1,6 @@
 import { AgentError } from "./agent-error.ts";
 import { runCommand } from "./command.ts";
-import { ConfigError, readLimits, uncommittedProjectConfig } from "./config.ts";
+import { ConfigError, readLayout, readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
@@ -107,6 +107,12 @@ async function buildFrs(
   record: (event: LogEvent) => Promise<void>,
   transcripts: string,
 ): Promise<number> {
+  // Where the project keeps each kind of file, from HEAD: paths oid cannot use stop the run before any attempt.
+  const layout = await readLayout(worktree.dir).catch((error: unknown) => {
+    if (error instanceof ConfigError) return error;
+    throw error;
+  });
+  if (layout instanceof ConfigError) return stop(layout.message, out);
   await record({ event: "stage", stage: "scenarios" });
   const listed: { fr: string; scenarios: Scenario[]; steps: Map<string, string[]> }[] = [];
   for (const fr of frs) {
@@ -130,6 +136,7 @@ async function buildFrs(
     executor,
     fr: listed[0]!.fr,
     worktree,
+    layout,
     out,
     green: [],
     known: testsIn(baseline),
