@@ -86,6 +86,61 @@ describe("untaken", () => {
   });
 });
 
+describe("untaken, on vitest 5's whole maps", () => {
+  // As vitest 5's provider and ast-v8-to-istanbul write them: every function and every side of every branch, with its
+  // count, at the places of the syntax tree; an end column can be null, the end of its line (DOMAIN.md, vitest's coverage).
+  const place = (line: number, column: number, endLine: number, endColumn: number | null) => ({ start: { line, column }, end: { line: endLine, column: endColumn } });
+  const greet = (counts: { greet: number; farewell: number; ternary: [number, number]; guard: [number, number]; farewellIf: [number, number] }) => ({
+    "/w/src/greet.ts": {
+      path: "/w/src/greet.ts",
+      fnMap: {
+        0: { name: "greet", decl: place(1, 16, 1, 21), loc: place(1, 44, 4, null) },
+        1: { name: "farewell", decl: place(5, 16, 5, 24), loc: place(5, 47, 8, null) },
+      },
+      f: { 0: counts.greet, 1: counts.farewell },
+      branchMap: {
+        0: { type: "if", loc: place(2, 2, 2, null), locations: [place(2, 2, 2, null), { start: {}, end: {} }] },
+        1: { type: "cond-expr", loc: place(3, 9, 3, null), locations: [place(3, 28, 3, 61), place(3, 61, 3, null)] },
+        2: { type: "if", loc: place(6, 2, 6, null), locations: [place(6, 2, 6, null), { start: {}, end: {} }] },
+      },
+      b: { 0: counts.guard, 1: counts.ternary, 2: counts.farewellIf },
+    },
+  });
+
+  test("is what no report took at the same place: a side one report takes is taken", () => {
+    const unit = greet({ greet: 1, farewell: 0, ternary: [0, 1], guard: [0, 1], farewellIf: [0, 0] });
+    const scenarios = greet({ greet: 1, farewell: 0, ternary: [1, 0], guard: [0, 1], farewellIf: [0, 0] });
+
+    expect(untaken([unit, scenarios], "/w", 5)).toEqual([
+      { file: "src/greet.ts", line: 2, column: 2, what: "a branch no test takes" },
+      { file: "src/greet.ts", line: 5, column: 47, what: "the function farewell, which no test calls" },
+    ]);
+  });
+
+  test("takes a function one report calls, whatever the other says of it", () => {
+    const unit = greet({ greet: 1, farewell: 1, ternary: [1, 1], guard: [1, 1], farewellIf: [1, 1] });
+    const scenarios = greet({ greet: 0, farewell: 0, ternary: [0, 0], guard: [0, 0], farewellIf: [0, 0] });
+
+    expect(untaken([unit, scenarios], "/w", 5)).toEqual([]);
+  });
+
+  test("says a missing else no test takes at its if", () => {
+    const unit = greet({ greet: 1, farewell: 1, ternary: [1, 1], guard: [1, 0], farewellIf: [1, 1] });
+
+    expect(untaken([unit], "/w", 5)).toEqual([{ file: "src/greet.ts", line: 2, column: 2, what: "a branch no test takes" }]);
+  });
+
+  test("keeps what one report has of a file the other did not load", () => {
+    const unit = greet({ greet: 0, farewell: 0, ternary: [0, 0], guard: [0, 0], farewellIf: [0, 0] });
+    const scenarios = report("/w/src/other.ts", [], [["other", 1, 1]]);
+
+    expect(untaken([unit, scenarios], "/w", 5)).toEqual([
+      { file: "src/greet.ts", line: 1, column: 44, what: "the function greet, which no test calls" },
+      { file: "src/greet.ts", line: 5, column: 47, what: "the function farewell, which no test calls" },
+    ]);
+  });
+});
+
 describe("uncoveredNew", () => {
   test("keeps what no test runs on the lines the FR added, and leaves the rest to earlier work", () => {
     const left = [
