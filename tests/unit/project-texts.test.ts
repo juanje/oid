@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { frText, projectTexts } from "../../src/project-texts.ts";
+import { frText, noFrText, projectTexts } from "../../src/project-texts.ts";
 import { tempRepo } from "./support/repo.ts";
 
 const SPEC = `# greet — Specification
@@ -30,6 +30,50 @@ describe("frText", () => {
 
   test("gives nothing for an FR the spec does not have", () => {
     expect(frText(SPEC, "FR-GREET-09")).toBeUndefined();
+  });
+});
+
+describe("frText, in the other forms a spec gives an FR", () => {
+  const TABLE_SPEC = `# x
+
+| ID | Description |
+|----|-------------|
+| FR-NET-01 | Fetch URL content |
+
+**FR-NET-01 — Fetch URL content**
+
+- **Given** a URL
+- **Then** its content
+
+**FR-NET-02 — Web search**
+
+Later.
+
+### 4. Non-functional requirements
+`;
+
+  test("gives an FR that starts with a line in bold, up to the next such line", () => {
+    expect(frText(TABLE_SPEC, "FR-NET-01")).toBe("**FR-NET-01 — Fetch URL content**\n\n- **Given** a URL\n- **Then** its content");
+  });
+
+  test("ends an FR in bold at the next heading", () => {
+    expect(frText(TABLE_SPEC, "FR-NET-02")).toBe("**FR-NET-02 — Web search**\n\nLater.");
+  });
+
+  test("gives an FR under a heading of level 3", () => {
+    expect(frText("### FR-A-01: A\nText of A.\n\n### FR-A-02: B\n", "FR-A-01")).toBe("### FR-A-01: A\nText of A.");
+  });
+
+  test("never takes a table's row for the FR's text", () => {
+    expect(frText("| FR-NET-01 | Fetch URL content |\n", "FR-NET-01")).toBeUndefined();
+  });
+});
+
+describe("noFrText", () => {
+  test("names the FR, the spec and every form oid reads an FR in", () => {
+    const message = noFrText("FR-GREET-01", "specs/SPEC.md");
+
+    for (const part of ["FR-GREET-01", "specs/SPEC.md", "### FR-GREET-01:", "#### FR-GREET-01:", "**FR-GREET-01 — "]) expect(message).toContain(part);
   });
 });
 
