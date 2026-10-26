@@ -16,6 +16,8 @@ export interface CheckResult {
   ranNothing?: boolean;
   /** An option the runner does not know: the check could not run, which no attempt can fix. */
   unknownOption?: string;
+  /** Why the check could not read what its runner wrote, which no attempt can fix either. */
+  error?: string;
   /** Each failing test or scenario with its message, from the runner's report. */
   failures?: string[];
   /** The failing tests, as `<file> > <full name>`. */
@@ -118,11 +120,11 @@ async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: s
 
 /** The gate's error: a check whose runner does not know an option could not run, and no attempt can fix that. */
 export function gateError(results: CheckResult[]): string | undefined {
-  const unknown = results.filter((result) => result.unknownOption !== undefined);
-  if (unknown.length === 0) return undefined;
-  return unknown
-    .map((result) => `The ${result.name} check could not run: its runner does not know the option ${result.unknownOption}. Fix the project's configuration.`)
-    .join("\n");
+  const errors = results.flatMap((result) => {
+    if (result.unknownOption !== undefined) return [`The ${result.name} check could not run: its runner does not know the option ${result.unknownOption}. Fix the project's configuration.`];
+    return result.error === undefined ? [] : [`The ${result.name} check could not read what its runner wrote: ${result.error}`];
+  });
+  return errors.length === 0 ? undefined : errors.join("\n");
 }
 
 // What the attempt the gate sends back is told to do: its own kind's part, never another's (FR-GATE-04).
