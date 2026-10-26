@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DEFAULT_LAYOUT, type Layout } from "./boundaries.ts";
 import type { AttemptKind } from "./executor.ts";
 import { git } from "./git.ts";
+import { filesRunnersLoad } from "./runner-config.ts";
 
 // The project's oid config, written by hand in the skeleton (FR-CLI-02 writes it later).
 const CONFIG_FILE = ".oid.json";
@@ -58,7 +59,7 @@ export async function readLayout(dir: string): Promise<Layout> {
       }
     }
   }
-  return { spec: paths?.spec ?? DEFAULT_LAYOUT.spec, features: paths?.features ?? DEFAULT_LAYOUT.features, writable };
+  return { spec: paths?.spec ?? DEFAULT_LAYOUT.spec, features: paths?.features ?? DEFAULT_LAYOUT.features, writable, loaded: await filesRunnersLoad(dir) };
 }
 
 export async function readPaths(dir: string): Promise<Paths> {

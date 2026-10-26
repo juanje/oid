@@ -14,9 +14,11 @@ export interface Layout {
   spec: string;
   features: string;
   writable: Record<AttemptKind, string[]>;
+  /** The files a runner's configuration loads with every test, when it loads any: the gate's configuration, wherever they sit. */
+  loaded?: string[];
 }
 
-export const DEFAULT_LAYOUT: Layout = { spec: "SPEC.md", features: "features/", writable: WRITABLE };
+export const DEFAULT_LAYOUT: Layout = { spec: "SPEC.md", features: "features/", writable: WRITABLE, loaded: [] };
 
 // The gate's configuration, by name wherever it sits (DOMAIN.md, Configuration): an agent that can edit it can pass the
 // gate by weakening it.
@@ -51,7 +53,7 @@ export const STATE_DIR = ".oid/";
  */
 function unwritable(file: string, layout: Layout): boolean {
   if (file === layout.spec || file.endsWith(".feature") || file.startsWith(STATE_DIR)) return true;
-  if (GATE_CONFIGURATION.some((name) => name.test(basename(file)))) return true;
+  if (GATE_CONFIGURATION.some((name) => name.test(basename(file))) || layout.loaded?.includes(file) === true) return true;
   return file.startsWith(layout.features) && !layout.writable.steps.some((path) => file.startsWith(path));
 }
 
