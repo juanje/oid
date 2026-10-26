@@ -26,6 +26,17 @@ describe("applyMutant", () => {
     expect(await readFile(join(dir, "src/greet-all.ts"), "utf8")).toBe(SOURCE);
   });
 
+  test("takes the source where the project keeps it", async () => {
+    const dir = await tempRepo({ "lib/greet-all.ts": SOURCE, "src/greet-all.ts": SOURCE });
+
+    const inLib = await applyMutant(dir, mutant("lib/greet-all.ts", "names", "list"), ["lib/"]);
+    const inSrc = await applyMutant(dir, mutant("src/greet-all.ts", 'names.join(", ")', "x"), ["lib/"]);
+
+    expect(inLib?.evidence).not.toContain("not source");
+    expect(inSrc?.evidence).toContain("src/greet-all.ts");
+    expect(inSrc?.next).toContain("lib/");
+  });
+
   test("refuses an edit whose old text is not in its file exactly once, naming the file", async () => {
     const dir = await tempRepo({ "src/greet-all.ts": SOURCE });
 

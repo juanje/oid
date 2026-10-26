@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { CALL_AS_OFFERED, OID_FACTS, systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
 import { AGENT_TOOLS } from "../../src/agent-tools.ts";
-import { WRITABLE } from "../../src/boundaries.ts";
+import { type Layout, WRITABLE } from "../../src/boundaries.ts";
 import { RUNNERS } from "../../src/runners.ts";
 
 const SCENARIO = "A person is greeted by name";
@@ -31,6 +31,18 @@ describe("systemPromptFor", () => {
       for (const other of (["steps", "test", "code"] as const).filter((one) => one !== kind)) {
         for (const path of WRITABLE[other]) expect(prompt).toMatch(new RegExp(`\\b${other}\\b[^\\n]*${path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`));
       }
+    }
+  });
+
+  test("states the paths, the other kinds' paths and the spec where the project keeps them", () => {
+    const layout: Layout = { spec: "specs/SPEC.md", features: "specs/features/", writable: { steps: ["tests/steps/"], test: ["tests/unit/"], code: ["src/", "shared/"] } };
+
+    for (const kind of ["steps", "test", "code"] as const) {
+      const prompt = systemPromptFor(kind, layout);
+
+      for (const other of ["steps", "test", "code"] as const) for (const path of layout.writable[other]) expect(prompt).toContain(path);
+      expect(prompt).toContain("specs/SPEC.md");
+      expect(prompt.replaceAll("specs/SPEC.md", "")).not.toContain("SPEC.md");
     }
   });
 

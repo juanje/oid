@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { DEFAULT_LAYOUT, type Layout, forbiddenLines, judgeBoundary, outsideBoundary, ownerOf } from "../../src/boundaries.ts";
+import { DEFAULT_LAYOUT, type Layout, forbiddenLines, isTestFile, judgeBoundary, outsideBoundary, ownerOf } from "../../src/boundaries.ts";
 
 describe("outsideBoundary", () => {
   test("a test attempt may write unit tests only", () => {
@@ -49,6 +49,36 @@ describe("outsideBoundary, at the paths the project names", () => {
 
   test("steps inside the features' directory are the steps', as cucumber-js lays them out", () => {
     expect(outsideBoundary("steps", ["features/steps/greet.steps.ts", "features/notes.md"], DEFAULT_LAYOUT)).toEqual(["features/notes.md"]);
+  });
+});
+
+describe("at the paths the project names", () => {
+  const layout: Layout = {
+    spec: "specs/SPEC.md",
+    features: "specs/features/",
+    writable: { steps: ["tests/steps/", "tests/support/"], test: ["tests/unit/"], code: ["src/", "shared/"] },
+  };
+
+  test("judgeBoundary tells the attempt the paths it may write, and the spec no attempt writes", () => {
+    const refusal = judgeBoundary("test", { files: ["tests/unit/greet.test.ts", "tests/steps/greet.steps.ts"], added: [] }, layout);
+
+    expect(refusal?.evidence).toBe("tests/steps/greet.steps.ts");
+    expect(refusal?.next).toContain("tests/unit/");
+    expect(refusal?.next).toContain("specs/SPEC.md");
+  });
+
+  test("ownerOf gives a file to the kind whose paths hold it, and a file no kind writes to a code attempt", () => {
+    expect(["tests/steps/a.steps.ts", "tests/support/world.ts", "tests/unit/a.test.ts", "shared/names.ts", "vitest.config.ts"].map((file) => ownerOf(file, layout))).toEqual([
+      "steps",
+      "steps",
+      "test",
+      "code",
+      "code",
+    ]);
+  });
+
+  test("isTestFile is whether the file is under the unit tests' paths", () => {
+    expect(["tests/unit/a.test.ts", "tests/steps/a.steps.ts"].map((file) => isTestFile(file, layout))).toEqual([true, false]);
   });
 });
 

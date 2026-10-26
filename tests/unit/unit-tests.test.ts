@@ -22,6 +22,19 @@ describe("runUnitTests", () => {
     expect(await runUnitTests(dir, [], run)).toMatchObject({ ran: true });
   });
 
+  test("measures the coverage of every source path the project names", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    let asked: string[] = [];
+    const run = async (_command: string, args: string[]) => {
+      asked = args;
+      return { exitCode: 1, output: "" };
+    };
+
+    await runUnitTests(dir, [], run, { dir: "/tmp/coverage", source: ["src/", "shared/"] });
+
+    expect(asked.filter((arg) => arg.startsWith("--coverage.include="))).toEqual(["--coverage.include=src/**", "--coverage.include=shared/**"]);
+  });
+
   test("never reads a report left by an earlier run when vitest writes none", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     await runUnitTests(dir, [], recordedVitest(dir, [], recorded("vitest-greet-02-assert.json")));

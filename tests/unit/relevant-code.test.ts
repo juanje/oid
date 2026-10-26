@@ -36,6 +36,14 @@ describe("relevantCode", () => {
     expect(cut).toEqual([]);
   });
 
+  test("looks for the unit tests under the paths the project names", async () => {
+    const dir = await tempRepo({ ...FILES, "spec/greet.test.ts": 'import { greet } from "../src/greet.ts";\n' });
+
+    const { files } = await relevantCode(dir, ["features/steps/greet.steps.ts"], 40_000, ["spec/"]);
+
+    expect(files.map((file) => file.path)).toEqual(["features/steps/greet.steps.ts", "features/support/names.ts", "src/greet.ts", "spec/greet.test.ts"]);
+  });
+
   test("leaves out the files past the budget, and names them", async () => {
     const dir = await tempRepo(FILES);
 

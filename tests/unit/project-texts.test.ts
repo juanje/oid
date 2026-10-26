@@ -48,6 +48,12 @@ describe("projectTexts", () => {
     expect(await projectTexts(dir)).toEqual({ domain: "## Domain\n\nSpec domain.", conventions: "## Conventions\n\nSpec conventions." });
   });
 
+  test("takes the sections from the spec where the project keeps it", async () => {
+    const dir = await tempRepo({ "specs/SPEC.md": SPEC_WITH_SECTIONS, "SPEC.md": "# Another\n\n## Domain\n\nOther domain.\n" });
+
+    expect(await projectTexts(dir, "specs/SPEC.md")).toEqual({ domain: "## Domain\n\nSpec domain.", conventions: "## Conventions\n\nSpec conventions." });
+  });
+
   test("takes them first from the files .oid.json names", async () => {
     const config = JSON.stringify({ paths: { domain: "docs/glossary.md", conventions: "docs/style.md" } });
     const dir = await tempRepo({ ".oid.json": config, "docs/glossary.md": "Named domain.\n", "docs/style.md": "Named conventions.\n", "DOMAIN.md": "File domain.\n" });

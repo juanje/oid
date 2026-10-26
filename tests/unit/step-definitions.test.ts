@@ -41,4 +41,10 @@ describe("stepPatterns", () => {
       "features/support/more.ts: /^a list of (\\d+) names$/",
     ]);
   });
+
+  test("looks under the step paths the project names", async () => {
+    const dir = await tempRepo({ "tests/steps/greet.steps.ts": STEPS, "features/steps/old.steps.ts": STEPS });
+
+    expect(await stepPatterns(dir, ["tests/steps/"])).toEqual(["tests/steps/greet.steps.ts: I greet {string}", "tests/steps/greet.steps.ts: I get {string}"]);
+  });
 });
