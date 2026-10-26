@@ -31,6 +31,8 @@ export class RunWorld extends World {
   configDir: string | undefined;
   /** The URLs of the modules a run of the oid command loaded, when it recorded them. */
   loadedModules: string[] = [];
+  /** Where the project keeps each kind of file, when a scenario lays it out its own way (FR-AGENT-04). */
+  layout: { spec: string; features: string; steps: string[]; tests: string[]; code: string[] } | undefined;
 }
 
 setWorldConstructor(RunWorld);
