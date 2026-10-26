@@ -6,7 +6,19 @@ import { Given, Then, When } from "@cucumber/cucumber";
 import { GREET_01_SCENARIO, attemptDir, branches, createGreetProject, filesUnder, git, runScenariosAt, testNames } from "../support/fixture.ts";
 import { assertOutputNames, attemptOf, noteBeforeRun, runBranch, runOid } from "../support/run.ts";
 import { ScriptedExecutor, lastAttempt } from "../support/scripted-executor.ts";
+import { useVitest } from "../support/runners.ts";
 import type { RunWorld } from "../support/world.ts";
+
+Given("the project's vitest is version {int}", async function (this: RunWorld, version: number) {
+  assert.ok(version === 4 || version === 5, `No fixture gives vitest ${version}`);
+  await useVitest(this.projectDir, String(version) as "4" | "5");
+});
+
+Then("the output names the project's vitest version and the versions oid reads", function (this: RunWorld) {
+  assertOutputNames(this, "4.1.0");
+  assertOutputNames(this, "vitest 3");
+  assertOutputNames(this, "vitest 5");
+});
 
 Given("a project with an approved feature file for FR-GREET-01", async function (this: RunWorld) {
   this.projectDir = await createGreetProject();

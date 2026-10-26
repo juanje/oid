@@ -1,0 +1,10 @@
+{
+  "name": "oid-fixture-vitest5",
+  "private": true,
+  "description": "vitest 5 for oid's own scenarios of a project on vitest 5; install with: npm ci --prefix fixtures/vitest5",
+  "type": "module",
+  "devDependencies": {
+    "@vitest/coverage-v8": "5.0.3",
+    "vitest": "5.0.3"
+  }
+}

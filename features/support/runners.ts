@@ -33,6 +33,27 @@ export async function installRunners(dir: string): Promise<void> {
   }
 }
 
+// vitest 5, installed apart from oid's own vitest 3 with its own lockfile (fixtures/vitest5).
+const VITEST_5 = join(OID_ROOT, "fixtures/vitest5/node_modules");
+
+/**
+ * Gives a fixture project another vitest than oid's: 5, from fixtures/vitest5, with its @vitest packages; or a package
+ * that only says it is version 4, which oid must refuse before it runs anything.
+ */
+export async function useVitest(dir: string, version: "4" | "5"): Promise<void> {
+  const modules = join(dir, "node_modules");
+  await rm(join(modules, "vitest"), { recursive: true, force: true });
+  if (version === "4") {
+    await mkdir(join(modules, "vitest"));
+    await writeFile(join(modules, "vitest/package.json"), `${JSON.stringify({ name: "vitest", version: "4.1.0", type: "module" })}\n`);
+    return;
+  }
+  assert.ok(existsSync(VITEST_5), "vitest 5 is not installed for oid's scenarios. Install it with: npm ci --prefix fixtures/vitest5");
+  await symlink(join(VITEST_5, "vitest"), join(modules, "vitest"));
+  await rm(join(modules, "@vitest"), { recursive: true, force: true });
+  await symlink(join(VITEST_5, "@vitest"), join(modules, "@vitest"));
+}
+
 function slug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }

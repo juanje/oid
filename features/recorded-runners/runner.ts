@@ -96,9 +96,16 @@ function coverageFiles(dir: string): Record<string, string> {
   return files;
 }
 
+/** The real tool: vitest is the project's own, which may be another version than oid's; the others are oid's. */
+function realCommand(): [string, string[]] {
+  if (tool === "vitest") return [process.execPath, [join(cwd, "node_modules/vitest/vitest.mjs"), ...args]];
+  return [join(OID_ROOT, "node_modules/.bin", tool), args];
+}
+
 function runReal(capture: boolean): Promise<{ exitCode: number; output: string }> {
   return new Promise((done) => {
-    const child = spawn(join(OID_ROOT, "node_modules/.bin", tool), args, {
+    const [command, commandArgs] = realCommand();
+    const child = spawn(command, commandArgs, {
       env: { ...process.env, NODE_OPTIONS: process.env.OID_NODE_OPTIONS ?? "" },
       stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
     });
