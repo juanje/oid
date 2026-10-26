@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { forbiddenLines, judgeBoundary, outsideBoundary, ownerOf } from "../../src/boundaries.ts";
+import { DEFAULT_LAYOUT, type Layout, forbiddenLines, judgeBoundary, outsideBoundary, ownerOf } from "../../src/boundaries.ts";
 
 describe("outsideBoundary", () => {
   test("a test attempt may write unit tests only", () => {
@@ -15,6 +15,40 @@ describe("outsideBoundary", () => {
 
   test("a code attempt may write source only, never the gate's configuration", () => {
     expect(outsideBoundary("code", ["src/greet.ts", "package.json", "tsconfig.json"])).toEqual(["package.json", "tsconfig.json"]);
+  });
+});
+
+describe("outsideBoundary, at the paths the project names", () => {
+  const layout: Layout = {
+    spec: "specs/SPEC.md",
+    features: "specs/features/",
+    writable: { steps: ["tests/steps/", "tests/support/"], test: ["tests/unit/"], code: ["src/", "shared/"] },
+  };
+
+  test("each kind writes under its own paths only", () => {
+    expect(outsideBoundary("code", ["shared/names.ts", "src/greet.ts", "tests/unit/greet.test.ts"], layout)).toEqual(["tests/unit/greet.test.ts"]);
+    expect(outsideBoundary("test", ["tests/unit/greet.test.ts", "tests/steps/greet.steps.ts"], layout)).toEqual(["tests/steps/greet.steps.ts"]);
+  });
+
+  test("no kind writes the gate's configuration, wherever it sits", () => {
+    const files = ["shared/vitest.config.ts", "src/package.json", "shared/tsconfig.build.json", "src/cucumber.mjs", "shared/eslint.config.js", "src/pnpm-lock.yaml", "src/greet.ts"];
+
+    expect(outsideBoundary("code", files, layout)).toEqual(files.slice(0, -1));
+  });
+
+  test("no kind writes the spec, a feature file or oid's state, whatever the paths say", () => {
+    const loose: Layout = { spec: "src/SPEC.md", features: "src/features/", writable: { ...layout.writable, code: ["src/", ".oid/"] } };
+
+    expect(outsideBoundary("code", ["src/SPEC.md", "src/features/README.md", "src/x.feature", ".oid/progress.json", "src/greet.ts"], loose)).toEqual([
+      "src/SPEC.md",
+      "src/features/README.md",
+      "src/x.feature",
+      ".oid/progress.json",
+    ]);
+  });
+
+  test("steps inside the features' directory are the steps', as cucumber-js lays them out", () => {
+    expect(outsideBoundary("steps", ["features/steps/greet.steps.ts", "features/notes.md"], DEFAULT_LAYOUT)).toEqual(["features/notes.md"]);
   });
 });
 
