@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_LAYOUT, type Layout } from "./boundaries.ts";
 import type { AttemptKind } from "./executor.ts";
+import { ConfigError } from "./config-error.ts";
 import { git } from "./git.ts";
 import { filesRunnersLoad } from "./runner-config.ts";
 
@@ -47,17 +48,13 @@ export async function readLayout(dir: string): Promise<Layout> {
   const { paths } = await readConfig(dir);
   const kinds = Object.keys(KIND_KEYS) as AttemptKind[];
   const writable = Object.fromEntries(kinds.map((kind) => [kind, paths?.[KIND_KEYS[kind]] ?? DEFAULT_LAYOUT.writable[kind]])) as Layout["writable"];
-  for (const [index, kind] of kinds.entries()) {
-    for (const other of kinds.slice(index + 1)) {
-      for (const one of writable[kind]) {
-        const held = writable[other].find((path) => path.startsWith(one) || one.startsWith(path));
-        if (held === undefined) continue;
-        const [outer, inner] = held.startsWith(one) ? [[kind, one], [other, held]] : [[other, held], [kind, one]];
-        throw new ConfigError(
-          `${CONFIG_FILE}: paths.${KIND_KEYS[outer[0] as AttemptKind]} "${outer[1]}" holds paths.${KIND_KEYS[inner[0] as AttemptKind]} "${inner[1]}": a file there would belong to two kinds of attempt. Give each kind paths of its own.`,
-        );
-      }
-    }
+  const named = kinds.flatMap((kind) => writable[kind].map((path) => ({ key: KIND_KEYS[kind], path })));
+  for (const outer of named) {
+    const inner = named.find((other) => other.key !== outer.key && other.path.startsWith(outer.path));
+    if (inner === undefined) continue;
+    throw new ConfigError(
+      `${CONFIG_FILE}: paths.${outer.key} "${outer.path}" holds paths.${inner.key} "${inner.path}": a file there would belong to two kinds of attempt. Give each kind paths of its own.`,
+    );
   }
   return { spec: paths?.spec ?? DEFAULT_LAYOUT.spec, features: paths?.features ?? DEFAULT_LAYOUT.features, writable, loaded: await filesRunnersLoad(dir) };
 }
@@ -67,8 +64,7 @@ export async function readPaths(dir: string): Promise<Paths> {
   return { ...(paths?.domain === undefined ? {} : { domain: paths.domain }), ...(paths?.conventions === undefined ? {} : { conventions: paths.conventions }) };
 }
 
-/** A configuration oid cannot run with: an error no attempt can fix (exit 2), which names what to change. */
-export class ConfigError extends Error {}
+export { ConfigError } from "./config-error.ts";
 
 /** Where the person's own oid configuration lives (NFR-08): `$OID_CONFIG_DIR`, else `oid` in `$XDG_CONFIG_HOME`, else `.config/oid` in the home. */
 export function personalConfigDir(env: { OID_CONFIG_DIR?: string; XDG_CONFIG_HOME?: string; HOME?: string }): string {

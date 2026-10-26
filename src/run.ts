@@ -8,7 +8,7 @@ import { LimitReached, RoundLimitReached } from "./limits.ts";
 import { missingCoverageProvider } from "./coverage.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
-import { ownerOf } from "./boundaries.ts";
+import { type Layout, ownerOf } from "./boundaries.ts";
 import { attemptEvent, checkpointedAttempt, codeAttempt, type FrRun, locationOf, testCount } from "./run-attempts.ts";
 import { buildScenario } from "./scenario-build.ts";
 import { brokenBaseRefusal, gateScope, runIdOf, startingScenarios } from "./run-plan.ts";
@@ -110,20 +110,11 @@ async function buildFrs(
   record: (event: LogEvent) => Promise<void>,
   transcripts: string,
 ): Promise<number> {
-  // Where the project keeps each kind of file, from HEAD: paths oid cannot use stop the run before any attempt.
-  const layout = await readLayout(worktree.dir).catch((error: unknown) => {
-    if (error instanceof ConfigError) return error;
-    throw error;
-  });
-  if (layout instanceof ConfigError) return stop(layout.message, out);
-  // A vitest whose output oid has not checked would be read as another version writes it (FR-EVID-01).
-  let vitest: VitestDialect;
-  try {
-    vitest = vitestDialect(worktree.dir);
-  } catch (error) {
-    if (!(error instanceof ConfigError)) throw error;
-    return stop(error.message, out);
-  }
+  // Where the project keeps each kind of file, from HEAD, and the vitest whose output oid reads as that version writes
+  // it: a configuration oid cannot run with stops the run before any attempt (FR-AGENT-04, FR-EVID-01).
+  const project = await projectSetup(worktree.dir);
+  if (project instanceof ConfigError) return stop(project.message, out);
+  const { layout, vitest } = project;
   await record({ event: "stage", stage: "scenarios" });
   const listed: { fr: string; scenarios: Scenario[]; steps: Map<string, string[]> }[] = [];
   for (const fr of frs) {
@@ -203,6 +194,16 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   if ("error" in gate) return stop(gate.error, out);
   if (gate.refusal !== undefined) return refuse(gate.refusal, out);
   return EXIT_BUILT;
+}
+
+/** Where the project keeps each kind of file and which vitest it runs, or the ConfigError that says why oid cannot use them. */
+async function projectSetup(dir: string): Promise<{ layout: Layout; vitest: VitestDialect } | ConfigError> {
+  try {
+    return { layout: await readLayout(dir), vitest: vitestDialect(dir) };
+  } catch (error) {
+    if (error instanceof ConfigError) return error;
+    throw error;
+  }
 }
 
 /** Stops the run on an error no attempt can fix. */

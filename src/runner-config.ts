@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, normalize } from "node:path";
 import ts from "typescript-api";
-import { ConfigError } from "./config.ts";
+import { ConfigError } from "./config-error.ts";
 
 // The files a runner's configuration loads with every test are part of the gate's configuration (FR-AGENT-04): a
 // setup file that stubs what a test checks lets the suite pass without the code working.

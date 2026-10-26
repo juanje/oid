@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { ConfigError } from "./config.ts";
+import { ConfigError } from "./config-error.ts";
 
 // oid reads vitest's reports as the version installed in the project writes them (FR-EVID-01). DOMAIN.md, vitest, says
 // what differs between the versions oid has checked: their coverage maps the source differently.
