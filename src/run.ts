@@ -21,6 +21,7 @@ import { summarize, transcriptsOf } from "./summary.ts";
 import { oidVersion } from "./version.ts";
 import { frTexts } from "./task-context.ts";
 import { noFrText } from "./project-texts.ts";
+import { vitestDialect } from "./vitest-dialect.ts";
 import { frScenarios, runAllScenarios } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { commitFr, createRunWorktree, finishRun, freeRunId, type RunWorktree } from "./worktree.ts";
@@ -115,6 +116,13 @@ async function buildFrs(
     throw error;
   });
   if (layout instanceof ConfigError) return stop(layout.message, out);
+  // A vitest whose output oid has not checked would be read as another version writes it (FR-EVID-01).
+  try {
+    vitestDialect(worktree.dir);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    return stop(error.message, out);
+  }
   await record({ event: "stage", stage: "scenarios" });
   const listed: { fr: string; scenarios: Scenario[]; steps: Map<string, string[]> }[] = [];
   for (const fr of frs) {
