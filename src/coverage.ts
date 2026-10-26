@@ -1,8 +1,9 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import v8ToIstanbul from "v8-to-istanbul";
+import { CAPTURED_PREFIX } from "./source-capture.ts";
 import type { VitestDialect } from "./vitest-dialect.ts";
 
 // Coverage of the FR's new branches (FR-GATE-02): what the unit tests and the scenarios took, joined by place in the
@@ -198,34 +199,97 @@ export function unitCoverage(dir: string): CoverageReport | undefined {
 }
 
 /**
- * The scenarios' coverage: the V8 coverage Node wrote in `dir` (NODE_V8_COVERAGE) for the files of the project in
- * `root` under the `sourcePaths`, as the unit side's coverage includes only them, converted to istanbul through the
- * source maps Node recorded (as c8 does: the executed source is rebuilt from their line lengths). Step definitions are
- * left out: their branches are not the code's to cover.
+ * The scenarios' coverage, from the V8 coverage Node wrote in `dir` (NODE_V8_COVERAGE), for the files of the project in
+ * `root` under the `sourcePaths`, as the unit side's coverage includes only them, mapped as the project's vitest maps
+ * the unit side's, so that the two join by place (DOMAIN.md, vitest's coverage). Step definitions are left out: their
+ * branches are not the code's to cover.
  */
-export async function scenarioCoverage(dir: string, root: string, sourcePaths: string[]): Promise<CoverageReport> {
-  const report: CoverageReport = {};
-  if (!existsSync(dir)) return report;
+export async function scenarioCoverage(dir: string, root: string, sourcePaths: string[], dialect: VitestDialect = 3): Promise<CoverageReport> {
+  if (!existsSync(dir)) return {};
+  return dialect === 5 ? await mappedOnTheTree(dir, root, sourcePaths) : await mappedByRanges(dir, root, sourcePaths);
+}
+
+interface V8Script {
+  url: string;
+  functions: Parameters<ReturnType<typeof v8ToIstanbul>["applyCoverage"]>[0];
+}
+
+/** Each script Node covered that is one of the project's source files, with its path from `root`. */
+function sourceScripts(dir: string, root: string, sourcePaths: string[]): { script: V8Script; path: string; file: string; maps?: Record<string, { lineLengths: number[]; data: object }> }[] {
   const project = real(root);
-  for (const name of readdirSync(dir).filter((file) => file.endsWith(".json"))) {
-    const v8 = JSON.parse(readFileSync(join(dir, name), "utf8")) as {
-      result: { url: string; functions: Parameters<ReturnType<typeof v8ToIstanbul>["applyCoverage"]>[0] }[];
-      "source-map-cache"?: Record<string, { lineLengths: number[]; data: object }>;
-    };
+  const scripts = [];
+  for (const name of readdirSync(dir).filter((file) => file.endsWith(".json") && !file.startsWith(CAPTURED_PREFIX))) {
+    const v8 = JSON.parse(readFileSync(join(dir, name), "utf8")) as { result: V8Script[]; "source-map-cache"?: Record<string, { lineLengths: number[]; data: object }> };
     for (const script of v8.result) {
       if (!script.url.startsWith("file://")) continue;
       const path = fileURLToPath(script.url);
       const file = relative(project, real(path));
       if (!sourcePaths.some((prefix) => file.startsWith(prefix)) || file.includes("node_modules/")) continue;
-      const cached = v8["source-map-cache"]?.[script.url];
-      const sources = cached === undefined ? undefined : { source: cached.lineLengths.map((length) => "".padEnd(length, ".")).join("\n"), sourceMap: { sourcemap: cached.data } };
-      const converter = v8ToIstanbul(path, 0, sources);
-      await converter.load();
-      converter.applyCoverage(script.functions);
-      Object.assign(report, converter.toIstanbul());
+      scripts.push({ script, path, file, ...(v8["source-map-cache"] === undefined ? {} : { maps: v8["source-map-cache"] }) });
     }
   }
+  return scripts;
+}
+
+/** vitest 3: through the source maps Node recorded, as c8 does (the executed source is rebuilt from their line lengths). */
+async function mappedByRanges(dir: string, root: string, sourcePaths: string[]): Promise<CoverageReport> {
+  const report: CoverageReport = {};
+  for (const { script, path, maps } of sourceScripts(dir, root, sourcePaths)) {
+    const cached = maps?.[script.url];
+    const sources = cached === undefined ? undefined : { source: cached.lineLengths.map((length) => "".padEnd(length, ".")).join("\n"), sourceMap: { sourcemap: cached.data } };
+    const converter = v8ToIstanbul(path, 0, sources);
+    await converter.load();
+    converter.applyCoverage(script.functions);
+    Object.assign(report, converter.toIstanbul());
+  }
   return report;
+}
+
+// The helpers tsx puts before a module's code (checked on tsx 4.23.15): not in the source, and not the code's to cover.
+const TSX_HELPERS = /var __defProp=Object\.defineProperty;var __name=\(target,value\)=>__defProp\(target,"name",\{value,configurable:true\}\);/;
+
+/**
+ * vitest 5: through the syntax tree of the code Node ran, which the capture hook kept beside the coverage, with the
+ * project's own ast-v8-to-istanbul and vitest's parser, as its provider maps the unit side. A source file whose code
+ * the hook did not keep cannot be mapped the same way: an error, never a guess.
+ */
+async function mappedOnTheTree(dir: string, root: string, sourcePaths: string[]): Promise<CoverageReport> {
+  const ran = new Map<string, string>();
+  for (const name of readdirSync(dir).filter((file) => file.startsWith(CAPTURED_PREFIX))) {
+    const { url, source } = JSON.parse(readFileSync(join(dir, name), "utf8")) as { url: string; source: string };
+    ran.set(url, source);
+  }
+  const { convert, parseAstAsync } = await projectConverter(root);
+  const report: CoverageReport = {};
+  for (const { script, path, file } of sourceScripts(dir, root, sourcePaths)) {
+    const code = ran.get(script.url);
+    if (code === undefined) {
+      throw new Error(`oid cannot map the scenarios' coverage of ${file}: the code Node ran for it was not kept, as happens to a file Node loads as CommonJS.`);
+    }
+    const inline = /sourceMappingURL=data:application\/json;base64,(\S+)\s*$/.exec(code)?.[1];
+    const helpers = TSX_HELPERS.exec(code);
+    const converted = await convert({
+      code,
+      ast: parseAstAsync(code),
+      coverage: { url: script.url, functions: script.functions },
+      ...(inline === undefined ? {} : { sourceMap: JSON.parse(Buffer.from(inline, "base64").toString("utf8")) }),
+      ignoreNode: (node: { start: number; end: number }) =>
+        helpers !== null && node.start >= helpers.index && node.end <= helpers.index + helpers[0].length ? "ignore-this-and-nested-nodes" : undefined,
+    });
+    // As JSON, as vitest's provider writes its report: an end of line is null there, Infinity in memory. tsx maps each
+    // script to its own file: name it by the script, whatever path its source map was written with.
+    for (const data of Object.values(JSON.parse(JSON.stringify(converted)) as CoverageReport)) report[path] = { ...data, path };
+  }
+  return report;
+}
+
+/** The converter and parser the project's own vitest coverage provider uses. */
+async function projectConverter(root: string): Promise<{ convert: (options: object) => Promise<CoverageReport>; parseAstAsync: (code: string) => Promise<object> }> {
+  const project = createRequire(join(root, "package.json"));
+  const provider = createRequire(project.resolve("@vitest/coverage-v8"));
+  const { default: convert } = await import(pathToFileURL(provider.resolve("ast-v8-to-istanbul")).href);
+  const { parseAstAsync } = await import(pathToFileURL(project.resolve("vitest/node")).href);
+  return { convert, parseAstAsync };
 }
 
 function real(path: string): string {
