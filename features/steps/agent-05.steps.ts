@@ -42,6 +42,33 @@ Given("the project has a committed .env that holds a secret", async function (th
   git(this.projectDir, "commit", "-q", "-m", "chore: local settings");
 });
 
+Given("the project has a committed .oid\\/progress.json", async function (this: RunWorld) {
+  await mkdir(join(this.projectDir, ".oid"), { recursive: true });
+  await writeFile(join(this.projectDir, ".oid/progress.json"), `{ "frs": {} }\n`);
+  git(this.projectDir, "add", ".oid");
+  git(this.projectDir, "commit", "-q", "-m", "chore: oid's state");
+});
+
+Given(
+  "the scripted model's steps attempt first reads .oid\\/progress.json, lists the worktree and finds all its files, then builds FR-GREET-01",
+  function (this: RunWorld) {
+    this.probed = [".oid/progress.json"];
+    buildsWithProbes(this, [callOf("read", ".oid/progress.json"), callOf("ls", "."), { tool: "find", args: { pattern: "**/*" } }]);
+  },
+);
+
+Then("the model was told the read of .oid\\/progress.json was refused, naming the path and why", function (this: RunWorld) {
+  const [answer] = probeResults(this);
+  assert.ok(answer?.includes(".oid/progress.json"), `The answer to reading .oid/progress.json does not name it:\n${answer}`);
+  assert.match(answer!, /refused/i, `The answer to reading .oid/progress.json does not say it was refused:\n${answer}`);
+});
+
+Then("no listing or search the model got names anything under .oid", function (this: RunWorld) {
+  for (const answer of probeResults(this).slice(1)) {
+    for (const line of answer.split("\n")) assert.ok(!/(^|\/)\.oid(\/|$)/.test(line), `A listing or search named oid's state: ${line}\n${answer}`);
+  }
+});
+
 /** The path a phrase of the feature names, as the model would write it. */
 function pathFor(world: RunWorld, phrase: string): string {
   const { file } = outsideFile(world);
