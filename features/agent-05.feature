@@ -38,3 +38,12 @@ Feature: No shell; read everything except secrets and noise
     And the secret never reached the model
     And no listing or search the model got names .env or anything under .git
     And the run's log counts 2 denied tool calls
+
+  Scenario: oid's state under .oid/ is refused, and left out of every listing and search
+    Given the project has a committed .oid/progress.json
+    And the scripted model's steps attempt first reads .oid/progress.json, lists the worktree and finds all its files, then builds FR-GREET-01
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the model was told the read of .oid/progress.json was refused, naming the path and why
+    And no listing or search the model got names anything under .oid
+    And the run's log counts 1 denied tool call
