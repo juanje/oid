@@ -20,6 +20,7 @@ import { progressLine } from "./progress.ts";
 import { summarize, transcriptsOf } from "./summary.ts";
 import { oidVersion } from "./version.ts";
 import { frTexts } from "./task-context.ts";
+import { noFrText } from "./project-texts.ts";
 import { frScenarios, runAllScenarios } from "./scenarios.ts";
 import { runUnitTests, testsIn } from "./unit-tests.ts";
 import { commitFr, createRunWorktree, finishRun, freeRunId, type RunWorktree } from "./worktree.ts";
@@ -123,6 +124,8 @@ async function buildFrs(
       return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
     }
     listed.push({ fr, scenarios, steps });
+    // A task without the FR's what and why would build its scenarios without their reason (FR-AGENT-03).
+    if ((await frTexts(worktree.dir, fr, layout.spec)).fr === undefined) return stop(noFrText(fr, layout.spec), out);
   }
   const { results } = await runAllScenarios(worktree.dir, runCommand);
   const start = startingScenarios(results, new Set(listed.flatMap(({ scenarios }) => scenarios.map(locationOf))));

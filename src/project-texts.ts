@@ -24,9 +24,31 @@ function specSection(spec: string | undefined, title: string): string | undefine
   return spec === undefined ? undefined : sectionAt(spec, (line) => line.trim() === `## ${title}`);
 }
 
-/** An FR's heading and text in the spec, up to the next heading of its level or higher; none when the spec lacks it. */
+/**
+ * An FR's text in the spec, none when the spec lacks it (DOMAIN.md, Requirements in the spec): under its heading of
+ * level 3 or 4, up to the next heading of its level or higher; or after its line in bold, up to the next FR's line in
+ * bold or the next heading.
+ */
 export function frText(spec: string, fr: string): string | undefined {
-  return sectionAt(spec, (line) => line.startsWith(`#### ${fr}:`));
+  return sectionAt(spec, (line) => line.startsWith(`### ${fr}:`) || line.startsWith(`#### ${fr}:`)) ?? boldAt(spec, fr);
+}
+
+/** Why oid cannot build an FR whose text the spec lacks, naming the forms it reads (FR-AGENT-03). */
+export function noFrText(fr: string, specFile: string): string {
+  return `${specFile} has no text for ${fr}: oid reads an FR under a heading "### ${fr}: <title>" or "#### ${fr}: <title>", or after a line in bold "**${fr} — <title>**". Give ${fr} its text in one of these forms, or check its id.`;
+}
+
+const BOLD_FR = /^\*\*FR-[A-Z][A-Z0-9]*-\d{2,3}[a-z]? — .+\*\*$/;
+
+function boldAt(spec: string, fr: string): string | undefined {
+  const lines = spec.split("\n");
+  const start = lines.findIndex((line) => BOLD_FR.test(line) && line.startsWith(`**${fr} — `));
+  if (start === -1) return undefined;
+  const end = lines.findIndex((line, index) => index > start && (BOLD_FR.test(line) || /^#+ /.test(line)));
+  return lines
+    .slice(start, end === -1 ? undefined : end)
+    .join("\n")
+    .trim();
 }
 
 /** The lines from the heading `isHeading` finds to the next heading of its level or higher, trimmed. */
