@@ -21,7 +21,7 @@ The rest of the MVP adds what the target and the first runs ask for:
 - several FRs in one run;
 - the mutant as Red's legal exit;
 - shelving a scenario with a contract-change proposal;
-- the FR refactor;
+- the FR refactor: duplication and complexity, and the code pass (FR-REF-01, FR-REF-02);
 - traceability in the gate;
 - budget limits;
 - `progress.json`;
@@ -143,7 +143,7 @@ Never the project's `AGENTS.md` or `CLAUDE.md`: they hold process instructions f
 - test: unit tests;
 - code: source;
 - refactor-code: source;
-- refactor-tests: tests and step definitions.
+- refactor-tests, after the MVP (FR-REF-03): tests and step definitions.
 
 The project's `.oid.json` names these paths in `paths`, each with a default: `spec` (`SPEC.md`), `features` (`features/`), `steps` (`features/steps/`, `features/support/`), `tests` (`tests/`) and `code` (`src/`); `steps`, `tests` and `code` are lists. Everything that depends on where a kind of file lives reads them from there. Paths of two kinds that overlap, one inside the other, are an error before any attempt (exit 2) that names both. No agent writes feature files, the spec, the gate's configuration or oid's state, whatever the paths say: a feature file is any `.feature` file, and any file under `features` outside the steps' paths; the gate's configuration is the runner configs, `tsconfig`, the lint and format configs, `package.json`, the lockfiles, and the files a runner's configuration loads (vitest's `setupFiles` and `globalSetup`), wherever they are; oid's state is `.oid/`. A diff outside the boundary rejects the attempt, and the refusal names the files. So do these patterns in added lines: `.only`, `.skip`, and branches on a test environment such as `process.env.VITEST`. *Why:* the order and the evidence keep tests honest only if tests and code change in separate attempts. An agent that can edit the gate can pass it by weakening it. An existing project keeps its files where it chose; boundaries that assume one layout either block its agents or leave part of its gate writable.
 
@@ -176,13 +176,24 @@ The project's `.oid.json` names these paths in `paths`, each with a default: `sp
 ### Refactor
 
 #### FR-REF-01: Detect findings on the FR's diff
-**MVP.** Once every scenario of the FR is green, oid runs its detectors on the FR's whole diff: complexity, duplication (across files too), dead code, magic values and doc drift. Only findings that are new against the baseline count. With none, the refactor ends without starting an agent. *Why:* "refactor if needed" never happens without a signal, a scope and a stopping condition. At FR scale there is enough change to find refactors worth doing.
+**MVP.** Once every scenario of the FR is green, and before its gate, oid runs two detectors on the project's source (the `code` paths):
+- **duplication:** a run of at least 5 significant lines that appears more than once in the source, where at least one occurrence touches a line the FR added or changed. Lines are compared after normalising identifiers and literals, so a copy with other names or another message counts;
+- **complexity:** a function the FR changed whose complexity is above the project's limit (`limits.complexity` in `.oid.json`, 10 when the file does not set it) and above its value at the run's start (0 for a new function).
+
+A finding that touches no line of the FR's diff is existing debt and does not count. With no finding, the refactor ends without starting an agent. Dead code, magic values and doc drift wait until a run shows a need for them; the coverage check already refuses branches no test runs. *Why:* "refactor if needed" never happens without a signal, a scope and a stopping condition. oid builds the minimum each scenario asks for, so a later change tends to copy what it needs. A detector that sees the copy in the change that makes it extracts a helper on a real need, not on a guess.
 
 #### FR-REF-02: The code pass
-**MVP.** A cleanup agent receives the findings and may change source only. Its job is to clean without changing behaviour. An item is accepted when every test and scenario still passes, its findings are gone, no new finding appears and no measure is worse. Each accepted item gets its own checkpoint; a rejected item goes back to the last one and is reported. *Why:* the unchanged tests prove the behaviour did not change. A cleanup agent with its own prompt does not re-implement what works.
+**MVP.** A cleanup agent (the refactor-code kind) gets the findings, one per attempt, and may change source only. Its job is to clean without changing behaviour. An item is accepted only when:
+- every test and scenario still passes, and none of them changed;
+- the item's findings are gone, and no new finding appears;
+- the public API is unchanged: each module exports the same names, with the same signatures as the type checker prints them;
+- the coverage check of the FR's new branches still passes;
+- no measure is worse: no changed function more complex than before the item, and no more duplicated lines.
+
+Each accepted item gets its own checkpoint. A refused cleanup attempt is retried like any attempt; when its retries run out, the item goes back to the last checkpoint and is reported, and the FR goes on to its gate. *Why:* the unchanged tests prove the behaviour did not change, and the unchanged exports keep valid the tests and steps that import them. A cleanup agent with its own prompt does not re-implement what works.
 
 #### FR-REF-03: The test pass
-**MVP.** After the code pass, a cleanup agent may change tests and step definitions only, under the same acceptance rules. Each changed test must also still fail on a targeted mutant of the current code. A change that needs both (renaming a function the tests import) takes three items: the code pass adds the new name with the old one as an alias, the test pass moves the tests, and a last code item removes the alias. *Why:* the unchanged code proves the tests still pass, and the mutant proves a cleaner test is not a weaker one.
+**After the MVP.** After the code pass, a cleanup agent may change tests and step definitions only, under the same acceptance rules. Each changed test must also still fail on a targeted mutant of the current code. A change that needs both (renaming a function the tests import) takes three items: the code pass adds the new name with the old one as an alias, the test pass moves the tests, and a last code item removes the alias. It waits until a run shows tests that need cleaning. *Why:* the unchanged code proves the tests still pass, and the mutant proves a cleaner test is not a weaker one.
 
 ### State and record
 

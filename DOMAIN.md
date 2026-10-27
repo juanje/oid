@@ -19,7 +19,7 @@ Each term has one meaning. The last column names what it must not be confused wi
 | **Contract** | `SPEC.md` and the approved feature files. Only the person changes them. | Step definitions and tests, which agents write. |
 | **Run** | One `oid run` of one FR or several, with its own worktree, branch and log; one commit per FR built. Its id is the FR's, or `<first>-to-<last>` for several, with the time it started. | — |
 | **Attempt** | One agent process that produces one diff of one kind. | A *session* (Pi's object; one per attempt) and a *turn* (one model response inside an attempt). |
-| **Attempt kind** | steps, test, code, refactor-code or refactor-tests. Each has its own write boundary. | — |
+| **Attempt kind** | steps, test, code or refactor-code; refactor-tests after the MVP. Each has its own write boundary. | — |
 | **Retry** | A new attempt after a refusal, from the last checkpoint, with the refusal in its task. | — |
 | **Request** | What an attempt's report asks for: another attempt kind next, with its reason (FR-RUN-04). It ends the round; the next round starts with the kind asked for. | A *refusal*, which oid gives; a request comes from the agent. |
 | **Round** | In a scenario's inner loop, its test attempts and the code attempts after them. A round makes no progress when after it the scenario fails the same way: the same step and the same message, without its stack lines (`at …`). | An *attempt*; and a *retry*: a round with no progress spends none. |
@@ -176,7 +176,11 @@ None of the three parts may be empty. "Retry" is never the only next step.
 }
 ```
 
-Categories: `complexity`, `duplication`, `dead_code`, `magic_value`, `doc_drift`.
+Categories: `complexity` and `duplication`; `dead_code`, `magic_value` and `doc_drift` after the MVP.
+
+- **Significant line:** a source line that is not blank, a comment, or only brackets and punctuation.
+- **Normalised:** identifiers become one placeholder, and string, template and number literals another, so a copy with other names or another message matches.
+- **Complexity:** cyclomatic: 1, plus each `if`, `for`, `while`, `do`, `case`, `catch`, `&&`, `||`, `??` and `? :` in the function, not counting the functions nested in it.
 
 ## How the tools behave
 

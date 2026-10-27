@@ -105,19 +105,16 @@ Lint and types count only errors that are new against the baseline.
 - `oid verify` in the MVP (reviewed after it);
 - `oid gate` applying autofixes.
 
-## D-07: Refactor at FR scale, in two passes
+## D-07: Refactor at FR scale, on findings, code first
 
-**Decision.** Once every scenario of an FR is green, detectors run on the FR's whole diff. A cleanup agent with its own prompt fixes what they find in two passes, never mixed:
-1. code, with tests and steps fixed;
-2. tests and steps, with the code fixed. Each changed test must still fail on a mutant of the current code.
+**Decision.** Once every scenario of an FR is green, two detectors run on the FR's diff against the whole source: duplication, compared after normalising identifiers and literals so that adapted copies count, and complexity above the project's limit. A finding starts a cleanup agent with its own prompt, which changes source only, with tests and steps fixed. Each accepted item gets its own checkpoint. With no finding there is no agent. A second pass over tests and steps, with the code fixed and each changed test still failing on a mutant, comes after the MVP.
 
-Each accepted item gets its own checkpoint.
-
-**Why.** v1 showed that a refactor after each Green finds too little and costs too many cycles. A code agent sent back to fix findings tends to re-implement what works. In each pass, the half that stays fixed proves the other half did not change meaning.
+**Why.** v1 showed that a refactor after each Green finds too little and costs too many cycles. A code agent sent back to fix findings tends to re-implement what works. oid builds the minimum each scenario asks for, with no named helpers, so the next change tends to copy what it needs; acting when a change creates the copy shapes the helper by a real need. The tests, fixed during the code pass, prove the behaviour did not change.
 
 **Rules out:**
 - refactoring after each Green;
 - refactor findings sent back to the code agent;
+- a cleanup agent with no finding;
 - refactoring existing debt inside an FR (that is `oid tidy`, after the MVP).
 
 ## D-08: State is evidence and a log; the person reads it with `oid status`

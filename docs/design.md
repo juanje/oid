@@ -62,7 +62,7 @@ INPUT: SPEC.md and approved feature files
 - **Inner loop.** A test attempt is accepted when every new test fails with a valid Red against the previous checkpoint. A code attempt is accepted when those tests pass and nothing that was green turns red. That is checked on the current scenario, the feature's green scenarios and the full unit suite; the gate checks the whole project. How many tests, and how small, is guidance.
 - **The next attempt** (D-03). By default the inner loop alternates test and code. An agent may ask in its report for another kind next (fix a step, another test, more code) with its reason. The request ends the round, whatever the attempt's verdict, and the next round starts with that kind, its task giving the reason and the scenario's failure. The evidence and the write boundary judge whatever comes: a steps or test attempt asked for must show its Red on the code from before the scenario's first code attempt, in a scratch copy, and keep every scenario that passed passing.
 - **Retries.** A refused attempt goes back to the last checkpoint and is retried with the refusal in its task, up to the limit: `limits.retries` in the project's `.oid.json`, 2 when the file does not set it. The limits of FR-RUN-09 cap what retries cost. An error (exit code 2) is never retried: no attempt can fix it. When the retries run out, oid asks the person: retry with a note, shelve the scenario, or stop.
-- **Limits.** Turns per attempt: `limits.turns` in `.oid.json`, 40 when the file does not set it. Rounds per scenario: `limits.rounds`, 6 when the file does not set it; built scenarios have needed at most 2. The executor counts its agent's turns and ends the agent between turns at the limit (with Pi, `finishTurn` returning `{ action: "end" }`); it reports the turns to oid in the attempt's outcome, never through a tool the model calls, which it could forget. Reaching a limit ends the run at the work accepted so far, with exit code 3, and says which limit. It is not retried.
+- **Limits.** Turns per attempt: `limits.turns` in `.oid.json`, 40 when the file does not set it. Rounds per scenario: `limits.rounds`, 6 when the file does not set it; built scenarios have needed at most 2. The refactor's complexity limit: `limits.complexity`, 10 when the file does not set it. The executor counts its agent's turns and ends the agent between turns at the limit (with Pi, `finishTurn` returning `{ action: "end" }`); it reports the turns to oid in the attempt's outcome, never through a tool the model calls, which it could forget. Reaching a limit ends the run at the work accepted so far, with exit code 3, and says which limit. It is not retried.
 - **Wiring.** When every unit test of a scenario is green and the scenario is still red, the next attempt is code that connects the parts. That is legal once the scenario has at least one unit test.
 
 ## 3. An attempt
@@ -86,7 +86,7 @@ An attempt is the unit of work (D-04):
 | test | unit tests |
 | code | source |
 | refactor-code | source |
-| refactor-tests | unit tests and step definitions |
+| refactor-tests (after the MVP) | unit tests and step definitions |
 
 No kind writes feature files, the spec, the gate's configuration (with the files a runner's configuration loads) or oid's state, `.oid/`, wherever the paths put them. The forbidden patterns in added lines are `.only`, `.skip`, and branches on a test environment.
 
@@ -146,12 +146,15 @@ The gate also runs at the start of a run as the baseline. A red test stops the r
 ## 6. Refactor
 
 At FR scale, after every scenario is green and before the gate (D-07).
-1. The detectors run on the FR's whole diff: complexity, duplication, dead code, magic values and doc drift. Only findings new against the baseline count. With none, there is no agent.
-2. **Code pass.** A cleanup agent may change source only.
-3. **Test pass.** A cleanup agent may change tests and step definitions only, and each changed test must still fail on a mutant of the current code.
-4. **Acceptance.** An item is accepted when everything still passes, its findings are gone, no new finding appears and no measure is worse. Each accepted item gets a checkpoint, and a rejected one goes back.
+1. **Detectors**, on the FR's diff against the whole source:
+   - duplication: runs of at least 5 significant lines, compared after normalising identifiers and literals;
+   - complexity: a changed function above `limits.complexity` and above its value at the run's start.
 
-A change that needs both passes (a rename the tests import) takes three items: the code pass adds the new name and keeps the old one as an alias, the test pass moves the tests, and a last code item removes the alias.
+   A finding that touches no line of the FR's diff is existing debt. With none, there is no agent.
+2. **Code pass.** A cleanup agent (refactor-code) gets one finding per attempt and may change source only.
+3. **Acceptance.** Tests and scenarios unchanged and passing; the item's findings gone and none new; the same exports with the same signatures; the coverage check still passing; no measure worse. Each accepted item gets a checkpoint. A refused one is retried, then goes back and is reported, and the FR goes on to its gate.
+
+After the MVP, a test pass (FR-REF-03) cleans tests and steps with the code fixed, each changed test still failing on a mutant. A change that needs both passes (a rename the tests import) then takes three items.
 
 ## 7. State and record
 
@@ -196,5 +199,5 @@ These parts of the design came from analysis, not from runs. The first runs conf
 - the agent choosing the next attempt kind (§2);
 - no shell for any agent (§3);
 - coverage of the FR's new branches, unit tests and scenarios together, as a gate check (§5);
-- a test or steps attempt the gate sends back for a type error is not asked for a new Red, only to keep the number of tests: it can still weaken a test unseen. That risk closes in the MVP with the recorded evidence (FR-EVID-04) and the refactor's mutant (FR-REF-03);
+- a test or steps attempt the gate sends back for a type error is not asked for a new Red, only to keep the number of tests: it can still weaken a test unseen. That risk closes with the recorded evidence (FR-EVID-04) and, after the MVP, the refactor's mutant (FR-REF-03);
 - the order in which the rest of the MVP is built: coverage first (FR-GATE-02), then the mutant, shelving, several FRs and the refactor; then budget limits, `progress.json`, `oid status` and `oid gate`; `init`, `doctor`/`setup` and `resume`/`abort` last.
