@@ -15,6 +15,7 @@ const DEFAULT_RETRIES = 2;
 const DEFAULT_TURNS = 40;
 // Built scenarios have needed at most 2 rounds in the runs so far.
 const DEFAULT_ROUNDS = 6;
+const DEFAULT_COMPLEXITY = 10;
 
 export interface Limits {
   /** How many times a refused attempt is retried (docs/design.md §2). */
@@ -23,12 +24,19 @@ export interface Limits {
   turns: number;
   /** How many rounds of test and code attempts a scenario may take, however its failure moves (FR-RUN-09). */
   rounds: number;
+  /** The complexity above which a function the FR changed is a finding (FR-REF-01). */
+  complexity: number;
 }
 
 export async function readLimits(dir: string): Promise<Limits> {
   const config = await readConfig(dir);
   const limits = config.limits;
-  return { retries: limits?.retries ?? DEFAULT_RETRIES, turns: limits?.turns ?? DEFAULT_TURNS, rounds: limits?.rounds ?? DEFAULT_ROUNDS };
+  return {
+    retries: limits?.retries ?? DEFAULT_RETRIES,
+    turns: limits?.turns ?? DEFAULT_TURNS,
+    rounds: limits?.rounds ?? DEFAULT_ROUNDS,
+    complexity: limits?.complexity ?? DEFAULT_COMPLEXITY,
+  };
 }
 
 /** The project's own files a task reads, when `.oid.json` names them (FR-AGENT-03). */
