@@ -1,6 +1,6 @@
 {
   "name": "oid",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "private": true,
   "description": "oid — Outside-In Development: coding agents build software from a verifiable contract",
   "license": "MIT",
