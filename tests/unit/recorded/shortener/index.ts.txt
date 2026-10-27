@@ -1,0 +1,122 @@
+import { randomBytes } from "node:crypto";
+
+export class Shortener {
+  private readonly urlsByCode = new Map<string, string>();
+  private readonly codesByUrl = new Map<string, string>();
+  private readonly expirationByCode = new Map<string, number>();
+  private readonly visitsByCode = new Map<string, number>();
+  private readonly codeGenerator: () => string;
+  private readonly clock: () => Date;
+
+  constructor(options: { codeGenerator?: () => string; clock?: () => Date } = {}) {
+    this.codeGenerator = options.codeGenerator ?? (() => randomBytes(6).toString("base64url"));
+    this.clock = options.clock ?? (() => new Date());
+  }
+
+  async shorten(url: string, options: { code?: string; lifetimeSeconds?: number } = {}): Promise<string> {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error(`Invalid URL: ${url} is not a valid URL`);
+    }
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("Only http and https URLs are accepted");
+    }
+
+    if (options.code !== undefined && !/^[A-Za-z0-9_-]{6,8}$/.test(options.code)) {
+      throw new Error(`Custom code is not valid: ${options.code}`);
+    }
+
+    const existingCode = this.codesByUrl.get(url);
+    if (existingCode !== undefined) {
+      const expiresAt = this.expirationByCode.get(existingCode);
+      if (expiresAt === undefined || this.clock().getTime() <= expiresAt) {
+        return existingCode;
+      }
+      this.removeCode(existingCode, url);
+    }
+
+    let code = options.code ?? this.codeGenerator();
+    if (options.code !== undefined && this.urlsByCode.has(code)) {
+      throw new Error(`Custom code is taken: ${code}`);
+    }
+    while (options.code === undefined && this.urlsByCode.has(code)) {
+      code = this.codeGenerator();
+    }
+    this.urlsByCode.set(code, url);
+    this.codesByUrl.set(url, code);
+    this.visitsByCode.set(code, 0);
+    if (options.lifetimeSeconds !== undefined) {
+      this.expirationByCode.set(code, this.clock().getTime() + options.lifetimeSeconds * 1000);
+    }
+    return code;
+  }
+
+  async revoke(code: string): Promise<void> {
+    const url = this.urlsByCode.get(code);
+    if (url === undefined) {
+      throw new Error(`Unknown code: ${code}`);
+    }
+    this.removeCode(code, url);
+  }
+
+  visits(code: string): number {
+    const visits = this.visitsByCode.get(code);
+    if (visits === undefined) {
+      throw new Error(`Unknown code: ${code}`);
+    }
+    return visits;
+  }
+
+  async resolve(code: string): Promise<string> {
+    const url = this.urlsByCode.get(code);
+    if (url === undefined) {
+      throw new Error(`Unknown code: ${code}`);
+    }
+    const expiresAt = this.expirationByCode.get(code);
+    if (this.clock().getTime() > (expiresAt as number)) {
+      this.removeCode(code, url);
+      throw new Error(`Code has expired: ${code}`);
+    }
+    this.visitsByCode.set(code, this.visitsByCode.get(code)! + 1);
+    return url;
+  }
+
+  async repoint(code: string, newUrl: string): Promise<void> {
+    const oldUrl = this.urlsByCode.get(code);
+    if (oldUrl === undefined) {
+      throw new Error(`Unknown code: ${code}`);
+    }
+    const expiresAt = this.expirationByCode.get(code);
+    if (expiresAt !== undefined && this.clock().getTime() > expiresAt) {
+      this.removeCode(code, oldUrl);
+      throw new Error(`Code has expired: ${code}`);
+    }
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(newUrl);
+    } catch {
+      throw new Error(`Invalid URL: ${newUrl} is not a valid URL`);
+    }
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("Only http and https URLs are accepted");
+    }
+    const existingCodeForNewUrl = this.codesByUrl.get(newUrl);
+    if (existingCodeForNewUrl !== undefined && existingCodeForNewUrl !== code) {
+      throw new Error(`URL already has a code: ${newUrl}`);
+    }
+    this.codesByUrl.delete(oldUrl);
+    this.urlsByCode.set(code, newUrl);
+    this.codesByUrl.set(newUrl, code);
+  }
+
+  private removeCode(code: string, url: string): void {
+    this.urlsByCode.delete(code);
+    if (this.codesByUrl.get(url) === code) {
+      this.codesByUrl.delete(url);
+    }
+    this.expirationByCode.delete(code);
+  }
+}
