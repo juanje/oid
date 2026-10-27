@@ -118,6 +118,7 @@ What a run prints as it goes (FR-CLI-05), one line per event of its log. Scenari
 | An attempt asks for another kind | `request for "<scenario>": the <kind> attempt asks for a <kind> attempt` | `: ` and its reason, then `, not followed` when the run does not follow it |
 | A round makes no progress | `round for "<scenario>": no progress` | `, still failing at step "<step>"` |
 | A provisional Red is settled | `  Red confirmed by attempt <NN>` or `  Red refuted by attempt <NN>` | `: ` and the scenario or test; `<NN>` is the attempt's transcript number |
+| A cleanup item is settled | `cleanup <category> at <file>:<line>:` | `accepted`, or `not accepted: <what failed>` (FR-REF-02) |
 
 ### Configuration
 
