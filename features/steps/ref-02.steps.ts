@@ -64,16 +64,21 @@ Then("every scenario and unit test passes on the run's branch", async function (
   assert.equal(units.exitCode, 0, `vitest failed on the run's branch:\n${units.output}`);
 });
 
+/** The one cleanup line of the run's output (DOMAIN.md, Progress lines). */
+function cleanupLine(world: RunWorld): string {
+  const lines = world.output.split("\n").filter((line) => line.startsWith("cleanup "));
+  assert.equal(lines.length, 1, `Expected one cleanup line in the output:\n${world.output}`);
+  return lines[0]!;
+}
+
 Then("the output reports the cleanup item as accepted", function (this: RunWorld) {
-  const lines = this.output.split("\n").filter((line) => line.startsWith("cleanup "));
-  assert.equal(lines.length, 1, `Expected one cleanup line in the output:\n${this.output}`);
-  assert.match(lines[0]!, /: accepted\b/, `The cleanup line does not say accepted:\n${lines[0]}`);
+  const line = cleanupLine(this);
+  assert.match(line, /: accepted\b/, `The cleanup line does not say accepted:\n${line}`);
 });
 
 Then("the output reports the cleanup item as not accepted", function (this: RunWorld) {
-  const lines = this.output.split("\n").filter((line) => line.startsWith("cleanup "));
-  assert.equal(lines.length, 1, `Expected one cleanup line in the output:\n${this.output}`);
-  assert.match(lines[0]!, /: not accepted\b/, `The cleanup line does not say not accepted:\n${lines[0]}`);
+  const line = cleanupLine(this);
+  assert.match(line, /: not accepted\b/, `The cleanup line does not say not accepted:\n${line}`);
 });
 
 Then("the FR's commit has the code the code attempt left", async function (this: RunWorld) {
