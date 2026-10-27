@@ -5,7 +5,7 @@ import { runAttempt } from "./attempt.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { judgeCode, noTestSuiteFiles } from "./evidence.ts";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt } from "./executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext } from "./executor.ts";
 import type { Failing } from "./inner-loop.ts";
 import type { Refusal } from "./refusal.ts";
 import type { Tried } from "./retries.ts";
@@ -88,9 +88,9 @@ export function failingOf(result: ScenarioRun | undefined): Failing | undefined 
 }
 
 /** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
-export async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"]) {
+export async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"], given?: TaskContext) {
   const location = locationOf(scenario);
-  const context = await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location), { asked: asked !== undefined, layout: run.layout });
+  const context = given ?? (await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location), { asked: asked !== undefined, layout: run.layout }));
   await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined });
   run.attempts += 1;
   const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
@@ -116,9 +116,10 @@ export async function checkpointedAttempt(
   previous: Refusal | undefined,
   judge: () => Promise<Refusal | undefined>,
   asked?: Attempt["asked"],
+  given?: TaskContext,
 ): Promise<Tried & { next?: NextAttempt }> {
   const accepted = await acceptedWork(run.worktree.dir);
-  const attempt = await attemptFor(run, kind, scenario, previous, asked);
+  const attempt = await attemptFor(run, kind, scenario, previous, asked, given);
   if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
   const refusal = attempt.refusal ?? (await judge());
   await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, asked: asked !== undefined }));

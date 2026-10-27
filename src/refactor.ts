@@ -1,13 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { runAttempt } from "./attempt.ts";
 import { addedLines } from "./coverage.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { detectFindings, type Finding, findingText } from "./findings.ts";
 import { git } from "./git.ts";
-import { type Tried, withRetries } from "./retries.ts";
-import { attemptEvent, type FrRun } from "./run-attempts.ts";
-import { acceptedWork, checkpoint } from "./worktree.ts";
+import { withRetries } from "./retries.ts";
+import { checkpointedAttempt, type FrRun } from "./run-attempts.ts";
+import { acceptedWork } from "./worktree.ts";
 
 // The FR-scale refactor (D-07): once every scenario of the FR is green and before its gate, the two
 // detectors run on the FR's diff against the whole source, and each finding gets a cleanup agent,
@@ -49,26 +48,8 @@ async function sourceAt(dir: string, since: string, source: string[]): Promise<M
   return files;
 }
 
-/** One cleanup attempt for one finding, checkpointed when accepted, as any attempt is. */
-async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, previous: Parameters<typeof runAttempt>[0]["refusal"]): Promise<Tried> {
-  const accepted = await acceptedWork(run.worktree.dir);
-  await run.record({ event: "attempting", kind: "refactor-code", scenario: scenario.name, retry: previous !== undefined });
-  run.attempts += 1;
-  const attempt = await runAttempt({
-    executor: run.executor,
-    kind: "refactor-code",
-    fr: run.fr,
-    scenario,
-    worktreeDir: run.worktree.dir,
-    layout: run.layout,
-    refusal: previous,
-    turns: run.turns,
-    context: { ...run.texts, steps: [], finding: findingText(finding, await sourceNow(run)) },
-    transcript: join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-refactor-code.jsonl`),
-  });
-  if (attempt.report !== undefined) run.reports.set("refactor-code", attempt.report);
-  const refusal = attempt.refusal;
-  await run.record(attemptEvent({ kind: "refactor-code", scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome }));
-  if (refusal === undefined) await checkpoint(run.worktree, `cleanup for "${finding.id}"`);
-  return { refusal, rollback: accepted.restore };
+/** One cleanup attempt for one finding, checkpointed when accepted, as any attempt is (judged by FR-REF-02). */
+async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, previous: Parameters<typeof checkpointedAttempt>[3]) {
+  const context = { ...run.texts, steps: [], finding: findingText(finding, await sourceNow(run)) };
+  return checkpointedAttempt(run, "refactor-code", scenario, previous, async () => undefined, undefined, context);
 }
