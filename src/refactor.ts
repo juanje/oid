@@ -1,25 +1,30 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { runCommand } from "./command.ts";
 import { addedLines } from "./coverage.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { detectFindings, type Finding, findingText } from "./findings.ts";
+import { detectFindings, type Finding, findingSignature, findingText, sourceMeasures, worseMeasures } from "./findings.ts";
+import { type CheckResult, runGate } from "./gate.ts";
 import { git } from "./git.ts";
+import { changedExports, exportSignatures, type ModuleExports } from "./module-exports.ts";
+import type { Refusal } from "./refusal.ts";
 import { withRetries } from "./retries.ts";
 import { checkpointedAttempt, type FrRun } from "./run-attempts.ts";
 import { acceptedWork } from "./worktree.ts";
 
 // The FR-scale refactor (D-07): once every scenario of the FR is green and before its gate, the two
 // detectors run on the FR's diff against the whole source, and each finding gets a cleanup agent,
-// one per attempt (FR-REF-01, FR-REF-02). With no finding, no agent runs.
+// one per attempt, whose item is accepted only when nothing behaviour-shaped moved (FR-REF-01, FR-REF-02).
 
-/** Runs the detectors on the FR's diff since `since` and a cleanup attempt per finding; never stops the FR. */
-export async function refactorPass(run: FrRun, scenario: Scenario, since: string): Promise<void> {
+/** Runs the detectors on the FR's diff since `since` and a cleanup item per finding; never stops the FR. */
+export async function refactorPass(run: FrRun, scenario: Scenario, since: string, scope: string[]): Promise<void> {
   const findings = await findingsOnDiff(run, since);
   for (const finding of findings) {
     const accepted = await acceptedWork(run.worktree.dir);
-    const refusal = await withRetries(run.retries, (previous) => cleanupOnce(run, scenario, finding, previous));
+    const refusal = await withRetries(run.retries, (previous) => cleanupOnce(run, scenario, finding, previous, since, scope));
     // When the item's retries run out, it goes back to the last checkpoint and the FR goes on (FR-REF-02).
     if (refusal !== undefined) await accepted.restore();
+    await run.record({ event: "cleanup", fr: run.fr, finding, verdict: refusal === undefined ? "accepted" : "not accepted", ...(refusal === undefined ? {} : { failed: refusal.failed }) });
   }
 }
 
@@ -48,8 +53,60 @@ async function sourceAt(dir: string, since: string, source: string[]): Promise<M
   return files;
 }
 
-/** One cleanup attempt for one finding, checkpointed when accepted, as any attempt is (judged by FR-REF-02). */
-async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, previous: Parameters<typeof checkpointedAttempt>[3]) {
-  const context = { ...run.texts, steps: [], finding: findingText(finding, await sourceNow(run)) };
-  return checkpointedAttempt(run, "refactor-code", scenario, previous, async () => undefined, undefined, context);
+/** What the item is judged against: the source, its findings, its API and its measures before the attempt. */
+interface BeforeItem {
+  files: Map<string, string>;
+  signatures: Set<string>;
+  exports: ModuleExports;
+}
+
+/** One cleanup attempt for one finding, checkpointed when accepted, as any attempt is (FR-REF-02). */
+async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, previous: Refusal | undefined, since: string, scope: string[]) {
+  const files = await sourceNow(run);
+  const before: BeforeItem = {
+    files,
+    signatures: new Set((await findingsOnDiff(run, since)).map((one) => findingSignature(one, files))),
+    exports: await exportSignatures(run.worktree.dir, [...files.keys()]),
+  };
+  const context = { ...run.texts, steps: [], finding: findingText(finding, files) };
+  const judge = () => judgeCleanup(run, finding, before, since, scope);
+  return checkpointedAttempt(run, "refactor-code", scenario, previous, judge, undefined, context);
+}
+
+const CLEAN_WITHOUT_CHANGING = "Clean without changing behaviour: remove the finding and nothing else, keeping every test, scenario and export as it is";
+
+/** An item is accepted only when its findings are gone, none is new, the API and the measures hold, and every check passes. */
+async function judgeCleanup(run: FrRun, finding: Finding, before: BeforeItem, since: string, scope: string[]): Promise<Refusal | undefined> {
+  const after = await sourceNow(run);
+  const findings = await findingsOnDiff(run, since);
+  const itemSignature = findingSignature(finding, before.files);
+  const still = findings.find((one) => findingSignature(one, after) === itemSignature);
+  if (still !== undefined) {
+    return { failed: "The cleanup left its finding in place", evidence: findingText(still, after), next: CLEAN_WITHOUT_CHANGING };
+  }
+  const added = findings.filter((one) => !before.signatures.has(findingSignature(one, after)));
+  if (added.length > 0) {
+    return { failed: "The cleanup added a new finding", evidence: added.map((one) => findingText(one, after)).join("\n"), next: CLEAN_WITHOUT_CHANGING };
+  }
+  const api = changedExports(before.exports, await exportSignatures(run.worktree.dir, [...after.keys()]));
+  if (api.length > 0) {
+    return { failed: "The cleanup changed the public API", evidence: api.join("\n"), next: "Keep every module exporting the same names with the same signatures; a rename that tests or steps import is not a cleanup's to make" };
+  }
+  const worse = worseMeasures(sourceMeasures(before.files), sourceMeasures(after));
+  if (worse.length > 0) {
+    return { failed: "The cleanup made a measure worse", evidence: worse.join("\n"), next: CLEAN_WITHOUT_CHANGING };
+  }
+  const checks = await runGate(run.worktree.dir, runCommand, { start: since, scenarios: scope, source: run.layout.writable.code, vitest: run.vitest });
+  return checksRefusal(checks);
+}
+
+/** The refusal of a cleanup that left a check failing: every test and scenario must pass, the coverage check included. */
+function checksRefusal(checks: CheckResult[]): Refusal | undefined {
+  const failed = checks.filter((check) => !check.passed);
+  if (failed.length === 0) return undefined;
+  return {
+    failed: `The cleanup left checks failing: ${failed.map((check) => check.name).join(", ")}`,
+    evidence: failed.map((check) => `${check.name}:\n${check.failures?.join("\n") ?? check.error ?? check.output}`).join("\n"),
+    next: CLEAN_WITHOUT_CHANGING,
+  };
 }

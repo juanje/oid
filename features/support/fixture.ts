@@ -111,6 +111,11 @@ export async function typeCheckAt(dir: string, ref: string): Promise<{ exitCode:
   return runAt(dir, ref, ["tsc", "--noEmit"]);
 }
 
+/** Checks `ref` out in a new temporary worktree and runs the whole unit suite there. */
+export async function runUnitTestsAt(dir: string, ref: string): Promise<{ exitCode: number; output: string }> {
+  return runAt(dir, ref, ["vitest", "run"]);
+}
+
 /** Runs `npx <args>` in a new temporary worktree of `ref`, with the real tools oid itself is tested with. */
 async function runAt(dir: string, ref: string, args: string[]): Promise<{ exitCode: number; output: string }> {
   const checkout = await mkdtemp(join(tmpdir(), "oid-checkout-"));

@@ -182,10 +182,10 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   if (builtRefusal !== undefined) return refuse(builtRefusal, out);
   // An attempt after the gate belongs to the FR's last scenario; its refusal's evidence and focus say what to fix.
   const last = scenarios[scenarios.length - 1]!;
-  // The FR's refactor: detectors on its diff, a cleanup per finding, before its gate (FR-REF-01, D-07).
-  await refactorPass(run, last, since);
-  await record({ event: "stage", stage: "gate" });
   const { scope, leftOut } = gateScope(all, passing, run.green);
+  // The FR's refactor: detectors on its diff, a cleanup per finding, before its gate (FR-REF-01, D-07).
+  await refactorPass(run, last, since, scope);
+  await record({ event: "stage", stage: "gate" });
   await record({ event: "scope", fr, leftOut });
   const gate = await gateLoop(
     retries,
