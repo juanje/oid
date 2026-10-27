@@ -134,3 +134,29 @@ describe("ownerOf", () => {
     expect(["scripts/build.ts", "vitest.config.ts", "features/greet-01.feature"].map((file) => ownerOf(file))).toEqual(["code", "code", "code"]);
   });
 });
+
+describe("the refactor-code kind (FR-REF-02)", () => {
+  test("a cleanup attempt may write source only: tests, step definitions and feature files stay fixed", () => {
+    expect(outsideBoundary("refactor-code", ["src/greet.ts", "src/name-check.ts", "tests/greet.test.ts", "features/steps/greet.steps.ts", "features/greet-01.feature"])).toEqual([
+      "tests/greet.test.ts",
+      "features/steps/greet.steps.ts",
+      "features/greet-01.feature",
+    ]);
+  });
+
+  test("a cleanup attempt writes under every path the project gives the source", () => {
+    const layout: Layout = {
+      spec: "SPEC.md",
+      features: "features/",
+      writable: { steps: ["features/steps/"], test: ["tests/"], code: ["src/", "shared/"] },
+    };
+    expect(outsideBoundary("refactor-code", ["src/greet.ts", "shared/names.ts", "tests/greet.test.ts"], layout)).toEqual(["tests/greet.test.ts"]);
+  });
+
+  test("judgeBoundary refuses a cleanup diff that edits a unit test, naming the file", () => {
+    const refusal = judgeBoundary("refactor-code", { files: ["src/greet.ts", "tests/greet.test.ts"], added: [] });
+    expect(refusal).toBeDefined();
+    expect(refusal!.evidence).toContain("tests/greet.test.ts");
+    expect(refusal!.next).toContain("src/");
+  });
+});

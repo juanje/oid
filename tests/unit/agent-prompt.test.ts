@@ -197,3 +197,24 @@ describe("taskFor", () => {
     expect(task).toContain(REFUSAL.next);
   });
 });
+
+describe("the cleanup agent's prompt (FR-REF-02)", () => {
+  test("has the common facts, its own identity apart from the code agent's, the source paths it may write and the tools", () => {
+    const prompt = systemPromptFor("refactor-code");
+
+    expect(prompt.split(/\n\s*\n/)).toContain(OID_FACTS);
+    expect(prompt).not.toBe(systemPromptFor("code"));
+    for (const path of WRITABLE.code) expect(prompt).toContain(path);
+    for (const tool of AGENT_TOOLS) expect(prompt).toMatch(new RegExp(`\\b${tool.name}\\b`));
+  });
+
+  test("a cleanup task opens with its job and gives the finding, the FR and no scenario steps", () => {
+    const finding = "duplication: src/greet-all.ts:2-8 (greetAll) repeats src/greet.ts:2-7 (greet): 5 duplicated lines";
+    const task = taskFor({ kind: "refactor-code", fr: "FR-GREET-02", scenario: SCENARIO, context: { ...CONTEXT, steps: [], finding } });
+
+    expect(task).toContain(finding);
+    expect(task).toContain("FR-GREET-02");
+    expect(task).toContain(CONTEXT.fr);
+    expect(task).not.toContain("Write the refactor-code attempt");
+  });
+});
