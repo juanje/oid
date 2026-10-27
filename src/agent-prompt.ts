@@ -1,7 +1,7 @@
 import { AGENT_TOOLS } from "./agent-tools.ts";
-import { DEFAULT_LAYOUT, type Layout } from "./boundaries.ts";
+import { DEFAULT_LAYOUT, type Layout, writablePaths } from "./boundaries.ts";
 import { RUNNERS, runnerText } from "./runners.ts";
-import type { Attempt, AttemptKind, TaskContext } from "./executor.ts";
+import type { Attempt, AttemptKind, PathsKind, TaskContext } from "./executor.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 
 // A system prompt is parts separated by blank lines: the common facts, then the kind's identity, its limits and its
@@ -47,6 +47,10 @@ const IDENTITY = (spec: string): Record<AttemptKind, string> => ({
     "You are oid's code agent. You write the source that makes the failing test pass, and the scenario once its parts exist. You do not change tests, step definitions or feature files.",
     `You value stopping at the failing test, even when ${spec} describes more: code for a behaviour no test asks for yet leaves the next test agent nothing that can fail, so that behaviour can no longer be proved Red first. The other requirements come later, each with its scenario and its tests.`,
   ].join(" "),
+  "refactor-code": [
+    "You are oid's cleanup agent. Every scenario of the FR passes; you remove one finding from the source — a duplication or a function too complex — without changing what the code does. You do not change tests, step definitions or feature files.",
+    "You value the smallest change that removes the finding: the unchanged tests are the proof that the behaviour did not change, and the unchanged exports keep valid everything that imports them.",
+  ].join(" "),
 });
 
 const PROCEDURE = (spec: string): Record<AttemptKind, string[]> => ({
@@ -65,12 +69,18 @@ const PROCEDURE = (spec: string): Record<AttemptKind, string[]> => ({
     "Write the simplest code that makes it pass, and stop there: code no test asks for yet costs the run extra cycles and leaves code that no test checks. Do not change tests, step definitions or feature files: if one looks wrong, say so in your report.",
     "Check with try the failing test, then your scenario (scenario: true), and fix the type errors in the files you changed.",
   ],
+  "refactor-code": [
+    "Read the finding in your task and the code at each of its places.",
+    "Remove the finding with the smallest change that keeps the behaviour: extract a repeated run into one piece that every place calls, or split a function too complex into smaller ones. Keep every module exporting the same names with the same signatures, and add nothing the finding does not ask for.",
+    "Check with try your scenario (scenario: true), and fix the type errors in the files you changed.",
+  ],
 });
 
 const SUCCESS: Record<AttemptKind, string> = {
   steps: "The scenario runs and fails, for the reason its missing behaviour gives.",
   test: "The new test fails before its code exists, for the reason its missing piece gives.",
   code: "The failing test passes, nothing that passed fails, and your scenario passes once its parts exist.",
+  "refactor-code": "The finding is gone, no new one appears, and every test and scenario passes as before, none of them changed.",
 };
 
 /** The system prompt of an attempt's agent: the common facts, then its kind's identity, limits and procedure (FR-AGENT-02). */
@@ -82,10 +92,10 @@ export function systemPromptFor(kind: AttemptKind, layout: Layout = DEFAULT_LAYO
 const RUNS: Partial<Record<AttemptKind, (typeof RUNNERS)[keyof typeof RUNNERS]>> = { test: RUNNERS.unit, steps: RUNNERS.scenarios };
 
 /** The kind's limits, generated from the boundary, the tools and the runners that enforce them (NFR-04). */
-function limitsOf(kind: AttemptKind, { writable, spec }: Layout): string {
+function limitsOf(kind: AttemptKind, layout: Layout): string {
   const tools = AGENT_TOOLS.map((tool) => `${tool.name} ${tool.does}`).join("; ");
   return [
-    `You may write only under ${writable[kind].join(", ")}. No agent writes feature files, ${spec}, the gate's configuration or oid's state: a diff outside your paths is refused, naming the files.`,
+    `You may write only under ${writablePaths(kind, layout).join(", ")}. No agent writes feature files, ${layout.spec}, the gate's configuration or oid's state: a diff outside your paths is refused, naming the files.`,
     `Your tools: ${tools}. You have no shell.`,
     ...(RUNS[kind] === undefined ? [] : [runnerText(RUNS[kind])]),
   ].join("\n");
@@ -93,7 +103,8 @@ function limitsOf(kind: AttemptKind, { writable, spec }: Layout): string {
 
 /** How to ask for the attempt kind that owns a cause outside the kind's paths, from the paths each kind writes (FR-RUN-04). */
 function askFor(kind: AttemptKind, { writable }: Layout): string {
-  const others = (Object.keys(writable) as AttemptKind[]).filter((other) => other !== kind);
+  if (kind === "refactor-code") return "If the cleanup cannot be made without changing a test, a step definition or an export, change nothing: end with report saying why.";
+  const others = (Object.keys(writable) as PathsKind[]).filter((other) => other !== kind);
   const owners = others.map((other) => `a ${other} attempt writes ${writable[other].join(", ")}`).join("; ");
   return `If the cause of the failure lies outside your paths, change nothing to work around it: end with report asking, in next, for the kind of attempt that owns those paths, and say why (${owners}).`;
 }
@@ -132,7 +143,7 @@ function failureText({ step, message, definition }: NonNullable<TaskContext["fai
 }
 
 // What each kind writes, for the opening of a repair's task.
-const WRITES: Record<AttemptKind, string> = { steps: "step definitions", test: "unit tests", code: "source" };
+const WRITES: Record<AttemptKind, string> = { steps: "step definitions", test: "unit tests", code: "source", "refactor-code": "source" };
 
 /**
  * The task of one attempt: what to build, from what the run gathered for it, and, for a retry, why the attempt before
@@ -141,7 +152,8 @@ const WRITES: Record<AttemptKind, string> = { steps: "step definitions", test: "
  */
 export function taskFor({ kind, fr, scenario, refusal, asked, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "asked" | "context">): string {
   const repair = repairOpening({ kind, fr, scenario, refusal, asked, context });
-  const parts = repair ?? [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
+  const cleanup = context?.finding === undefined ? undefined : [`Remove this finding from the source of ${fr}, without changing what the code does:\n${context.finding}`];
+  const parts = repair ?? cleanup ?? [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
   if (context?.fr !== undefined) parts.push(`The FR, from the spec:\n${context.fr}`);
   if (context?.domain !== undefined) parts.push(`The project's domain:\n${context.domain}`);
   if (context?.conventions !== undefined) parts.push(`The project's conventions:\n${context.conventions}`);

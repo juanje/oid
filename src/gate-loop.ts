@@ -1,5 +1,5 @@
 import { ownerOf } from "./boundaries.ts";
-import type { AttemptKind } from "./executor.ts";
+import type { PathsKind } from "./executor.ts";
 import { type CheckResult, gateError, gateRefusal } from "./gate.ts";
 import type { Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
@@ -9,7 +9,7 @@ export type GateOutcome = { error: string } | { refusal: Refusal | undefined };
 const KEEP_THE_CODE = async (): Promise<void> => {};
 
 // Outside-in: the attempt the gate sends back first, when failures belong to several kinds.
-const OUTSIDE_IN: AttemptKind[] = ["steps", "test", "code"];
+const OUTSIDE_IN: PathsKind[] = ["steps", "test", "code"];
 
 /**
  * Runs the gate before the FR's commit (FR-GATE-04). A failure goes back to the attempt kind that can fix it, with
@@ -21,12 +21,12 @@ const OUTSIDE_IN: AttemptKind[] = ["steps", "test", "code"];
 export async function gateLoop(
   retries: number,
   gate: () => Promise<CheckResult[]>,
-  afterGate: (kind: AttemptKind, refusal: Refusal) => Promise<Tried>,
-  onGate: (refusal: Refusal | undefined, sendTo: AttemptKind | undefined) => Promise<void> = async () => {},
-  owner: (file: string) => AttemptKind = (file) => ownerOf(file),
+  afterGate: (kind: PathsKind, refusal: Refusal) => Promise<Tried>,
+  onGate: (refusal: Refusal | undefined, sendTo: PathsKind | undefined) => Promise<void> = async () => {},
+  owner: (file: string) => PathsKind = (file) => ownerOf(file),
 ): Promise<GateOutcome> {
   let error: string | undefined;
-  let kind: AttemptKind = "code";
+  let kind: PathsKind = "code";
   let tests: number | undefined;
   const refusal = await withRetries(retries, async (previous): Promise<Tried> => {
     if (previous !== undefined) {
@@ -54,7 +54,7 @@ export async function gateLoop(
 }
 
 /** The kind the gate's failures go back to, outside-in, or none when a failure is not one an attempt can be sent to fix. */
-function ownerOfFailures(results: CheckResult[], owner: (file: string) => AttemptKind): AttemptKind | undefined {
+function ownerOfFailures(results: CheckResult[], owner: (file: string) => PathsKind): PathsKind | undefined {
   const failed = results.filter((result) => !result.passed);
   const kinds = failed.map((result) => {
     // A branch no test runs is code no test asks for: a code attempt removes it (FR-GATE-02).

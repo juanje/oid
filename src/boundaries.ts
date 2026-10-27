@@ -1,9 +1,9 @@
 import { basename } from "node:path";
-import type { AttemptKind } from "./executor.ts";
+import type { AttemptKind, PathsKind } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
 
 // What each attempt kind may write (D-05), when the project's .oid.json does not say otherwise.
-export const WRITABLE: Record<AttemptKind, string[]> = {
+export const WRITABLE: Record<PathsKind, string[]> = {
   steps: ["features/steps/", "features/support/"],
   test: ["tests/"],
   code: ["src/"],
@@ -13,9 +13,14 @@ export const WRITABLE: Record<AttemptKind, string[]> = {
 export interface Layout {
   spec: string;
   features: string;
-  writable: Record<AttemptKind, string[]>;
+  writable: Record<PathsKind, string[]>;
   /** The files a runner's configuration loads with every test, when it loads any: the gate's configuration, wherever they sit. */
   loaded?: string[];
+}
+
+/** The paths an attempt of `kind` may write: a cleanup (refactor-code) writes the source, as a code attempt does (FR-REF-02). */
+export function writablePaths(kind: AttemptKind, layout: Layout): string[] {
+  return layout.writable[kind === "refactor-code" ? "code" : kind];
 }
 
 export const DEFAULT_LAYOUT: Layout = { spec: "SPEC.md", features: "features/", writable: WRITABLE, loaded: [] };
@@ -59,15 +64,15 @@ function unwritable(file: string, layout: Layout): boolean {
 
 /** The files an attempt of `kind` wrote outside what it may write, at the project's paths. */
 export function outsideBoundary(kind: AttemptKind, files: string[], layout: Layout = DEFAULT_LAYOUT): string[] {
-  return files.filter((file) => unwritable(file, layout) || !layout.writable[kind].some((path) => file.startsWith(path)));
+  return files.filter((file) => unwritable(file, layout) || !writablePaths(kind, layout).some((path) => file.startsWith(path)));
 }
 
 /**
  * The attempt kind that owns `file`: the one that may write it. No kind writes a feature file or the gate's
  * configuration, so an error in one goes to a code attempt: its cause is almost always in the source (FR-GATE-04).
  */
-export function ownerOf(file: string, layout: Layout = DEFAULT_LAYOUT): AttemptKind {
-  const kinds = Object.keys(layout.writable) as AttemptKind[];
+export function ownerOf(file: string, layout: Layout = DEFAULT_LAYOUT): PathsKind {
+  const kinds = Object.keys(layout.writable) as PathsKind[];
   return kinds.find((kind) => outsideBoundary(kind, [file], layout).length === 0) ?? "code";
 }
 
@@ -104,7 +109,7 @@ export function judgeBoundary(kind: AttemptKind, diff: { files: string[]; added:
     return {
       failed: `The ${kind} attempt wrote outside what it may write`,
       evidence: outside.join("\n"),
-      next: `Write only under ${layout.writable[kind].join(", ")}; feature files, ${layout.spec} and the gate's configuration belong to no attempt`,
+      next: `Write only under ${writablePaths(kind, layout).join(", ")}; feature files, ${layout.spec} and the gate's configuration belong to no attempt`,
     };
   }
   const forbidden = forbiddenLines(diff.added);

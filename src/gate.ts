@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import { type CommandRunner, TYPESCRIPT_STEPS_ENV, projectBin } from "./command.ts";
 import { type CoverageReport, addedLines, scenarioCoverage, uncoveredNew, unitCoverage, untaken } from "./coverage.ts";
 import type { ScenarioResult } from "./cucumber-messages.ts";
-import type { AttemptKind } from "./executor.ts";
+import type { PathsKind } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
 import { git, reportPath } from "./git.ts";
 import { runAllScenarios } from "./scenarios.ts";
@@ -149,14 +149,15 @@ export function gateError(results: CheckResult[]): string | undefined {
 }
 
 // What the attempt the gate sends back is told to do: its own kind's part, never another's (FR-GATE-04).
-const NEXT_STEP: Record<AttemptKind, string> = {
+// The gate sends work back to a kind that owns files; a cleanup (refactor-code) is never one of them.
+const NEXT_STEP: Record<PathsKind, string> = {
   code: "Fix the code so that every check passes, without changing the tests or the scenarios",
   test: "Fix these errors in the unit tests, keeping what each test asserts",
   steps: "Fix these errors in the step definitions, keeping what each step asserts",
 };
 
 /** The gate's refusal: every failed check, with its failures, or its output when it has none, as the evidence; its next step is for the kind of attempt it goes back to. */
-export function gateRefusal(results: CheckResult[], sendTo: AttemptKind = "code"): Refusal | undefined {
+export function gateRefusal(results: CheckResult[], sendTo: PathsKind = "code"): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);
   if (failed.length === 0) return undefined;
   const scenarios = failed

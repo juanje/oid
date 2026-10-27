@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
-import type { AttemptKind } from "../../src/executor.ts";
+import type { AttemptKind, PathsKind } from "../../src/executor.ts";
 import { createGreetProjectWith, greet03AttemptDir, scenarioNames, typeCheckAt } from "../support/fixture.ts";
 import { assertOutputNames, requestsOf, runBranch, runLog } from "../support/run.ts";
 import type { PreparedAttempt } from "../support/scripted-executor.ts";
@@ -51,7 +51,7 @@ Then("the output names the scenario of FR-GREET-02 that fails", function (this: 
 });
 
 /** For each kind, its prepared attempt with a type error no test catches, and the file the error is in. */
-const TYPE_ERRORS: Record<AttemptKind, { dir: string; file: string }> = {
+const TYPE_ERRORS: Record<PathsKind, { dir: string; file: string }> = {
   code: { dir: "code-type-error", file: "src/greet.ts" },
   test: { dir: "test-type-error", file: "tests/greet-with.test.ts" },
   steps: { dir: "steps-type-error", file: "features/steps/greet-with.steps.ts" },
@@ -59,14 +59,14 @@ const TYPE_ERRORS: Record<AttemptKind, { dir: string; file: string }> = {
 
 Given(
   "the scripted {word} attempt for FR-GREET-03 leaves a type error in {} that no test catches, and its attempt after the gate fixes it",
-  function (this: RunWorld, kind: AttemptKind, _file: string) {
+  function (this: RunWorld, kind: PathsKind, _file: string) {
     const withError = this.script.map((attempt) => (attempt.kind === kind ? { ...attempt, dir: greet03AttemptDir(TYPE_ERRORS[kind].dir) } : attempt));
     const fix = this.script.find((attempt) => attempt.kind === kind)!;
     this.script = [...withError, fix];
   },
 );
 
-Then("the {word} attempt after the gate was given the type error, naming its file", function (this: RunWorld, kind: AttemptKind) {
+Then("the {word} attempt after the gate was given the type error, naming its file", function (this: RunWorld, kind: PathsKind) {
   const refusal = requestsOf(this, kind, 2)[1]!.refusal;
   assert.ok(refusal !== undefined, `The ${kind} attempt after the gate came without the gate's refusal`);
   assert.ok(refusal.evidence.includes(TYPE_ERRORS[kind].file), `The refusal's evidence does not name ${TYPE_ERRORS[kind].file}:\n${refusal.evidence}`);

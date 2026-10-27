@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_LAYOUT, type Layout } from "./boundaries.ts";
-import type { AttemptKind } from "./executor.ts";
+import type { PathsKind } from "./executor.ts";
 import { ConfigError } from "./config-error.ts";
 import { git } from "./git.ts";
 import { filesRunnersLoad } from "./runner-config.ts";
@@ -38,7 +38,7 @@ export interface Paths {
 }
 
 /** The keys of `paths` in .oid.json that name what an attempt kind writes. */
-const KIND_KEYS: Record<AttemptKind, "steps" | "tests" | "code"> = { steps: "steps", test: "tests", code: "code" };
+const KIND_KEYS: Record<PathsKind, "steps" | "tests" | "code"> = { steps: "steps", test: "tests", code: "code" };
 
 /**
  * Where the project keeps each kind of file, from .oid.json's `paths` and oid's defaults (FR-AGENT-04). Paths of two
@@ -46,7 +46,7 @@ const KIND_KEYS: Record<AttemptKind, "steps" | "tests" | "code"> = { steps: "ste
  */
 export async function readLayout(dir: string): Promise<Layout> {
   const { paths } = await readConfig(dir);
-  const kinds = Object.keys(KIND_KEYS) as AttemptKind[];
+  const kinds = Object.keys(KIND_KEYS) as PathsKind[];
   const writable = Object.fromEntries(kinds.map((kind) => [kind, paths?.[KIND_KEYS[kind]] ?? DEFAULT_LAYOUT.writable[kind]])) as Layout["writable"];
   const named = kinds.flatMap((kind) => writable[kind].map((path) => ({ key: KIND_KEYS[kind], path })));
   for (const outer of named) {

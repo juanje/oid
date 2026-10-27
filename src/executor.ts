@@ -1,7 +1,10 @@
 import type { Layout } from "./boundaries.ts";
 import type { Refusal } from "./refusal.ts";
 
-export type AttemptKind = "steps" | "test" | "code";
+export type AttemptKind = "steps" | "test" | "code" | "refactor-code";
+
+/** The kinds a project's paths name (FR-AGENT-04): a refactor-code attempt writes the code's paths. */
+export type PathsKind = "steps" | "test" | "code";
 
 /**
  * What a report can submit when its scenario or new test passes before its code (FR-EVID-03): edits to the source, in
@@ -55,6 +58,8 @@ export interface TaskContext {
   /** The project's domain and its conventions, when it keeps them. */
   domain?: string;
   conventions?: string;
+  /** For a cleanup attempt, the finding it removes, rendered with its places (FR-REF-02). */
+  finding?: string;
 }
 
 /** What the executor reports of an attempt: its agent's turns, which the executor counts, never the model. */
