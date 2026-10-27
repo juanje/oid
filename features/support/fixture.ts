@@ -78,6 +78,18 @@ export function attemptDir(name: string): string {
   return join(GREET, "attempts", name);
 }
 
+/** The directory of a prepared attempt or committed source of the refactor scenarios (FR-REF-01, FR-REF-02). */
+export function refDir(name: string): string {
+  return join(GREET, "ref", name);
+}
+
+/** Copies a fixture directory over the project and commits it, as code the project had before the run. */
+export async function commitFixture(dir: string, fixture: string, message: string): Promise<void> {
+  await cp(fixture, dir, { recursive: true });
+  git(dir, "add", "--all");
+  git(dir, "commit", "-q", "-m", message);
+}
+
 /** Every file under `dir`, relative to it. */
 export async function filesUnder(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { recursive: true, withFileTypes: true });

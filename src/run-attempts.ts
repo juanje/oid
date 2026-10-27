@@ -41,6 +41,8 @@ export interface FrRun {
   turns: number;
   /** How many rounds of test and code attempts a scenario may take (FR-RUN-09). */
   rounds: number;
+  /** The complexity above which a function the FR changed is a finding (FR-REF-01). */
+  complexity: number;
   /** The last report of each attempt kind, for the person when the scenario reaches its limit of rounds. */
   reports: Map<AttemptKind, string>;
   /** Appends to the run log. */

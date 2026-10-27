@@ -11,6 +11,7 @@ import { gateLoop } from "./gate-loop.ts";
 import { type Layout, ownerOf } from "./boundaries.ts";
 import { attemptEvent, checkpointedAttempt, codeAttempt, type FrRun, locationOf, testCount } from "./run-attempts.ts";
 import { buildScenario } from "./scenario-build.ts";
+import { refactorPass } from "./refactor.ts";
 import { brokenBaseRefusal, gateScope, runIdOf, startingScenarios } from "./run-plan.ts";
 import { git } from "./git.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
@@ -134,7 +135,7 @@ async function buildFrs(
   if (noProvider !== undefined) return stop(noProvider, out);
   await record({ event: "stage", stage: "unit tests" });
   const baseline = await runUnitTests(worktree.dir, [], runCommand);
-  const { retries, turns, rounds } = await readLimits(worktree.dir);
+  const { retries, turns, rounds, complexity } = await readLimits(worktree.dir);
   // One run for every FR: the scenarios built, the tests there are, the transcripts' numbering are the run's.
   const run: FrRun = {
     executor,
@@ -149,6 +150,7 @@ async function buildFrs(
     retries,
     turns,
     rounds,
+    complexity,
     reports: new Map(),
     record,
     texts: await frTexts(worktree.dir, listed[0]!.fr, layout.spec),
@@ -180,6 +182,8 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   if (builtRefusal !== undefined) return refuse(builtRefusal, out);
   // An attempt after the gate belongs to the FR's last scenario; its refusal's evidence and focus say what to fix.
   const last = scenarios[scenarios.length - 1]!;
+  // The FR's refactor: detectors on its diff, a cleanup per finding, before its gate (FR-REF-01, D-07).
+  await refactorPass(run, last, since);
   await record({ event: "stage", stage: "gate" });
   const { scope, leftOut } = gateScope(all, passing, run.green);
   await record({ event: "scope", fr, leftOut });
