@@ -18,7 +18,7 @@ import { acceptedWork } from "./worktree.ts";
 
 /** Runs the detectors on the FR's diff since `since` and a cleanup item per finding; never stops the FR. */
 export async function refactorPass(run: FrRun, scenario: Scenario, since: string, scope: string[]): Promise<void> {
-  const findings = await findingsOnDiff(run, since);
+  const findings = await findingsOnDiff(run, since, await sourceNow(run));
   for (const finding of findings) {
     const accepted = await acceptedWork(run.worktree.dir);
     const refusal = await withRetries(run.retries, (previous) => cleanupOnce(run, scenario, finding, previous, since, scope));
@@ -29,11 +29,11 @@ export async function refactorPass(run: FrRun, scenario: Scenario, since: string
 }
 
 /** The findings of both detectors on the FR's diff against the whole source (FR-REF-01). */
-async function findingsOnDiff(run: FrRun, since: string): Promise<Finding[]> {
+async function findingsOnDiff(run: FrRun, since: string, files: Map<string, string>): Promise<Finding[]> {
   const { dir } = run.worktree;
   const source = run.layout.writable.code;
   const added = addedLines(await git(dir, "diff", "-U0", "--no-color", since, "--", ...source));
-  return detectFindings({ files: await sourceNow(run), baseline: await sourceAt(dir, since, source), added, limit: run.complexity });
+  return detectFindings({ files, baseline: await sourceAt(dir, since, source), added, limit: run.complexity });
 }
 
 /** The source files as the FR left them, read from the worktree. */
@@ -65,7 +65,7 @@ async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, pre
   const files = await sourceNow(run);
   const before: BeforeItem = {
     files,
-    signatures: new Set((await findingsOnDiff(run, since)).map((one) => findingSignature(one, files))),
+    signatures: new Set((await findingsOnDiff(run, since, files)).map((one) => findingSignature(one, files))),
     exports: await exportSignatures(run.worktree.dir, [...files.keys()]),
   };
   const context = { ...run.texts, steps: [], finding: findingText(finding, files) };
@@ -78,7 +78,7 @@ const CLEAN_WITHOUT_CHANGING = "Clean without changing behaviour: remove the fin
 /** An item is accepted only when its findings are gone, none is new, the API and the measures hold, and every check passes. */
 async function judgeCleanup(run: FrRun, finding: Finding, before: BeforeItem, since: string, scope: string[]): Promise<Refusal | undefined> {
   const after = await sourceNow(run);
-  const findings = await findingsOnDiff(run, since);
+  const findings = await findingsOnDiff(run, since, after);
   const itemSignature = findingSignature(finding, before.files);
   const still = findings.find((one) => findingSignature(one, after) === itemSignature);
   if (still !== undefined) {
