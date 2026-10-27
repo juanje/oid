@@ -1,5 +1,5 @@
 import { enclosingFunction, functionComplexities } from "./complexity.ts";
-import { cloneRuns } from "./duplication.ts";
+import { cloneRuns, duplicatedLineCount, normalisedLines } from "./duplication.ts";
 
 // The two detectors of the FR-scale refactor (FR-REF-01, D-07), on the whole source given the FR's
 // diff: a finding that touches no line the FR added or changed is existing debt and does not count.
@@ -79,6 +79,51 @@ function complexityFindings(files: Map<string, string>, baseline: Map<string, st
     }
   }
   return findings;
+}
+
+/**
+ * What identifies a finding across cleanups, where lines move and names change: a duplication by its
+ * normalised run, a complex function by its file and name (FR-REF-02).
+ */
+export function findingSignature(finding: Finding, files: Map<string, string>): string {
+  if (finding.category === "complexity") {
+    const functions = functionComplexities(files.get(finding.file) ?? "");
+    return `complexity ${finding.file} ${enclosingFunction(functions, finding.range.start)?.name ?? "?"}`;
+  }
+  const run = normalisedLines(files.get(finding.file) ?? "")
+    .filter(({ line }) => line >= finding.range.start && line <= finding.range.end)
+    .map(({ norm }) => norm)
+    .join("\n");
+  return `duplication ${run}`;
+}
+
+/** The measures a cleanup item must not worsen (FR-REF-02): each function's complexity, and the duplicated lines. */
+export interface SourceMeasures {
+  /** Each function's complexity, by `<file> <name>`; functions sharing a name keep the highest. */
+  functions: Map<string, number>;
+  duplicatedLines: number;
+}
+
+export function sourceMeasures(files: Map<string, string>): SourceMeasures {
+  const functions = new Map<string, number>();
+  for (const [file, text] of files) {
+    for (const fn of functionComplexities(text)) {
+      const key = `${file} ${fn.name}`;
+      functions.set(key, Math.max(functions.get(key) ?? 0, fn.complexity));
+    }
+  }
+  return { functions, duplicatedLines: duplicatedLineCount(files) };
+}
+
+/** What `after` worsens against `before`, one line each: a shared function more complex, or more duplicated lines. */
+export function worseMeasures(before: SourceMeasures, after: SourceMeasures): string[] {
+  const worse: string[] = [];
+  for (const [key, complexity] of after.functions) {
+    const was = before.functions.get(key);
+    if (was !== undefined && complexity > was) worse.push(`the function ${key.split(" ")[1]} (${key.split(" ")[0]}) has complexity ${complexity}, up from ${was} before the item`);
+  }
+  if (after.duplicatedLines > before.duplicatedLines) worse.push(`${after.duplicatedLines} duplicated lines, up from ${before.duplicatedLines} before the item`);
+  return worse;
 }
 
 /** A finding as a cleanup task shows it, each place with its enclosing function when the file has one. */
