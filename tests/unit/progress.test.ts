@@ -68,3 +68,17 @@ describe("progressLine", () => {
     expect(progressLine({ event: "stop", limit: "turns" })).toBeUndefined();
   });
 });
+
+describe("the cleanup item's line (FR-REF-02)", () => {
+  const finding = { id: "dup-0001", category: "duplication" as const, file: "src/greet-all.ts", range: { start: 2, end: 8 }, detail: "5 duplicated lines" };
+
+  test("says when an item is accepted, with its category and place", () => {
+    expect(progressLine({ event: "cleanup", fr: "FR-GREET-02", finding, verdict: "accepted" })).toBe("cleanup duplication at src/greet-all.ts:2: accepted");
+  });
+
+  test("says when an item is not accepted, and why", () => {
+    expect(progressLine({ event: "cleanup", fr: "FR-GREET-02", finding, verdict: "not accepted", failed: "The cleanup left its finding in place" })).toBe(
+      "cleanup duplication at src/greet-all.ts:2: not accepted: The cleanup left its finding in place",
+    );
+  });
+});
