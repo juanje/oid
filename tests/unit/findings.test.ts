@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { detectFindings } from "../../src/findings.ts";
+import { detectFindings, findingText } from "../../src/findings.ts";
 
 // The detectors run on the FR's diff against the whole source (FR-REF-01): a finding that touches
 // no line the FR added or changed is existing debt and does not count.
@@ -89,5 +89,26 @@ describe("complexity findings", () => {
     const findings = detectFindings({ files: new Map([["src/pick.ts", after]]), baseline: new Map([["src/pick.ts", before]]), added: added("src/pick.ts", allLines(after)), limit: 3 });
     expect(findings.map(({ category }) => category)).toEqual(["complexity"]);
     expect(findings[0]!.detail).toContain("6");
+  });
+});
+
+describe("findingText", () => {
+  test("shows each place with its enclosing function, so the task names both functions", () => {
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkNew", "new")],
+    ]);
+    const findings = detectFindings({ files, baseline: new Map(), added: added("src/new.ts", allLines(checkBlock("x", "x"))), limit: 10 });
+
+    expect(findingText(findings[0]!, files)).toBe("duplication: src/new.ts:1-9 (checkNew) repeats src/old.ts:1-9 (checkOld): 7 duplicated lines");
+  });
+
+  test("a complexity finding names its function in the detail", () => {
+    const text = sized("pickFive", 4);
+    const files = new Map([["src/pick.ts", text]]);
+    const findings = detectFindings({ files, baseline: new Map(), added: added("src/pick.ts", allLines(text)), limit: 3 });
+
+    expect(findingText(findings[0]!, files)).toContain("complexity: src/pick.ts:");
+    expect(findingText(findings[0]!, files)).toContain("the function pickFive has complexity 5, above the limit 3 (was 0 at the run's start)");
   });
 });
