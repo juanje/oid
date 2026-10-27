@@ -25,6 +25,9 @@ export function progressLine(event: LogEvent): string | undefined {
     return `request for "${event.scenario}": the ${event.by} attempt asks for a ${event.kind} attempt: ${event.reason}${event.followed === false ? ", not followed" : ""}`;
   }
   if (event.event === "round") return `round for "${event.scenario}": ${event.verdict}, still failing at step "${event.step}"`;
+  if (event.event === "cleanup") {
+    return `cleanup ${event.finding.category} at ${event.finding.file}:${event.finding.range.start}: ${event.verdict}${event.failed === undefined ? "" : `: ${event.failed}`}`;
+  }
   if (event.event === "red") return `  Red ${event.verdict} by attempt ${String(event.attempt).padStart(2, "0")}: ${event.what}`;
   if (event.event !== "attempt") return undefined;
   const ended = `attempt ${event.kind} for "${event.scenario}": ${event.verdict}${event.refusal === undefined ? "" : `: ${event.refusal.failed}`}`;

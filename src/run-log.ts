@@ -2,6 +2,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Scenario } from "./cucumber-messages.ts";
 import type { AttemptKind, Mutant } from "./executor.ts";
+import type { Finding } from "./findings.ts";
 import { git } from "./git.ts";
 import { provisionalOf } from "./evidence.ts";
 import { changesNextKind } from "./requests.ts";
@@ -109,6 +110,16 @@ export interface RoundEvent {
   failure: string;
 }
 
+/** A cleanup item settled (FR-REF-02): its finding, and whether its attempts left an accepted cleanup. */
+export interface CleanupEvent {
+  event: "cleanup";
+  fr: string;
+  finding: Finding;
+  verdict: "accepted" | "not accepted";
+  /** What the last cleanup attempt was refused for, when the item was not accepted. */
+  failed?: string;
+}
+
 /** The FRs a run builds, in order (FR-RUN-05). */
 export interface PlanEvent {
   event: "plan";
@@ -164,7 +175,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | PlanEvent | BuiltEvent | ScopeEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | CleanupEvent | PlanEvent | BuiltEvent | ScopeEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;
