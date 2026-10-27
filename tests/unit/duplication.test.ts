@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { cloneRuns, duplicatedLineCount, normalisedLines } from "../../src/duplication.ts";
+import { checkBlock } from "./support/source-blocks.ts";
 
 // Lines are compared after normalising identifiers and literals (DOMAIN.md, Normalised), so a copy
 // with other names or another message counts (FR-REF-01).
@@ -42,20 +43,6 @@ describe("normalisedLines", () => {
     expect(norms("    const a = b.trim();")).toEqual(norms("const a = b.trim();"));
   });
 });
-
-const checkBlock = (name: string, message: string) =>
-  [
-    `export function ${name}(raw: string): string {`,
-    `  const value = raw.trim();`,
-    `  if (value === "") {`,
-    `    throw new Error("${message}");`,
-    `  }`,
-    `  if (value.length > 40) {`,
-    `    throw new Error("${message}: too long");`,
-    `  }`,
-    `  return value;`,
-    `}`,
-  ].join("\n");
 
 describe("cloneRuns", () => {
   test("a run of 5 significant lines repeated in another file, with other names and messages, is a clone with both places", () => {

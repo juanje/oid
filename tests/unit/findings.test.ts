@@ -1,22 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { detectFindings, findingText } from "../../src/findings.ts";
+import { checkBlock } from "./support/source-blocks.ts";
 
 // The detectors run on the FR's diff against the whole source (FR-REF-01): a finding that touches
 // no line the FR added or changed is existing debt and does not count.
 
-const checkBlock = (name: string, message: string) =>
-  [
-    `export function ${name}(raw: string): string {`,
-    `  const value = raw.trim();`,
-    `  if (value === "") {`,
-    `    throw new Error("${message}");`,
-    `  }`,
-    `  if (value.length > 40) {`,
-    `    throw new Error("${message}: too long");`,
-    `  }`,
-    `  return value;`,
-    `}`,
-  ].join("\n");
 
 const added = (file: string, lines: number[]) => new Map([[file, new Set(lines)]]);
 const allLines = (text: string) => Array.from({ length: text.split("\n").length }, (_, index) => index + 1);
