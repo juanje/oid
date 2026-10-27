@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { detectFindings, findingText } from "../../src/findings.ts";
+import { detectFindings, findingSignature, findingText, sourceMeasures, worseMeasures } from "../../src/findings.ts";
 import { checkBlock } from "./support/source-blocks.ts";
 
 // The detectors run on the FR's diff against the whole source (FR-REF-01): a finding that touches
@@ -98,5 +98,61 @@ describe("findingText", () => {
 
     expect(findingText(findings[0]!, files)).toContain("complexity: src/pick.ts:");
     expect(findingText(findings[0]!, files)).toContain("the function pickFive has complexity 5, above the limit 3 (was 0 at the run's start)");
+  });
+});
+
+describe("findingSignature", () => {
+  test("a duplication finding keeps its signature when unrelated lines move or rename", () => {
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkNew", "new")],
+    ]);
+    const moved = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", `const unrelated = 1;\n${checkBlock("checkRenamed", "renamed")}`],
+    ]);
+    const everything = (text: string) => allLines(text);
+    const one = detectFindings({ files, baseline: new Map(), added: added("src/new.ts", everything(checkBlock("x", "x"))), limit: 10 })[0]!;
+    const other = detectFindings({ files: moved, baseline: new Map(), added: new Map([["src/new.ts", new Set(everything(moved.get("src/new.ts")!))]]), limit: 10 })[0]!;
+
+    expect(findingSignature(one, files)).toBe(findingSignature(other, moved));
+  });
+
+  test("a complexity finding's signature is its file and function, wherever its lines sit", () => {
+    const text = sized("pickFive", 4);
+    const moved = `const unrelated = 1;\n${text}`;
+    const one = detectFindings({ files: new Map([["src/pick.ts", text]]), baseline: new Map(), added: added("src/pick.ts", allLines(text)), limit: 3 })[0]!;
+    const other = detectFindings({ files: new Map([["src/pick.ts", moved]]), baseline: new Map(), added: added("src/pick.ts", allLines(moved)), limit: 3 })[0]!;
+
+    expect(findingSignature(one, new Map([["src/pick.ts", text]]))).toBe(findingSignature(other, new Map([["src/pick.ts", moved]])));
+  });
+});
+
+describe("sourceMeasures and worseMeasures", () => {
+  test("a function more complex than before the item is worse, named with both values", () => {
+    const before = sourceMeasures(new Map([["src/pick.ts", sized("pick", 2)]]));
+    const after = sourceMeasures(new Map([["src/pick.ts", sized("pick", 3)]]));
+
+    const worse = worseMeasures(before, after);
+    expect(worse).toHaveLength(1);
+    expect(worse[0]).toContain("pick");
+    expect(worse[0]).toContain("3");
+    expect(worse[0]).toContain("4");
+  });
+
+  test("a new function, and a function simpler than before, are not worse", () => {
+    const before = sourceMeasures(new Map([["src/pick.ts", sized("pick", 3)]]));
+    const after = sourceMeasures(new Map([["src/pick.ts", `${sized("pick", 2)}\nexport function also(a: number): number {\n  return a > 0 ? a : 0;\n}`]]));
+
+    expect(worseMeasures(before, after)).toEqual([]);
+  });
+
+  test("more duplicated lines than before the item are worse", () => {
+    const before = sourceMeasures(new Map([["src/one.ts", checkBlock("checkOne", "one")]]));
+    const after = sourceMeasures(new Map([["src/one.ts", checkBlock("checkOne", "one")], ["src/two.ts", checkBlock("checkTwo", "two")]]));
+
+    const worse = worseMeasures(before, after);
+    expect(worse).toHaveLength(1);
+    expect(worse[0]).toContain("duplicated lines");
   });
 });
