@@ -9,13 +9,13 @@ import { missingCoverageProvider } from "./coverage.ts";
 import { runGate } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
 import { type Layout, ownerOf } from "./boundaries.ts";
-import { attemptEvent, checkpointedAttempt, codeAttempt, type FrRun, locationOf, testCount } from "./run-attempts.ts";
+import { attemptEvent, checkpointedAttempt, codeAttempt, type FrRun, judgeCoverTests, locationOf, testCount } from "./run-attempts.ts";
 import { buildScenario } from "./scenario-build.ts";
 import { refactorPass } from "./refactor.ts";
 import { brokenBaseRefusal, gateScope, runIdOf, startingScenarios } from "./run-plan.ts";
 import { git } from "./git.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
-import type { Tried } from "./retries.ts";
+import { type Tried, withRetries } from "./retries.ts";
 import { type LogEvent, startRunLog } from "./run-log.ts";
 import { progressLine } from "./progress.ts";
 import { summarize, transcriptsOf } from "./summary.ts";
@@ -235,11 +235,27 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
 
 /**
  * An attempt the gate sent back. A code attempt is judged as any code attempt. A test or steps attempt is judged by
- * its boundary and its report only, with no new Red: its tests have theirs, and the gate runs again after it.
+ * its boundary and its report only, with no new Red: its tests have theirs, and the gate runs again after it. A test
+ * attempt for uncovered branches is the exception: its new tests need a mutant as their Red (FR-GATE-02).
  */
-function attemptAfterGate(run: FrRun, kind: AttemptKind, scenario: Scenario, refusal: Refusal): Promise<Tried> {
+function attemptAfterGate(run: FrRun, kind: AttemptKind, scenario: Scenario, refusal: Refusal): Promise<Tried & { report?: string }> {
   if (kind === "code") return codeAttempt(run, scenario, refusal);
+  if (kind === "test" && refusal.uncovered !== undefined) return coverTestAttempt(run, scenario, refusal);
   return checkpointedAttempt(run, kind, scenario, refusal, async () => undefined);
+}
+
+/**
+ * The test attempt for branches no test runs, retried as any attempt. When its retries run out it is taken back, and
+ * the gate, run again, sends the branches to a code attempt with its report (FR-GATE-02).
+ */
+async function coverTestAttempt(run: FrRun, scenario: Scenario, refusal: Refusal): Promise<Tried & { report?: string }> {
+  let last: (Tried & { report?: string }) | undefined;
+  const left = await withRetries(run.retries, async (previous) => {
+    last = await checkpointedAttempt(run, "test", scenario, previous ?? refusal, (attempt) => judgeCoverTests(run, attempt));
+    return last;
+  });
+  if (left !== undefined) await last!.rollback();
+  return { refusal: undefined, rollback: async () => {}, ...(last?.report === undefined ? {} : { report: last.report }) };
 }
 
 function stamp(): string {

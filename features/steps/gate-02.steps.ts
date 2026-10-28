@@ -3,8 +3,8 @@ import { readdirSync } from "node:fs";
 import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Given, Then } from "@cucumber/cucumber";
-import { GREET_01_SCENARIO, OID_ROOT, attemptDir, commitProjectConfig, git } from "../support/fixture.ts";
-import { assertOutputNames, requestsOf } from "../support/run.ts";
+import { GREET_01_SCENARIO, OID_ROOT, attemptDir, commitFixture, commitProjectConfig, git } from "../support/fixture.ts";
+import { assertOutputNames, requestsOf, runBranch } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
 /** FR-GREET-01's attempts, by the names of their prepared directories. */
@@ -67,4 +67,65 @@ Then("the code attempt after the gate was given the uncovered branch, naming its
   const refusal = requestsOf(this, "code", 2)[1]!.refusal;
   assert.ok(refusal !== undefined, "The code attempt after the gate came without the gate's refusal");
   assert.match(refusal.evidence, /shared\/salutation\.ts:3\b/, `The refusal does not name shared/salutation.ts and the branch's line, 3:\n${refusal.evidence}`);
+});
+
+/** Puts `attempt` right after the code attempt that built the FR: the attempt after the gate comes first. */
+function afterFirstCode(script: RunWorld["script"], attempt: RunWorld["script"][number]): RunWorld["script"] {
+  const at = script.findIndex((prepared) => prepared.kind === "code");
+  return [...script.slice(0, at + 1), attempt, ...script.slice(at + 1)];
+}
+
+const NO_REQUIREMENT = "No requirement asks for the empty-name branch of greet: neither the SPEC nor the FR's scenarios say what an empty name gets.";
+
+Given("the scripted test attempt after the gate adds no test and reports that no requirement asks for the branch", function (this: RunWorld) {
+  // The test the FR's build committed, as it is: the attempt changes nothing.
+  this.script = afterFirstCode(this.script, { kind: "test", scenario: GREET_01_SCENARIO, dir: attemptDir("test"), report: NO_REQUIREMENT });
+});
+
+Given("the scripted code attempt adds a branch on a line its test covers, which no test takes", function (this: RunWorld) {
+  this.script = greet01("steps", "test", "code-untaken-branch");
+});
+
+Given("the scripted code attempt after the gate removes the branch", function (this: RunWorld) {
+  this.script = [...this.script, { kind: "code", scenario: GREET_01_SCENARIO, dir: attemptDir("code") }];
+});
+
+Then("the code attempt after the gate was given the uncovered branch and the test attempt's report", function (this: RunWorld) {
+  const refusal = requestsOf(this, "code", 2)[1]!.refusal;
+  assert.ok(refusal !== undefined, "The code attempt after the gate came without the gate's refusal");
+  assert.match(refusal.evidence, /src\/greet\.ts:3\b/, `The refusal does not name src/greet.ts and the branch's line, 3:\n${refusal.evidence}`);
+  assert.ok(refusal.evidence.includes(NO_REQUIREMENT), `The refusal does not give the test attempt's report:\n${refusal.evidence}`);
+});
+
+Given("the scripted code attempt adds a branch the SPEC states, on a line its test covers, which no test takes", async function (this: RunWorld) {
+  await commitFixture(this.projectDir, attemptDir("spec-stranger"), "spec: an empty name is greeted as a stranger");
+  this.script = greet01("steps", "test", "code-untaken-branch");
+});
+
+Given(
+  "the scripted test attempt after the gate adds a unit test that takes the branch, with a mutant of the branch on which it fails",
+  function (this: RunWorld) {
+    const mutant = {
+      reason: "Without the branch, an empty name gets no stranger's greeting",
+      files: [{ path: "src/greet.ts", edits: [{ oldText: '"Hello, stranger!"', newText: "`Hello, ${name}!`" }] }],
+    };
+    this.script = [...this.script, { kind: "test", scenario: GREET_01_SCENARIO, dir: attemptDir("test-greets-stranger"), mutant }];
+  },
+);
+
+Then("the test attempt after the gate was given the uncovered branch, naming its file and line", function (this: RunWorld) {
+  const refusal = requestsOf(this, "test", 2)[1]!.refusal;
+  assert.ok(refusal !== undefined, "The test attempt after the gate came without the gate's refusal");
+  assert.match(refusal.evidence, /src\/greet\.ts:3\b/, `The refusal does not name src/greet.ts and the branch's line, 3:\n${refusal.evidence}`);
+});
+
+Then("the executor was not asked for a code attempt after the gate", function (this: RunWorld) {
+  requestsOf(this, "code", 1);
+});
+
+Then("the run's commit holds the new unit test and the branch", function (this: RunWorld) {
+  const branch = runBranch(this);
+  const files = git(this.projectDir, "ls-tree", "-r", "--name-only", branch).split("\n");
+  assert.ok(files.includes("tests/greet-stranger.test.ts"), `The run's commit does not hold the new unit test:\n${files.join("\n")}`);
+  assert.match(git(this.projectDir, "show", `${branch}:src/greet.ts`), /stranger/, "The run's commit does not hold the branch");
 });

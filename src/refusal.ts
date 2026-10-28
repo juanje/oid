@@ -21,6 +21,8 @@ export interface Refusal {
   sendTo?: AttemptKind;
   /** The gate's, not the refused attempt's own: the task of the attempt it goes back to opens with its job (FR-AGENT-03). */
   from?: "gate";
+  /** The branches no test runs, when the gate refused them: a test attempt sent back for them must prove its new test with a mutant (FR-GATE-02). */
+  uncovered?: string[];
   /** The refused attempt's diff, which oid took back: a cleanup's retry gets it to finish what it started (FR-REF-02). */
   diff?: string;
 }

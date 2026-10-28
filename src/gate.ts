@@ -156,10 +156,16 @@ const NEXT_STEP: Record<PathsKind, string> = {
   steps: "Fix these errors in the step definitions, keeping what each step asserts",
 };
 
+// A test attempt sent back for branches no test runs: a branch a requirement states gets its test, one none states goes
+// to a code attempt with the report that says so (FR-GATE-02).
+const COVER_NEXT =
+  "For each branch, if the SPEC or the FR's scenarios state what it does, add a unit test that takes it and submit in your report a mutant of the branch on which that test fails; if no requirement asks for a branch, add no test for it and say why in your report";
+
 /** The gate's refusal: every failed check, with its failures, or its output when it has none, as the evidence; its next step is for the kind of attempt it goes back to. */
 export function gateRefusal(results: CheckResult[], sendTo: PathsKind = "code"): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);
   if (failed.length === 0) return undefined;
+  const uncovered = failed.find((result) => result.name === "coverage")?.failures ?? [];
   const scenarios = failed
     .flatMap((result) => result.failedScenarios ?? [])
     .map(({ uri, line, name, steps, failure }) => ({ uri, line, name, ...(steps === undefined ? {} : { steps }), ...(failure === undefined ? {} : { failure }) }));
@@ -168,7 +174,8 @@ export function gateRefusal(results: CheckResult[], sendTo: PathsKind = "code"):
     from: "gate",
     failed: `The gate failed: ${failed.map((result) => `${result.name}: ${result.ranNothing === true ? "FAIL, ran no test" : "FAIL"}`).join(", ")}`,
     evidence: failed.map((result) => `${result.name}:\n${result.failures?.join("\n") ?? result.output}`).join("\n"),
-    next: NEXT_STEP[sendTo],
+    next: sendTo === "test" && uncovered.length > 0 ? COVER_NEXT : NEXT_STEP[sendTo],
     ...(scenarios.length > 0 || tests.length > 0 ? { focus: { scenarios, tests } } : {}),
+    ...(uncovered.length > 0 ? { uncovered } : {}),
   };
 }
