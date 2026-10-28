@@ -91,6 +91,19 @@ describe("findingText", () => {
     expect(findingText(findings[0]!, files)).toBe("duplication: src/new.ts:1-9 (checkNew) repeats src/old.ts:1-9 (checkOld): 7 duplicated lines");
   });
 
+  test("names a place inside an anonymous function by the named function around it", () => {
+    const inner = checkBlock("x", "inner").split("\n").slice(1, -1).map((line) => `    ${line}`);
+    const outer = [`export function checkAll(raws: string[]): string[] {`, `  return raws.map((raw) => {`, ...inner, `  });`, `}`].join("\n");
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/all.ts", outer],
+    ]);
+    const findings = detectFindings({ files, baseline: new Map(), added: added("src/all.ts", allLines(outer)), limit: 10 });
+
+    expect(findingText(findings[0]!, files)).toContain("(checkAll)");
+    expect(findingText(findings[0]!, files)).not.toContain("<anonymous>");
+  });
+
   test("a complexity finding names its function in the detail", () => {
     const text = sized("pickFive", 4);
     const files = new Map([["src/pick.ts", text]]);
@@ -102,20 +115,54 @@ describe("findingText", () => {
 });
 
 describe("findingSignature", () => {
-  test("a duplication finding keeps its signature when unrelated lines move or rename", () => {
+  test("a duplication finding keeps its signature when unrelated lines move it and its message changes", () => {
     const files = new Map([
       ["src/old.ts", checkBlock("checkOld", "old")],
       ["src/new.ts", checkBlock("checkNew", "new")],
     ]);
     const moved = new Map([
       ["src/old.ts", checkBlock("checkOld", "old")],
-      ["src/new.ts", `const unrelated = 1;\n${checkBlock("checkRenamed", "renamed")}`],
+      ["src/new.ts", `const unrelated = 1;\n${checkBlock("checkNew", "renamed")}`],
     ]);
     const everything = (text: string) => allLines(text);
     const one = detectFindings({ files, baseline: new Map(), added: added("src/new.ts", everything(checkBlock("x", "x"))), limit: 10 })[0]!;
     const other = detectFindings({ files: moved, baseline: new Map(), added: new Map([["src/new.ts", new Set(everything(moved.get("src/new.ts")!))]]), limit: 10 })[0]!;
 
     expect(findingSignature(one, files)).toBe(findingSignature(other, moved));
+  });
+
+  // The check without its first rule: a shorter copy of the same run.
+  const shorter = (name: string, message: string) => checkBlock(name, message).replace(/ {2}if \(value === ""\) \{\n.*\n {2}\}\n/, "");
+  const duplicationIn = (files: Map<string, string>, file: string) =>
+    detectFindings({ files, baseline: new Map(), added: added(file, allLines(files.get(file)!)), limit: 10 }).find(({ category }) => category === "duplication")!;
+
+  test("a duplication finding left shorter in the same functions keeps its signature", () => {
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkNew", "new")],
+    ]);
+    const shortened = new Map([
+      ["src/old.ts", shorter("checkOld", "old")],
+      ["src/new.ts", shorter("checkNew", "new")],
+    ]);
+    const one = duplicationIn(files, "src/new.ts");
+    const other = duplicationIn(shortened, "src/new.ts");
+
+    expect(other.detail).not.toBe(one.detail);
+    expect(findingSignature(other, shortened)).toBe(findingSignature(one, files));
+  });
+
+  test("a duplication finding moved into another function has another signature", () => {
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkNew", "new")],
+    ]);
+    const moved = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkElsewhere", "new")],
+    ]);
+
+    expect(findingSignature(duplicationIn(moved, "src/new.ts"), moved)).not.toBe(findingSignature(duplicationIn(files, "src/new.ts"), files));
   });
 
   test("a complexity finding's signature is its file and function, wherever its lines sit", () => {

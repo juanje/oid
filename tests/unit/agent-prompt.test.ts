@@ -217,4 +217,14 @@ describe("the cleanup agent's prompt (FR-REF-02)", () => {
     expect(task).toContain(CONTEXT.fr);
     expect(task).not.toContain("Write the refactor-code attempt");
   });
+
+  test("a cleanup retry is given the refused attempt's diff after its refusal, so it can finish what it started", () => {
+    const finding = "duplication: src/greet-all.ts:2-8 (greetAll) repeats src/greet.ts:2-7 (greet): 5 duplicated lines";
+    const diff = "--- a/src/greet.ts\n+++ b/src/greet.ts\n+  requireName(trimmed);";
+    const refusal = { failed: "The cleanup's finding is still there", evidence: finding, next: "Finish it", diff };
+    const task = taskFor({ kind: "refactor-code", fr: "FR-GREET-02", scenario: SCENARIO, refusal, context: { ...CONTEXT, steps: [], finding } });
+
+    expect(task).toContain(diff);
+    expect(task.indexOf(diff)).toBeGreaterThan(task.indexOf(refusal.failed));
+  });
 });
