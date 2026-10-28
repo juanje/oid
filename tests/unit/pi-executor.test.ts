@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 /** One code attempt for GREET-01's scenario, whose try answers `tried` and whose report is kept. */
-function codeAttempt(turns = 40, tried: TryResult = { passed: true }) {
+function codeAttempt(turns = 40, tried: TryResult = { passed: true }, outputTokens = 16000) {
   const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[], mutants: [] as (Mutant | undefined)[] };
   const attempt: Attempt = {
     kind: "code",
@@ -32,7 +32,7 @@ function codeAttempt(turns = 40, tried: TryResult = { passed: true }) {
     scenario: SCENARIO,
     worktree,
     layout: DEFAULT_LAYOUT,
-    limits: { turns },
+    limits: { turns, outputTokens },
     tools: {
       try: async (target) => {
         calls.tries.push(target);
@@ -138,6 +138,18 @@ describe("piExecutor", () => {
 
     expect(calls.tries).toEqual([{ scenario: true }, { test: "tests/greet.test.ts" }]);
     expect(model.attempts[0]![1]!.toolResults.join("\n")).toContain("expected greeting");
+  });
+
+  test("asks for at most the output limit in each turn, and counts a turn the limit cut, whose tool calls the agent may make again", async () => {
+    const model = await scripted({ dir: attemptDir("code"), floods: 1000 });
+    const { attempt, calls } = codeAttempt(40, { passed: true }, 200);
+
+    const outcome = await executorOn(model).run(attempt);
+
+    expect(model.attempts[0]!.map((request) => request.maxTokens)).toEqual([200, 200]);
+    expect(outcome.cutTurns).toBe(1);
+    expect(await readFile(join(worktree, "src/greet.ts"), "utf8")).toBe(await readFile(join(attemptDir("code"), "src/greet.ts"), "utf8"));
+    expect(calls.reports).toEqual(["scripted code attempt"]);
   });
 
   test("ends the agent between turns at the turn limit, and says so", async () => {

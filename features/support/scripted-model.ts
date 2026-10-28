@@ -40,6 +40,11 @@ export interface ModelAttempt {
   loops?: true;
   /** Answers every request with this provider error. */
   error?: string;
+  /**
+   * Answers its first turn with this many tokens of output, a write whose content is filler, before anything else:
+   * cut at the request's output limit when it asks for fewer, as a provider cuts it (FR-RUN-09).
+   */
+  floods?: number;
   /** The attempt kind its report asks for next, with its reason (FR-RUN-04). */
   next?: NextAttempt;
   /** The mutant its report submits (FR-EVID-03). */
@@ -56,6 +61,8 @@ export interface ModelRequest {
   tools: string[];
   /** What the tools answered, as the model read it. */
   toolResults: string[];
+  /** The most tokens of output the request asked for, when it asked. */
+  maxTokens?: number;
 }
 
 const PROVIDER = "scripted";
@@ -96,7 +103,7 @@ export class ScriptedModel {
     const scripted = new ScriptedModel(runtime, core.getModel());
     const respond = async (context: TranscriptContext, options: SimpleStreamOptions | undefined): Promise<AssistantMessage> => {
       core.appendResponses([respond]);
-      return scripted.#answer(context, options?.sessionId ?? "");
+      return scripted.#answer(context, options?.sessionId ?? "", options?.maxTokens);
     };
     core.setResponses([respond]);
     return scripted;
@@ -107,13 +114,13 @@ export class ScriptedModel {
     return `${this.model.provider}/${this.model.id}`;
   }
 
-  async #answer(context: TranscriptContext, sessionId: string): Promise<AssistantMessage> {
+  async #answer(context: TranscriptContext, sessionId: string, maxTokens: number | undefined): Promise<AssistantMessage> {
     if (!this.#sessions.includes(sessionId)) {
       this.#sessions.push(sessionId);
       this.attempts.push([]);
     }
     const index = this.#sessions.indexOf(sessionId);
-    const request = requestOf(context.messages);
+    const request = { ...requestOf(context.messages), ...(maxTokens === undefined ? {} : { maxTokens }) };
     this.attempts[index]!.push(request);
     const prepared = this.script[index];
     if (prepared === undefined) return fauxAssistantMessage(`No prepared attempt for request ${index + 1}`);
@@ -127,8 +134,9 @@ export class ScriptedModel {
     });
     const probed = prepared.probes !== undefined && prepared.probes.length > 0;
     if (probed && this.attempts[index]!.length === 1) return fauxAssistantMessage(prepared.probes!.map(({ tool, args }) => fauxToolCall(tool, args)));
-    // Its turns once the probes, if any, are answered.
-    const turn = this.attempts[index]!.length - (probed ? 1 : 0);
+    if (prepared.floods !== undefined && this.attempts[index]!.length === 1) return flood(prepared.floods, maxTokens);
+    // Its turns once the probes or the flood, if any, are answered.
+    const turn = this.attempts[index]!.length - (probed || prepared.floods !== undefined ? 1 : 0);
     if (prepared.dir === undefined || turn > 2) return fauxAssistantMessage("Done.");
     if (turn === 2) return fauxAssistantMessage(prepared.tries === undefined ? "Done." : report);
     const writes = await Promise.all(
@@ -137,6 +145,16 @@ export class ScriptedModel {
     if (prepared.tries === undefined) return fauxAssistantMessage([...writes, report]);
     return fauxAssistantMessage([...writes, ...prepared.tries.map((target) => fauxToolCall("try", { ...target }))]);
   }
+}
+
+// The faux provider counts a token as 4 characters of output.
+const CHARS_PER_TOKEN = 4;
+
+/** A write of `tokens` tokens of filler, as a malformed call streams it: cut at `limit`, with a length stop, when that is fewer. */
+function flood(tokens: number, limit: number | undefined): AssistantMessage {
+  const cut = limit !== undefined && limit < tokens;
+  const content = " ".repeat((cut ? limit : tokens) * CHARS_PER_TOKEN);
+  return fauxAssistantMessage(fauxToolCall("write", { path: "src/greet.ts", content }), { stopReason: cut ? "length" : "toolUse" });
 }
 
 /** Every file under `dir`, relative to it. Not fixture.ts's: that one loads cucumber, and unit tests use this model too. */

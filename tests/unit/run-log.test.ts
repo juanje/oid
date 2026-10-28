@@ -87,6 +87,12 @@ describe("measuresOf", () => {
 
     expect(measuresOf(events, 1)).toMatchObject({ tokens: 300, cost: 0.03, deniedToolCalls: 2 });
   });
+
+  test("counts the turns the output limit cut, per attempt kind", () => {
+    const events = [attempt("steps", "accepted"), attempt("code", "refused", { cutTurns: 2 }), attempt("code", "accepted", { cutTurns: 1 })];
+
+    expect(measuresOf(events, 1).cutTurns).toEqual({ code: 3 });
+  });
 });
 
 describe("openRunLog", () => {
