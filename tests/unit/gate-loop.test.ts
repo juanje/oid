@@ -141,11 +141,11 @@ describe("gateLoop", () => {
     expect(given[0]!.uncovered).toEqual([BRANCH]);
   });
 
-  test("a branch still uncovered after the test attempt goes to a code attempt, with the test attempt's report", async () => {
+  test("a branch still uncovered after the test attempt goes to a code attempt, with the test attempt's report; the test attempt, with retries of its own, is not one of the gate's", async () => {
     const report = "No requirement asks for this branch";
     const { gate, afterGate, given, kinds } = fakes([COVERAGE_FAILS, COVERAGE_FAILS, PASSING], report);
 
-    const outcome = await gateLoop(2, gate, afterGate);
+    const outcome = await gateLoop(1, gate, afterGate);
 
     expect(outcome).toEqual({ refusal: undefined });
     expect(kinds).toEqual(["test", "code"]);
