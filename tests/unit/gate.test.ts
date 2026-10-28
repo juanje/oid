@@ -158,6 +158,15 @@ describe("gateRefusal", () => {
     expect(refusal?.evidence).toContain(TYPE_ERROR);
   });
 
+  test("sent to a test attempt for an uncovered branch, asks for a test with a mutant when a requirement states the branch, and for a report when none does", () => {
+    const branch = "src/greet.ts:3:10: branch 0 of a conditional expression";
+    const refusal = gateRefusal([{ name: "unit", passed: true, output: "" }, { name: "coverage", passed: false, output: branch, failures: [branch] }], "test");
+
+    expect(refusal?.uncovered).toEqual([branch]);
+    expect(refusal?.next).toMatch(/\bmutant\b/);
+    expect(refusal?.next).toMatch(/\breport\b/);
+  });
+
   test("marks itself as the gate's, so that the task of the attempt it goes back to opens with its job", () => {
     expect(gateRefusal([{ name: "types", passed: false, output: TYPE_ERROR }])?.from).toBe("gate");
   });
