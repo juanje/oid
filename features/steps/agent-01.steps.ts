@@ -110,10 +110,51 @@ const PROVIDER_ERROR = "529 overloaded_error: the scripted provider is overloade
 
 Given("the scripted model answers the code attempt with a provider error every time", function (this: RunWorld) {
   codeAttemptAnswers(this, { error: PROVIDER_ERROR });
+  // oid's own retry of the attempt is a session of its own, and gets the error too.
+  errorThenRetry(this, { error: PROVIDER_ERROR });
+});
+
+/** Puts `retry` right after the code attempt, as what the model answers a session that retries it. */
+function errorThenRetry(world: RunWorld, retry: Omit<ModelAttempt, "kind" | "scenario">): void {
+  const model = scriptedModel(world);
+  const index = modelAttemptOf(model, "code");
+  model.script.splice(index + 1, 0, { kind: "code", scenario: model.script[index]!.scenario, ...retry });
+}
+
+Given("the scripted model answers the code attempt's first turn with a provider error, then builds it", function (this: RunWorld) {
+  const builds = scriptedModel(this).script[modelAttemptOf(scriptedModel(this), "code")]!;
+  codeAttemptAnswers(this, { error: PROVIDER_ERROR });
+  errorThenRetry(this, { dir: builds.dir! });
+});
+
+const OUT_OF_CREDIT = "400 invalid_request_error: Your credit balance is too low to access the API. Please go to Plans & Billing to upgrade or purchase credits.";
+
+Given("the scripted model answers the code attempt with a provider error that says the account is out of credit", function (this: RunWorld) {
+  const builds = scriptedModel(this).script[modelAttemptOf(scriptedModel(this), "code")]!;
+  codeAttemptAnswers(this, { error: OUT_OF_CREDIT });
+  // What a retry would get: a run that retried would build, and not stop.
+  errorThenRetry(this, { dir: builds.dir! });
+});
+
+Then("the scripted model was asked for one turn in the code attempt", function (this: RunWorld) {
+  const model = scriptedModel(this);
+  // Every session of a code attempt, a retry's included.
+  const asked = model.attempts.filter((_, index) => model.script[index]?.kind === "code").reduce((total, requests) => total + requests.length, 0);
+  assert.equal(asked, 1, `The scripted model was asked for ${asked} turns in the code attempt`);
+});
+
+Then("the run's log gives the code attempt one provider retry and no rejection", async function (this: RunWorld) {
+  const log = await runLog(this);
+  const retries = log.filter((event) => event.event === "attempting" && event.kind === "code" && event.providerRetry === true);
+  assert.equal(retries.length, 1, `The run's log gives the code attempt ${retries.length} provider retries`);
+  const end = log.find((event) => event.event === "end");
+  assert.ok(end?.event === "end", "The run's log has no measures");
+  assert.equal(end.measures.rejections.code, undefined, `The run's measures count a rejection of the code attempt: ${JSON.stringify(end.measures.rejections)}`);
 });
 
 Then("the output names the provider error", function (this: RunWorld) {
-  assertOutputNames(this, PROVIDER_ERROR);
+  // The error the scripted model answers the code attempt with.
+  assertOutputNames(this, scriptedModel(this).script.find((attempt) => attempt.error !== undefined)?.error);
 });
 
 Given("the project has a .pi\\/settings.json that would change the agent's tools", async function (this: RunWorld) {

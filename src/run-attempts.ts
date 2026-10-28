@@ -1,6 +1,7 @@
 import type { Layout } from "./boundaries.ts";
 import type { VitestDialect } from "./vitest-dialect.ts";
 import { join } from "node:path";
+import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
 import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
@@ -17,7 +18,7 @@ import { runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { type FrTexts, taskContext } from "./task-context.ts";
 import { runUnitTests, testsIn, type UnitRun } from "./unit-tests.ts";
 import type { TestFailure } from "./vitest-report.ts";
-import { acceptedWork, checkpoint, type RunWorktree } from "./worktree.ts";
+import { acceptedWork, checkpoint, type RunWorktree, takeAttemptChanges } from "./worktree.ts";
 
 // One FR's run, as its scenarios share it, and the attempts it runs: each with the run's executor, judged by what
 // holds for every kind, logged, and checkpointed when accepted.
@@ -92,14 +93,31 @@ export function failingOf(result: ScenarioRun | undefined): Failing | undefined 
   return { step: result.failure?.step ?? "?", message: result.failure?.message ?? result.status };
 }
 
-/** One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and turn limit. */
+/**
+ * One attempt of `kind` for `scenario` in this run, with the run's executor, worktree and limits. A provider error that
+ * may pass takes it back to its checkpoint and runs it once more, as it was: a provider retry, which is not one of the
+ * run's retries. A second in a row ends the run (FR-AGENT-01).
+ */
 export async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenario, previous: Refusal | undefined, asked?: Attempt["asked"], given?: TaskContext) {
   const location = locationOf(scenario);
   const context = given ?? (await taskContext(run.worktree.dir, kind, run.texts, run.steps.get(location) ?? [], run.latest.get(location), { asked: asked !== undefined, layout: run.layout }));
-  await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined });
-  run.attempts += 1;
-  const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, layout: run.layout, refusal: previous, turns: run.turns, outputTokens: run.outputTokens, context, transcript, asked });
+  const once = async (providerRetry: boolean) => {
+    await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined, ...(providerRetry ? { providerRetry: true as const } : {}) });
+    run.attempts += 1;
+    const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
+    return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, layout: run.layout, refusal: previous, turns: run.turns, outputTokens: run.outputTokens, context, transcript, asked });
+  };
+  const accepted = await acceptedWork(run.worktree.dir);
+  try {
+    return await once(false);
+  } catch (error) {
+    if (!(error instanceof AgentError) || !error.passes) throw error;
+    await run.record(attemptEvent({ kind, scenario: scenario.name, refusal: undefined, retry: previous !== undefined, outcome: error.outcome, verdict: "provider error" }));
+    // What the agent wrote before the error is staged first, so that going back removes the files it created too.
+    await takeAttemptChanges(run.worktree.dir);
+    await accepted.restore();
+    return once(true);
+  }
 }
 
 export function locationOf(scenario: Scenario): string {

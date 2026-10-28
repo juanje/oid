@@ -17,7 +17,7 @@ export interface AttemptEvent {
   event: "attempt";
   kind: AttemptKind;
   scenario: string;
-  verdict: "accepted" | "refused" | "stopped at the turn limit" | "stopped on an error";
+  verdict: "accepted" | "refused" | "stopped at the turn limit" | "stopped on an error" | "provider error";
   /** The attempt came with the refusal of the one before it. */
   retry: boolean;
   refusal?: Refusal;
@@ -68,6 +68,8 @@ export interface AttemptingEvent {
   kind: AttemptKind;
   scenario: string;
   retry: boolean;
+  /** The same attempt again, after a provider error that may pass (FR-AGENT-01). */
+  providerRetry?: true;
 }
 
 /** A run of the gate, and when it refuses, the kind of attempt the refusal goes back to, if any (FR-GATE-04). */

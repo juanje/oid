@@ -16,7 +16,10 @@ const STAGES: Record<StageEvent["stage"], string> = {
 /** The progress line of a log event, or none for an event only the summary covers. */
 export function progressLine(event: LogEvent): string | undefined {
   if (event.event === "stage") return `stage ${event.stage}: ${STAGES[event.stage]}`;
-  if (event.event === "attempting") return `attempt ${event.kind} for "${event.scenario}"${event.retry ? ", a retry with the refusal of the one before it" : ""}`;
+  if (event.event === "attempting") {
+    const again = event.providerRetry === true ? ", again after a provider error" : event.retry ? ", a retry with the refusal of the one before it" : "";
+    return `attempt ${event.kind} for "${event.scenario}"${again}`;
+  }
   if (event.event === "scope") {
     if (event.leftOut.length === 0) return undefined;
     return `gate of ${event.fr} leaves out: ${event.leftOut.map((scenario) => `${scenario.uri}:${scenario.line} "${scenario.name}"`).join(", ")}`;
