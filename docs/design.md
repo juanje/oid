@@ -145,14 +145,14 @@ The gate also runs at the start of a run as the baseline. A red test stops the r
 
 ## 6. Refactor
 
-At FR scale, after every scenario is green and before the gate (D-07).
+At FR scale, after the FR's gate passes and before its commit (D-07).
 1. **Detectors**, on the FR's diff against the whole source:
    - duplication: runs of at least 5 significant lines, compared after normalising identifiers and literals;
    - complexity: a changed function above `limits.complexity` and above its value at the run's start.
 
    A finding that touches no line of the FR's diff is existing debt. With none, there is no agent.
 2. **Code pass.** A cleanup agent (refactor-code) gets one finding per attempt and may change source only.
-3. **Acceptance.** Tests and scenarios unchanged and passing; the item's findings gone and none new; the same exports with the same signatures; the coverage check still passing; no measure worse. Each accepted item gets a checkpoint. A refused one is retried, then goes back and is reported, and the FR goes on to its gate.
+3. **Acceptance.** Tests and scenarios unchanged and passing; the item's findings gone and none new (a same finding in the same functions, shorter, is still there, not new); the same exports with the same signatures; the coverage check still passing; no measure worse. Each accepted item gets a checkpoint. A refused one is retried with its diff, then goes back and is reported, and the FR goes on to its commit.
 
 After the MVP, a test pass (FR-REF-03) cleans tests and steps with the code fixed, each changed test still failing on a mutant. A change that needs both passes (a rename the tests import) then takes three items.
 

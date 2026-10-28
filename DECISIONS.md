@@ -107,9 +107,9 @@ Lint and types count only errors that are new against the baseline.
 
 ## D-07: Refactor at FR scale, on findings, code first
 
-**Decision.** Once every scenario of an FR is green, two detectors run on the FR's diff against the whole source: duplication, compared after normalising identifiers and literals so that adapted copies count, and complexity above the project's limit. A finding starts a cleanup agent with its own prompt, which changes source only, with tests and steps fixed. Each accepted item gets its own checkpoint. With no finding there is no agent. A second pass over tests and steps, with the code fixed and each changed test still failing on a mutant, comes after the MVP.
+**Decision.** Once an FR's gate passes, two detectors run on the FR's diff against the whole source: duplication, compared after normalising identifiers and literals so that adapted copies count, and complexity above the project's limit. A finding starts a cleanup agent with its own prompt, which changes source only, with tests and steps fixed. Each accepted item gets its own checkpoint. With no finding there is no agent. A second pass over tests and steps, with the code fixed and each changed test still failing on a mutant, comes after the MVP.
 
-**Why.** v1 showed that a refactor after each Green finds too little and costs too many cycles. A code agent sent back to fix findings tends to re-implement what works. oid builds the minimum each scenario asks for, with no named helpers, so the next change tends to copy what it needs; acting when a change creates the copy shapes the helper by a real need. The tests, fixed during the code pass, prove the behaviour did not change.
+**Why.** v1 showed that a refactor after each Green finds too little and costs too many cycles. A code agent sent back to fix findings tends to re-implement what works. oid builds the minimum each scenario asks for, with no named helpers, so the next change tends to copy what it needs; acting when a change creates the copy shapes the helper by a real need. The tests, fixed during the code pass, prove the behaviour did not change. After the gate, so that a cleanup is judged only by what it did: a check that already fails would refuse it for something it may not fix.
 
 **Rules out:**
 - refactoring after each Green;
