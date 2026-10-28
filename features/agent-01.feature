@@ -32,6 +32,19 @@ Feature: One attempt, one agent process
     Then the run stops with an error, not a refusal and not a crash
     And the output names the provider error
 
+  Scenario: A provider error that passes costs one provider retry of the attempt, not the run
+    Given the scripted model answers the code attempt's first turn with a provider error, then builds it
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the run's log gives the code attempt one provider retry and no rejection
+
+  Scenario: A billing or quota error is not retried
+    Given the scripted model answers the code attempt with a provider error that says the account is out of credit
+    When I run "oid run FR-GREET-01"
+    Then the run stops with an error, not a refusal and not a crash
+    And the scripted model was asked for one turn in the code attempt
+    And the output names the provider error
+
   Scenario: The project's own Pi settings do not reach the agent
     Given the project has a .pi/settings.json that would change the agent's tools
     When I run "oid run FR-GREET-01"
