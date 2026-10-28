@@ -114,6 +114,12 @@ Given("the scripted model answers the code attempt with a provider error every t
   errorThenRetry(this, { error: PROVIDER_ERROR });
 });
 
+/** The scripted model's prepared code attempt, as it builds the FR. */
+function codeAttemptOf(world: RunWorld): ModelAttempt {
+  const model = scriptedModel(world);
+  return model.script[modelAttemptOf(model, "code")]!;
+}
+
 /** Puts `retry` right after the code attempt, as what the model answers a session that retries it. */
 function errorThenRetry(world: RunWorld, retry: Omit<ModelAttempt, "kind" | "scenario">): void {
   const model = scriptedModel(world);
@@ -122,7 +128,7 @@ function errorThenRetry(world: RunWorld, retry: Omit<ModelAttempt, "kind" | "sce
 }
 
 Given("the scripted model answers the code attempt's first turn with a provider error, then builds it", function (this: RunWorld) {
-  const builds = scriptedModel(this).script[modelAttemptOf(scriptedModel(this), "code")]!;
+  const builds = codeAttemptOf(this);
   codeAttemptAnswers(this, { error: PROVIDER_ERROR });
   errorThenRetry(this, { dir: builds.dir! });
 });
@@ -130,7 +136,7 @@ Given("the scripted model answers the code attempt's first turn with a provider 
 const OUT_OF_CREDIT = "400 invalid_request_error: Your credit balance is too low to access the API. Please go to Plans & Billing to upgrade or purchase credits.";
 
 Given("the scripted model answers the code attempt with a provider error that says the account is out of credit", function (this: RunWorld) {
-  const builds = scriptedModel(this).script[modelAttemptOf(scriptedModel(this), "code")]!;
+  const builds = codeAttemptOf(this);
   codeAttemptAnswers(this, { error: OUT_OF_CREDIT });
   // What a retry would get: a run that retried would build, and not stop.
   errorThenRetry(this, { dir: builds.dir! });
