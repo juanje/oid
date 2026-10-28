@@ -30,3 +30,20 @@ Feature: The code pass
       | adds another duplication                           |
       | leaves a branch that no test runs                  |
       | makes the new function more complex than it was    |
+
+  Scenario: A cleanup that shortens the duplication without removing it is refused as still there, and its retry, given its diff, finishes it
+    Given the run allows 1 retry
+    And the scripted cleanup attempt extracts part of the shared check, leaving a shorter copy in both functions, and its retry extracts the rest
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the retried cleanup attempt was given a refusal that says the duplication is still there, naming both functions
+    And the retried cleanup attempt was given the refused attempt's diff
+    And the output reports the cleanup item as accepted
+    And the FR's commit has the name check in one place
+
+  Scenario: A cleanup that moves the duplication into another pair of functions is refused as adding a new finding
+    Given the scripted cleanup attempt removes the copy from the new function and repeats the check in a third function
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the output reports the cleanup item as not accepted
+    And the run's log gives the cleanup's refusal as a new finding
