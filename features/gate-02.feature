@@ -8,6 +8,7 @@ Feature: Coverage of the FR's new branches
 
   Scenario: A branch the FR added that no test runs, unit test or scenario, is refused at the gate, even on a line a test covers
     Given the scripted code attempt adds a branch on a line its test covers, which no test takes, and its attempt after the gate removes it
+    And the scripted test attempt after the gate adds no test and reports that no requirement asks for the branch
     When I run "oid run FR-GREET-01"
     Then the run succeeds
     And the code attempt after the gate was given the uncovered branch, naming its file and line
@@ -21,6 +22,7 @@ Feature: Coverage of the FR's new branches
   Scenario: On vitest 5, a branch the FR added that no test runs is refused at the gate
     Given the project's vitest is version 5
     And the scripted code attempt adds a branch on a line its test covers, which no test takes, and its attempt after the gate removes it
+    And the scripted test attempt after the gate adds no test and reports that no requirement asks for the branch
     When I run "oid run FR-GREET-01"
     Then the run succeeds
     And the code attempt after the gate was given the uncovered branch, naming its file and line
@@ -34,6 +36,7 @@ Feature: Coverage of the FR's new branches
   Scenario: A branch the FR added in any of the project's source paths, which no test runs, is refused at the gate
     Given the project's .oid.json gives the source the paths src/ and shared/
     And the scripted code attempt also adds, under shared/, a branch no test takes, and its attempt after the gate removes it
+    And the scripted test attempt after the gate adds no test and reports that no requirement asks for the branch
     When I run "oid run FR-GREET-01"
     Then the run succeeds
     And the code attempt after the gate was given the uncovered branch, naming its file under shared/ and its line
@@ -54,3 +57,20 @@ Feature: Coverage of the FR's new branches
     Then the run stops with an error, not a refusal and not a crash
     And the output names @vitest/coverage-v8
     And the executor was asked for no attempt
+
+  Scenario: A branch the SPEC asks for, which no test runs, is covered by a test attempt after the gate, with a mutant as its Red
+    Given the scripted code attempt adds a branch the SPEC states, on a line its test covers, which no test takes
+    And the scripted test attempt after the gate adds a unit test that takes the branch, with a mutant of the branch on which it fails
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the test attempt after the gate was given the uncovered branch, naming its file and line
+    And the executor was not asked for a code attempt after the gate
+    And the run's commit holds the new unit test and the branch
+
+  Scenario: A branch no requirement asks for goes from the test attempt to a code attempt, which removes it
+    Given the scripted code attempt adds a branch on a line its test covers, which no test takes
+    And the scripted test attempt after the gate adds no test and reports that no requirement asks for the branch
+    And the scripted code attempt after the gate removes the branch
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the code attempt after the gate was given the uncovered branch and the test attempt's report
