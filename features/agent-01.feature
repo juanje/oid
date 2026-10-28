@@ -76,3 +76,12 @@ Feature: One attempt, one agent process
     And the run's log gives each attempt the real model's id, its turns, and tokens above zero
     And the run's summary is shown: what it built or not, where it stopped, its attempts and its cost
     And a copy of the run's log is kept outside the temporary directory, and its path is shown
+
+  @FR-RUN-09
+  Scenario: A turn that reaches the output limit is cut, and the agent may call its tools again
+    Given the project's .oid.json sets the output limit to 200 tokens
+    And the scripted model answers the code attempt's first turn with 1,000 tokens of output, then builds it in its next turn
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the scripted model was asked for at most 200 tokens of output in each turn
+    And the run's log counts one turn cut, in the code attempt
