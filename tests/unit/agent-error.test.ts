@@ -18,3 +18,22 @@ describe("agentError", () => {
     expect(agentError("code", SCENARIO, { turns: 3, stoppedAtLimit: false })).toBeUndefined();
   });
 });
+
+describe("a provider error that may pass", () => {
+  test("a transient error, such as an overload or a dropped stream, may pass, and oid retries the attempt once", () => {
+    for (const message of [PROVIDER_ERROR, "500 api_error: Internal server error", "terminated", "Connection error."]) {
+      expect(agentError("code", SCENARIO, { turns: 1, stoppedAtLimit: false, error: message })?.passes).toBe(true);
+    }
+  });
+
+  test("an error of credentials, billing or quota does not pass by trying again", () => {
+    for (const message of [
+      "400 invalid_request_error: Your credit balance is too low to access the API. Please go to Plans & Billing to upgrade or purchase credits.",
+      "429 insufficient_quota: You exceeded your current quota, please check your plan and billing details.",
+      "401 authentication_error: invalid x-api-key",
+      "403 permission_error: Your API key does not have permission to use the specified resource.",
+    ]) {
+      expect(agentError("code", SCENARIO, { turns: 1, stoppedAtLimit: false, error: message })?.passes).toBe(false);
+    }
+  });
+});

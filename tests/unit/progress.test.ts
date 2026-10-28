@@ -25,6 +25,11 @@ describe("progressLine", () => {
     expect(progressLine({ event: "attempting", kind: "code", scenario: SCENARIO, retry: true })).toMatch(new RegExp(`^attempt code for "${SCENARIO}", .*retry`));
   });
 
+  test("says when an attempt runs again after a provider error, and how an attempt stopped on one ended", () => {
+    expect(progressLine({ event: "attempting", kind: "code", scenario: SCENARIO, retry: false, providerRetry: true })).toMatch(new RegExp(`^attempt code for "${SCENARIO}", .*provider error`));
+    expect(progressLine(ended("code", { verdict: "provider error" }))).toBe(`attempt code for "${SCENARIO}": provider error`);
+  });
+
   test("says how an attempt ended, and a refused one why", () => {
     expect(progressLine(ended("code"))).toBe(`attempt code for "${SCENARIO}": accepted`);
     const refusal = { failed: "Unit tests fail after the code", evidence: "…", next: "…" };
