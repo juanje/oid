@@ -237,3 +237,26 @@ Given("the run uses oid's default limits, as a real run does", async function (t
   git(this.projectDir, "add", ".oid.json");
   git(this.projectDir, "commit", "-q", "--allow-empty", "-m", "chore: oid's default limits");
 });
+
+Given("the project's .oid.json sets the output limit to {int} tokens", async function (this: RunWorld, tokens: number) {
+  await commitProjectConfig(this.projectDir, (config) => (config.limits = { ...config.limits, outputTokens: tokens }), "chore: the output limit");
+});
+
+Given("the scripted model answers the code attempt's first turn with 1,000 tokens of output, then builds it in its next turn", function (this: RunWorld) {
+  const model = scriptedModel(this);
+  const index = modelAttemptOf(model, "code");
+  model.script[index] = { ...model.script[index]!, floods: 1000 };
+});
+
+Then("the scripted model was asked for at most {int} tokens of output in each turn", function (this: RunWorld, tokens: number) {
+  const requests = scriptedModel(this).attempts.flat();
+  assert.ok(requests.length > 0, "The model was asked nothing");
+  const over = requests.filter((request) => request.maxTokens === undefined || request.maxTokens > tokens);
+  assert.deepEqual(over.map((request) => request.maxTokens), [], `${over.length} of ${requests.length} requests asked for more than ${tokens} tokens of output, or set no limit`);
+});
+
+Then("the run's log counts one turn cut, in the code attempt", async function (this: RunWorld) {
+  const end = (await runLog(this)).find((event) => event.event === "end");
+  assert.ok(end?.event === "end", "The run's log has no measures");
+  assert.deepEqual(end.measures.cutTurns, { code: 1 }, `The run's measures do not count one turn cut, in the code attempt: ${JSON.stringify(end.measures.cutTurns)}`);
+});

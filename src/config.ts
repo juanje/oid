@@ -16,6 +16,8 @@ const DEFAULT_TURNS = 40;
 // Built scenarios have needed at most 2 rounds in the runs so far.
 const DEFAULT_ROUNDS = 6;
 const DEFAULT_COMPLEXITY = 10;
+// Twice the largest turn seen in real runs: it bounds a model streaming filler without cutting real work (FR-RUN-09).
+const DEFAULT_OUTPUT_TOKENS = 16_000;
 
 export interface Limits {
   /** How many times a refused attempt is retried (docs/design.md §2). */
@@ -26,6 +28,8 @@ export interface Limits {
   rounds: number;
   /** The complexity above which a function the FR changed is a finding (FR-REF-01). */
   complexity: number;
+  /** How many tokens of output one turn of an agent may take; a turn that reaches it is cut (FR-RUN-09). */
+  outputTokens: number;
 }
 
 export async function readLimits(dir: string): Promise<Limits> {
@@ -36,6 +40,7 @@ export async function readLimits(dir: string): Promise<Limits> {
     turns: limits?.turns ?? DEFAULT_TURNS,
     rounds: limits?.rounds ?? DEFAULT_ROUNDS,
     complexity: limits?.complexity ?? DEFAULT_COMPLEXITY,
+    outputTokens: limits?.outputTokens ?? DEFAULT_OUTPUT_TOKENS,
   };
 }
 

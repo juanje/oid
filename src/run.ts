@@ -135,7 +135,7 @@ async function buildFrs(
   if (noProvider !== undefined) return stop(noProvider, out);
   await record({ event: "stage", stage: "unit tests" });
   const baseline = await runUnitTests(worktree.dir, [], runCommand);
-  const { retries, turns, rounds, complexity } = await readLimits(worktree.dir);
+  const { retries, turns, rounds, complexity, outputTokens } = await readLimits(worktree.dir);
   // One run for every FR: the scenarios built, the tests there are, the transcripts' numbering are the run's.
   const run: FrRun = {
     executor,
@@ -149,6 +149,7 @@ async function buildFrs(
     tests: testCount(baseline),
     retries,
     turns,
+    outputTokens,
     rounds,
     complexity,
     reports: new Map(),

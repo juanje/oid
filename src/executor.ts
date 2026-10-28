@@ -36,7 +36,7 @@ export interface Attempt {
   /** For an attempt another one asked for: which kind asked, and why (FR-RUN-04). */
   asked?: { by: AttemptKind; reason: string };
   /** The executor ends its agent between turns when it reaches `turns` (with Pi, finishTurn returning { action: "end" }). */
-  limits: { turns: number };
+  limits: { turns: number; outputTokens: number };
   /** What the task gives the agent besides its kind and scenario (FR-AGENT-03). */
   context?: TaskContext;
   /** Where the executor keeps its agent's whole session, as JSONL, when it has one to keep (FR-STATE-02). */
@@ -74,6 +74,8 @@ export interface AttemptOutcome {
   cacheRead?: number;
   cost?: number;
   deniedToolCalls?: number;
+  /** The turns the output limit cut: their tool calls did not run (FR-RUN-09). */
+  cutTurns?: number;
   /** The agent stopped on an error no attempt can fix, such as a provider error its executor's own retries did not clear. */
   error?: string;
 }

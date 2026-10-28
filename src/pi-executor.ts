@@ -56,13 +56,19 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
     // Neither the person's nor the project's Pi settings reach the agent; cache warming would send requests of its own.
     settingsManager: SettingsManager.inMemory({ cacheWarming: "off", ...(retry === undefined ? {} : { retry: { enabled: true, ...retry } }) }),
   });
+  // Each turn asks for at most the output limit. A turn that reaches it is cut: Pi runs none of its tool calls and tells
+  // the agent so, which may make them again (FR-RUN-09, DOMAIN.md, Pi SDK).
+  const sessionStream = session.agent.streamFunction;
+  session.agent.streamFunction = (streamModel, context, options) => sessionStream(streamModel, context, { ...options, maxTokens: attempt.limits.outputTokens });
   let turns = 0;
+  let cutTurns = 0;
   let stoppedAtLimit = false;
   // The executor counts the turns, never the model, and ends the agent between turns (DOMAIN.md, Pi SDK: chain to
   // the session's own finishTurn). A report ends the attempt: the turn it came in is its last.
   const sessionFinishTurn = session.agent.finishTurn;
   session.agent.finishTurn = async (turn, signal): Promise<AgentTurnDecision | undefined> => {
     turns += 1;
+    if (turn.message.stopReason === "length") cutTurns += 1;
     if (reported) return { action: "end" };
     if (turns >= attempt.limits.turns && callsTools(turn.message)) {
       stoppedAtLimit = true;
@@ -105,6 +111,7 @@ async function runAgent({ runtime, model, retry }: PiExecutorOptions, attempt: A
     cacheRead: sum((usage) => usage.cacheRead),
     cost: sum((usage) => usage.cost.total),
     deniedToolCalls,
+    cutTurns,
   };
   // A provider error resolves the prompt; Pi has retried it by then.
   const last = responses.at(-1);

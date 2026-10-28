@@ -21,6 +21,8 @@ export interface AttemptRequest {
   refusal: Refusal | undefined;
   /** The turns its agent may take. */
   turns: number;
+  /** The tokens of output one of its turns may take (FR-RUN-09). */
+  outputTokens: number;
   /** What its task gives besides its kind and scenario. */
   context?: TaskContext;
   /** Where its agent's session is kept. */
@@ -44,6 +46,7 @@ export async function runAttempt({
   layout,
   refusal: previous,
   turns,
+  outputTokens,
   context,
   transcript,
   asked,
@@ -66,7 +69,7 @@ export async function runAttempt({
     worktree: worktreeDir,
     layout,
     tools,
-    limits: { turns },
+    limits: { turns, outputTokens },
     ...(previous === undefined ? {} : { refusal: previous }),
     ...(context === undefined ? {} : { context }),
     ...(transcript === undefined ? {} : { transcript }),

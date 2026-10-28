@@ -35,6 +35,8 @@ export interface AttemptEvent {
   cacheRead?: number;
   cost?: number;
   deniedToolCalls?: number;
+  /** The turns the output limit cut (FR-RUN-09). */
+  cutTurns?: number;
 }
 
 export interface StartEvent {
@@ -156,6 +158,8 @@ export interface Measures {
   cacheRead?: number;
   cost: number;
   deniedToolCalls: number;
+  /** The turns the output limit cut, per attempt kind (FR-RUN-09); logs before 0.1.22 do not have it. */
+  cutTurns?: Partial<Record<AttemptKind, number>>;
   /**
    * Requests for another attempt kind: all of them, those the run followed that changed the next kind, and the attempts
    * asked for that were accepted (FR-RUN-04); logs before 0.1.11 do not have it, and those of 0.1.11 not `changing`.
@@ -233,7 +237,7 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
     changing: asked.filter((request) => request.followed === true && changesNextKind(request.by, request.kind)).length,
     accepted: attempts.filter((attempt) => attempt.asked === true && attempt.verdict === "accepted").length,
   };
-  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, noProgressRounds, requests, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, provisional, timeMs };
+  const measures: Measures = { attempts: {}, rejections: {}, blindRetries: 0, noProgressRounds, requests, tokens: 0, cacheRead: 0, cost: 0, deniedToolCalls: 0, cutTurns: {}, provisional, timeMs };
   const last = new Map<AttemptKind, AttemptEvent>();
   for (const attempt of attempts) {
     measures.attempts[attempt.kind] = (measures.attempts[attempt.kind] ?? 0) + 1;
@@ -244,6 +248,7 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
     measures.cacheRead = (measures.cacheRead ?? 0) + (attempt.cacheRead ?? 0);
     measures.cost += attempt.cost ?? 0;
     measures.deniedToolCalls += attempt.deniedToolCalls ?? 0;
+    if ((attempt.cutTurns ?? 0) > 0) measures.cutTurns![attempt.kind] = (measures.cutTurns![attempt.kind] ?? 0) + attempt.cutTurns!;
     provisional.accepted += provisionalOf(attempt.reds ?? []).length;
     last.set(attempt.kind, attempt);
   }

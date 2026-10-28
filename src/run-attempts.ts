@@ -42,6 +42,8 @@ export interface FrRun {
   retries: number;
   /** How many turns an attempt's agent may take. */
   turns: number;
+  /** How many tokens of output one turn may take (FR-RUN-09). */
+  outputTokens: number;
   /** How many rounds of test and code attempts a scenario may take (FR-RUN-09). */
   rounds: number;
   /** The complexity above which a function the FR changed is a finding (FR-REF-01). */
@@ -78,10 +80,10 @@ export function attemptEvent(attempt: {
   mutant?: Mutant;
 }): AttemptEvent {
   const { kind, scenario, refusal, retry, reds = [] } = attempt;
-  const { turns, model, tokens, cacheRead, cost, deniedToolCalls } = attempt.outcome;
+  const { turns, model, tokens, cacheRead, cost, deniedToolCalls, cutTurns } = attempt.outcome;
   const verdict = attempt.verdict ?? (refusal === undefined ? "accepted" : "refused");
   const shown = { ...(attempt.asked === true ? { asked: true as const } : {}), ...(attempt.mutant === undefined ? {} : { mutant: attempt.mutant }), ...(refusal === undefined ? {} : { refusal }), ...(reds.length === 0 ? {} : { reds }) };
-  return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cacheRead, cost, deniedToolCalls };
+  return { event: "attempt", kind, scenario, verdict, retry, ...shown, turns, model, tokens, cacheRead, cost, deniedToolCalls, ...(cutTurns === undefined || cutTurns === 0 ? {} : { cutTurns }) };
 }
 
 /** How a scenario's run fails, or nothing when it passes. */
@@ -97,7 +99,7 @@ export async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenar
   await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined });
   run.attempts += 1;
   const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
-  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, layout: run.layout, refusal: previous, turns: run.turns, context, transcript, asked });
+  return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, layout: run.layout, refusal: previous, turns: run.turns, outputTokens: run.outputTokens, context, transcript, asked });
 }
 
 export function locationOf(scenario: Scenario): string {
