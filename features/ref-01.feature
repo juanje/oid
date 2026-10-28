@@ -32,3 +32,13 @@ Feature: Detect findings on the FR's diff
     When I run "oid run FR-GREET-02"
     Then the run succeeds
     And the executor was not asked for a cleanup attempt
+
+  Scenario: The cleanup starts after the gate passes, on a tree where every check passes
+    Given the project's complexity limit is 3
+    And the scripted code attempt for FR-GREET-02 writes a new function with complexity 5
+    And the scripted steps attempt for FR-GREET-02 leaves a type error in its step definitions, and its attempt after the gate fixes it
+    And the scripted cleanup attempt splits that function
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the executor was asked for the steps attempt after the gate before the cleanup attempt
+    And the output reports the cleanup item as accepted
