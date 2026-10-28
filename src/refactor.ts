@@ -12,7 +12,7 @@ import { withRetries } from "./retries.ts";
 import { checkpointedAttempt, type FrRun } from "./run-attempts.ts";
 import { acceptedWork } from "./worktree.ts";
 
-// The FR-scale refactor (D-07): once every scenario of the FR is green and before its gate, the two
+// The FR-scale refactor (D-07): once the FR's gate passes and before its commit, the two
 // detectors run on the FR's diff against the whole source, and each finding gets a cleanup agent,
 // one per attempt, whose item is accepted only when nothing behaviour-shaped moved (FR-REF-01, FR-REF-02).
 

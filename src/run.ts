@@ -175,7 +175,7 @@ async function buildFrs(
   return EXIT_BUILT;
 }
 
-/** Builds one FR's scenarios, then runs its gate on what is in scope; returns the exit code. */
+/** Builds one FR's scenarios, runs its gate on what is in scope, then its refactor; returns the exit code. */
 async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], passing: Set<string>, since: string): Promise<number> {
   const { worktree, record, out, retries, fr } = run;
   const builtRefusal = await buildScenarios(run, scenarios);
@@ -183,8 +183,6 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   // An attempt after the gate belongs to the FR's last scenario; its refusal's evidence and focus say what to fix.
   const last = scenarios[scenarios.length - 1]!;
   const { scope, leftOut } = gateScope(all, passing, run.green);
-  // The FR's refactor: detectors on its diff, a cleanup per finding, before its gate (FR-REF-01, D-07).
-  await refactorPass(run, last, since, scope);
   await record({ event: "stage", stage: "gate" });
   await record({ event: "scope", fr, leftOut });
   const gate = await gateLoop(
@@ -197,6 +195,9 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   );
   if ("error" in gate) return stop(gate.error, out);
   if (gate.refusal !== undefined) return refuse(gate.refusal, out);
+  // The FR's refactor, once its gate passes: a cleanup is judged by every check passing, so it starts on a tree where
+  // they all do (FR-REF-01, D-07).
+  await refactorPass(run, last, since, scope);
   return EXIT_BUILT;
 }
 

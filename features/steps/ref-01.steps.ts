@@ -80,3 +80,22 @@ Given("FR-GREET-01's greeting function already has complexity 5", async function
 Given("the scripted code attempt for FR-GREET-02 changes a line of the greeting function without adding a decision", function (this: RunWorld) {
   this.script = buildWith(greet02AttemptDir("s2-test"), refDir("s2-code-touches-greet"));
 });
+
+Given(
+  "the scripted steps attempt for FR-GREET-02 leaves a type error in its step definitions, and its attempt after the gate fixes it",
+  function (this: RunWorld) {
+    const withError = this.script.map((attempt) =>
+      attempt.kind === "steps" && attempt.scenario === SECOND ? { ...attempt, dir: refDir("s2-steps-type-error") } : attempt,
+    );
+    this.script = [...withError, { kind: "steps", scenario: SECOND, dir: greet02AttemptDir("s2-steps") }];
+  },
+);
+
+Then("the executor was asked for the steps attempt after the gate before the cleanup attempt", function (this: RunWorld) {
+  const kinds = (this.executor?.requests ?? []).map((request) => request.kind);
+  const afterGate = kinds.lastIndexOf("steps");
+  const cleanup = kinds.indexOf("refactor-code");
+  assert.equal(kinds.filter((kind) => kind === "steps").length, 3, `Expected a steps attempt after the gate; the executor was asked for: ${kinds.join(", ")}`);
+  assert.notEqual(cleanup, -1, `The executor was not asked for a cleanup attempt: ${kinds.join(", ")}`);
+  assert.ok(afterGate < cleanup, `The cleanup attempt came before the steps attempt after the gate: ${kinds.join(", ")}`);
+});
