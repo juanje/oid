@@ -21,6 +21,8 @@ export interface Refusal {
   sendTo?: AttemptKind;
   /** The gate's, not the refused attempt's own: the task of the attempt it goes back to opens with its job (FR-AGENT-03). */
   from?: "gate";
+  /** The refused attempt's diff, which oid took back: a cleanup's retry gets it to finish what it started (FR-REF-02). */
+  diff?: string;
 }
 
 export function formatRefusal(refusal: Refusal): string {

@@ -70,7 +70,12 @@ async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, pre
   };
   const context = { ...run.texts, steps: [], finding: findingText(finding, files) };
   const judge = () => judgeCleanup(run, finding, before, since, scope);
-  return checkpointedAttempt(run, "refactor-code", scenario, previous, judge, undefined, context);
+  const start = await git(run.worktree.dir, "write-tree");
+  const tried = await checkpointedAttempt(run, "refactor-code", scenario, previous, judge, undefined, context);
+  if (tried.refusal === undefined) return tried;
+  // The retry is given what the refused attempt did, so that it can finish it rather than start again (FR-REF-02).
+  const diff = await git(run.worktree.dir, "diff", "--no-color", start, await git(run.worktree.dir, "write-tree"));
+  return diff === "" ? tried : { ...tried, refusal: { ...tried.refusal, diff } };
 }
 
 const CLEAN_WITHOUT_CHANGING = "Clean without changing behaviour: remove the finding and nothing else, keeping every test, scenario and export as it is";
@@ -82,7 +87,7 @@ async function judgeCleanup(run: FrRun, finding: Finding, before: BeforeItem, si
   const itemSignature = findingSignature(finding, before.files);
   const still = findings.find((one) => findingSignature(one, after) === itemSignature);
   if (still !== undefined) {
-    return { failed: "The cleanup left its finding in place", evidence: findingText(still, after), next: CLEAN_WITHOUT_CHANGING };
+    return { failed: "The cleanup's finding is still there", evidence: findingText(still, after), next: CLEAN_WITHOUT_CHANGING };
   }
   const added = findings.filter((one) => !before.signatures.has(findingSignature(one, after)));
   if (added.length > 0) {

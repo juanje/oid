@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
 import { filesUnder, git, refDir, runScenariosAt, runUnitTestsAt, scenarioNames } from "../support/fixture.ts";
-import { runBranch } from "../support/run.ts";
+import { requestsOf, runBranch, runLog } from "../support/run.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RunWorld } from "../support/world.ts";
@@ -93,4 +93,43 @@ Then("the FR's commit has the code the code attempt left", async function (this:
   assert.equal(git(this.projectDir, "show", `${branch}:src/greet.ts`), git(this.projectDir, "show", `${this.startHead}:src/greet.ts`), "The cleanup's change to src/greet.ts reached the commit");
   const files = git(this.projectDir, "ls-tree", "-r", "--name-only", branch).split("\n");
   assert.ok(!files.includes("src/name-check.ts"), "The refused cleanup's helper reached the commit");
+});
+
+Given(
+  "the scripted cleanup attempt extracts part of the shared check, leaving a shorter copy in both functions, and its retry extracts the rest",
+  function (this: RunWorld) {
+    cleanupWith(this, "cleanup-extracts-part");
+    cleanupWith(this, "cleanup-extracts");
+  },
+);
+
+Then("the retried cleanup attempt was given a refusal that says the duplication is still there, naming both functions", function (this: RunWorld) {
+  const refusal = requestsOf(this, "refactor-code", 2)[1]!.refusal;
+  assert.ok(refusal !== undefined, "The retried cleanup attempt came without a refusal");
+  assert.match(refusal.failed, /still there/, `The refusal does not say the finding is still there:\n${refusal.failed}`);
+  assert.match(refusal.evidence, /\bduplication\b/, `The refusal's evidence names no duplication:\n${refusal.evidence}`);
+  for (const name of ["greet", "greetAll"]) {
+    assert.ok(refusal.evidence.includes(`(${name})`), `The refusal's evidence does not name ${name}:\n${refusal.evidence}`);
+  }
+});
+
+Then("the retried cleanup attempt was given the refused attempt's diff", function (this: RunWorld) {
+  const tasks = this.executor!.told.filter((_, at) => this.executor!.requests[at]!.kind === "refactor-code").map(({ task }) => task);
+  assert.equal(tasks.length, 2, `Expected 2 cleanup attempts, got ${tasks.length}`);
+  // The refused attempt's diff, as git shows it: the helper it added and the call that replaced each copy's check.
+  for (const line of ["+export function requireName(name: string): void {", "+  requireName(trimmed);", "+    requireName(cleaned);"]) {
+    assert.ok(tasks[1]!.includes(line), `The retried cleanup attempt's task does not hold the refused diff's line "${line}":\n${tasks[1]}`);
+  }
+});
+
+Given("the scripted cleanup attempt removes the copy from the new function and repeats the check in a third function", function (this: RunWorld) {
+  cleanupWith(this, "cleanup-moves-duplication");
+});
+
+Then("the run's log gives the cleanup's refusal as a new finding", async function (this: RunWorld) {
+  const cleanups = (await runLog(this)).filter((event) => event.event === "cleanup");
+  assert.equal(cleanups.length, 1, `Expected one cleanup in the run's log, found ${cleanups.length}`);
+  const [cleanup] = cleanups;
+  assert.ok(cleanup?.event === "cleanup" && cleanup.failed !== undefined, `The cleanup in the run's log has no refusal: ${JSON.stringify(cleanup)}`);
+  assert.match(cleanup.failed, /new finding/, `The cleanup's refusal is not a new finding: ${cleanup.failed}`);
 });

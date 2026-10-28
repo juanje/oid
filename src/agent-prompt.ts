@@ -166,6 +166,7 @@ export function taskFor({ kind, fr, scenario, refusal, asked, context }: Pick<At
   }
   if (repair !== undefined) return parts.join("\n\n");
   if (refusal !== undefined) parts.push(`The attempt before this one was refused:\n${formatRefusal(refusal)}`);
+  if (refusal?.diff !== undefined) parts.push(`Its diff, which oid took back: start from it to finish what it started.\n${refusal.diff}`);
   if (refusal?.focus !== undefined) parts.push(focusText(refusal.focus));
   return parts.join("\n\n");
 }

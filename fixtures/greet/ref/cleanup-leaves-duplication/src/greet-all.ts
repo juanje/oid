@@ -1,10 +1,11 @@
 export function greetAll(names: string[]): string {
   const checked = names.map((person) => {
     const cleaned = person.trim();
+    const length = cleaned.length;
     if (cleaned === "") {
       throw new Error("Nobody to greet");
     }
-    if (cleaned.length > 40) {
+    if (length > 40) {
       throw new Error(`No greeting fits a name this long: ${cleaned}`);
     }
     return cleaned;

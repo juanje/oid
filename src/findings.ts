@@ -1,5 +1,5 @@
-import { enclosingFunction, functionComplexities } from "./complexity.ts";
-import { cloneRuns, duplicatedLineCount, normalisedLines } from "./duplication.ts";
+import { enclosingFunction, type FunctionComplexity, functionComplexities } from "./complexity.ts";
+import { cloneRuns, duplicatedLineCount } from "./duplication.ts";
 
 // The two detectors of the FR-scale refactor (FR-REF-01, D-07), on the whole source given the FR's
 // diff: a finding that touches no line the FR added or changed is existing debt and does not count.
@@ -81,20 +81,26 @@ function complexityFindings(files: Map<string, string>, baseline: Map<string, st
   return findings;
 }
 
+/** The innermost function holding `line` that has a name: an anonymous one is named by the function around it. */
+function namedHolder(functions: FunctionComplexity[], line: number): FunctionComplexity | undefined {
+  return enclosingFunction(
+    functions.filter(({ name }) => name !== "<anonymous>"),
+    line,
+  );
+}
+
 /**
- * What identifies a finding across cleanups, where lines move and names change: a duplication by its
- * normalised run, a complex function by its file and name (FR-REF-02).
+ * What identifies a finding across cleanups, where lines move: its kind and the functions it sits in. A complex
+ * function by its file and name; a duplication by the functions that hold its occurrences, however long the repeated
+ * run now is, so that a shorter copy left behind is the same finding, still there (FR-REF-02).
  */
 export function findingSignature(finding: Finding, files: Map<string, string>): string {
   if (finding.category === "complexity") {
     const functions = functionComplexities(files.get(finding.file) ?? "");
     return `complexity ${finding.file} ${enclosingFunction(functions, finding.range.start)?.name ?? "?"}`;
   }
-  const run = normalisedLines(files.get(finding.file) ?? "")
-    .filter(({ line }) => line >= finding.range.start && line <= finding.range.end)
-    .map(({ norm }) => norm)
-    .join("\n");
-  return `duplication ${run}`;
+  const holders = [finding, ...(finding.related ?? [])].map(({ file, range }) => `${file} ${namedHolder(functionComplexities(files.get(file) ?? ""), range.start)?.name ?? "?"}`);
+  return `duplication ${[...new Set(holders)].sort().join(", ")}`;
 }
 
 /** The measures a cleanup item must not worsen (FR-REF-02): each function's complexity, and the duplicated lines. */
@@ -126,13 +132,13 @@ export function worseMeasures(before: SourceMeasures, after: SourceMeasures): st
   return worse;
 }
 
-/** A finding as a cleanup task shows it, each place with its enclosing function when the file has one. */
+/** A finding as a cleanup task shows it, each place with its enclosing named function when the file has one. */
 export function findingText(finding: Finding, files: Map<string, string>): string {
   const functionsOf = new Map<string, ReturnType<typeof functionComplexities>>();
   const at = ({ file, range }: FindingPlace): string => {
     const functions = functionsOf.get(file) ?? functionComplexities(files.get(file) ?? "");
     functionsOf.set(file, functions);
-    const holder = enclosingFunction(functions, range.start);
+    const holder = namedHolder(functions, range.start);
     return `${file}:${range.start}-${range.end}${holder === undefined ? "" : ` (${holder.name})`}`;
   };
   const places = [at(finding), ...(finding.related ?? []).map(at)];
