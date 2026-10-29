@@ -41,6 +41,10 @@ Given("the run allows {int} retry", async function (this: RunWorld, retries: num
   await setLimit(this, "retries", retries);
 });
 
+Given("the run allows {int} retries", async function (this: RunWorld, retries: number) {
+  await setLimit(this, "retries", retries);
+});
+
 Given("the run allows {int} turns per attempt", async function (this: RunWorld, turns: number) {
   await setLimit(this, "turns", turns);
 });

@@ -52,11 +52,16 @@ export async function gateLoop(
     return { refusal, rollback: KEEP_THE_CODE, final: sendTo === undefined };
   };
   const refusal = await withRetries(retries, async (previous): Promise<Tried> => {
+    const sentTo = kind;
     if (previous !== undefined) {
       const attempt = await afterGate(kind, previous);
       if (attempt.refusal !== undefined) return attempt;
     }
     const tried = await judged();
+    // A code attempt sent to remove untaken branches must leave fewer, wherever they now are (FR-GATE-02).
+    if (sentTo === "code" && previous?.uncovered !== undefined && tried.refusal?.uncovered !== undefined && tried.refusal.uncovered.length >= previous.uncovered.length) {
+      return { ...tried, refusal: movedRefusal(tried.refusal, previous.uncovered.length) };
+    }
     // The test attempt for uncovered branches has retries of its own: it is not one of the gate's (FR-GATE-02).
     if (kind !== "test" || tried.refusal?.uncovered === undefined || coverTried) return tried;
     coverTried = true;
@@ -89,6 +94,16 @@ function ownerOfFailures(results: CheckResult[], owner: (file: string) => PathsK
 function withCoverReport(refusal: Refusal | undefined, sendTo: PathsKind | undefined, report: string | undefined): Refusal | undefined {
   if (refusal?.uncovered === undefined || sendTo !== "code" || report === undefined) return refusal;
   return { ...refusal, evidence: `${refusal.evidence}\nThe test attempt that had these branches reported:\n${report}` };
+}
+
+/** The gate's refusal of a code attempt that left as many of the FR's branches untaken as it was sent to remove. */
+function movedRefusal(refusal: Refusal, before: number): Refusal {
+  return {
+    ...refusal,
+    failed: `The code attempt moved the untaken branches instead of removing them: ${refusal.uncovered!.length} of the FR's branches are untaken, as ${before} were before it`,
+    evidence: refusal.uncovered!.join("\n"),
+    next: "Remove the branch no requirement asks for, wherever it is now: a branch moved into a helper, or copied, is still a branch no test takes",
+  };
 }
 
 function fewerTests(before: number, now: number): Refusal {

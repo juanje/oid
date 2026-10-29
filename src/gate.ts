@@ -161,6 +161,22 @@ const NEXT_STEP: Record<PathsKind, string> = {
 const COVER_NEXT =
   "For each branch, if the SPEC or the FR's scenarios state what it does, add a unit test that takes it and submit in your report a mutant of the branch on which that test fails; if no requirement asks for a branch, add no test for it and say why in your report";
 
+/**
+ * A test attempt sent for uncovered branches, refused when a branch it was sent for is still untaken by every test,
+ * after it (FR-GATE-02): a test of something else leaves the gap where it was.
+ */
+export function untakenRefusal(sent: string[], results: CheckResult[]): Refusal | undefined {
+  const untaken = new Set(results.find((result) => result.name === "coverage")?.failures ?? []);
+  const left = sent.filter((branch) => untaken.has(branch));
+  if (left.length === 0) return undefined;
+  return {
+    failed: "The branches the test attempt was sent for are still untaken: its tests do not take them",
+    evidence: left.join("\n"),
+    next: COVER_NEXT,
+    uncovered: left,
+  };
+}
+
 /** The gate's refusal: every failed check, with its failures, or its output when it has none, as the evidence; its next step is for the kind of attempt it goes back to. */
 export function gateRefusal(results: CheckResult[], sendTo: PathsKind = "code"): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);

@@ -102,16 +102,51 @@ Given("the scripted code attempt adds a branch the SPEC states, on a line its te
   this.script = greet01("steps", "test", "code-untaken-branch");
 });
 
+// A test that takes the empty-name branch, and the mutant of the branch on which it fails.
+const STRANGER_TEST = {
+  kind: "test" as const,
+  scenario: GREET_01_SCENARIO,
+  dir: attemptDir("test-greets-stranger"),
+  mutant: {
+    reason: "Without the branch, an empty name gets no stranger's greeting",
+    files: [{ path: "src/greet.ts", edits: [{ oldText: '"Hello, stranger!"', newText: "`Hello, ${name}!`" }] }],
+  },
+};
+
 Given(
   "the scripted test attempt after the gate adds a unit test that takes the branch, with a mutant of the branch on which it fails",
   function (this: RunWorld) {
-    const mutant = {
-      reason: "Without the branch, an empty name gets no stranger's greeting",
-      files: [{ path: "src/greet.ts", edits: [{ oldText: '"Hello, stranger!"', newText: "`Hello, ${name}!`" }] }],
-    };
-    this.script = [...this.script, { kind: "test", scenario: GREET_01_SCENARIO, dir: attemptDir("test-greets-stranger"), mutant }];
+    this.script = [...this.script, STRANGER_TEST];
   },
 );
+
+Given(
+  "the scripted test attempt after the gate adds a unit test of other behaviour, with a mutant on which it fails, and its retry adds a unit test that takes the branch, with a mutant of the branch on which it fails",
+  function (this: RunWorld) {
+    const other = {
+      reason: "Another salutation fails a greeting by name",
+      files: [{ path: "src/greet.ts", edits: [{ oldText: "`Hello, ${name}!`", newText: "`Hi, ${name}!`" }] }],
+    };
+    this.script = [...this.script, { kind: "test", scenario: GREET_01_SCENARIO, dir: attemptDir("test-greets-another"), mutant: other }, STRANGER_TEST];
+  },
+);
+
+Then("the test attempt's retry after the gate was given a refusal that names the branch still untaken", function (this: RunWorld) {
+  const refusal = requestsOf(this, "test", 3)[2]!.refusal;
+  assert.ok(refusal !== undefined, "The test attempt's retry after the gate came without a refusal");
+  assert.match(refusal.evidence, /src\/greet\.ts:3\b/, `The refusal does not name src/greet.ts and the branch's line, 3:\n${refusal.evidence}`);
+  assert.match(refusal.failed, /\buntaken\b/, `The refusal does not say the branch is still untaken: ${refusal.failed}`);
+});
+
+Given("the scripted code attempt after the gate moves the branch into a new helper function, and its retry removes it", function (this: RunWorld) {
+  this.script = [...this.script, { kind: "code", scenario: GREET_01_SCENARIO, dir: attemptDir("code-moves-branch") }, { kind: "code", scenario: GREET_01_SCENARIO, dir: attemptDir("code") }];
+});
+
+Then("the code attempt's retry after the gate was given a refusal that says the branch was moved, not removed", function (this: RunWorld) {
+  const refusal = requestsOf(this, "code", 3)[2]!.refusal;
+  assert.ok(refusal !== undefined, "The code attempt's retry after the gate came without a refusal");
+  assert.match(refusal.failed, /\bmoved\b/, `The refusal does not say the branch was moved: ${refusal.failed}`);
+});
 
 Then("the test attempt after the gate was given the uncovered branch, naming its file and line", function (this: RunWorld) {
   const refusal = requestsOf(this, "test", 2)[1]!.refusal;
