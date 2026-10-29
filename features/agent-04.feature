@@ -39,6 +39,8 @@ Feature: Write boundaries, checked on the diff
       | test    | .only              |
       | test    | .skip              |
       | code    | process.env.VITEST |
+      | steps   | import(modulePath) |
+      | test    | import(modulePath) |
 
   Scenario: A .oid.json whose paths for two kinds of attempt overlap is an error that names them
     Given the project's .oid.json gives the unit tests the path tests/ and the step definitions the path tests/steps/
@@ -53,6 +55,19 @@ Feature: Write boundaries, checked on the diff
     Then the run stops with a refusal, not a crash
     And the output names .oid/progress.json
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A code attempt that writes source in another language than the project's is not committed
+    Given the scripted code attempt writes the greeting function in src/greet.js
+    When I run "oid run FR-GREET-01"
+    Then the run stops with a refusal, not a crash
+    And the output names src/greet.js and the project's source extension .ts
+    And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A project whose .oid.json names JavaScript as a source extension may have JavaScript source
+    Given the project's .oid.json sets the source extensions to .ts and .js
+    And the scripted code attempt writes a helper in src/helper.js, which its TypeScript source imports
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
 
   Rule: Each kind of attempt writes where the project's .oid.json says
 
