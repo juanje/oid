@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { detectFindings, findingSignature, findingText, sourceMeasures, worseMeasures } from "../../src/findings.ts";
+import { detectFindings, findingSignature, findingText, nearCopies, sourceMeasures, worseMeasures } from "../../src/findings.ts";
 import { checkBlock } from "./support/source-blocks.ts";
 
 // The detectors run on the FR's diff against the whole source (FR-REF-01): a finding that touches
@@ -201,5 +201,97 @@ describe("sourceMeasures and worseMeasures", () => {
     const worse = worseMeasures(before, after);
     expect(worse).toHaveLength(1);
     expect(worse[0]).toContain("duplicated lines");
+  });
+});
+
+describe("repeated condition findings", () => {
+  const greet = [
+    "export function greet(name: string): string {",
+    '  if (name.trim() === "" || name.length > 40) throw new Error("A greeting needs a name");',
+    "  return `Hello, ${name}!`;",
+    "}",
+    "",
+    "export function greetFormally(name: string): string {",
+    '  if (name.trim() === "" || name.length > 40) throw new Error("A formal greeting needs a name");',
+    "  return `Good day, ${name}.`;",
+    "}",
+  ].join("\n");
+  const greetAll = [
+    "export function greetAll(names: string[]): string {",
+    '  for (const person of names) if (person.trim() === "" || person.length > 40) throw new Error("Nobody to greet");',
+    '  return names.join(" and ");',
+    "}",
+  ].join("\n");
+
+  test("a condition with three or more operators or calls, three times in the source, one on the FR's lines, is a finding with every place", () => {
+    const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", greetAll]]);
+
+    const findings = detectFindings({ files, baseline: new Map([["src/greet.ts", greet]]), added: added("src/greet-all.ts", allLines(greetAll)), limit: 10 });
+
+    expect(findings).toHaveLength(1);
+    const found = findings[0]!;
+    expect(found.category).toBe("repeated_condition");
+    expect({ file: found.file, range: found.range }).toEqual({ file: "src/greet-all.ts", range: { start: 2, end: 2 } });
+    expect(found.related).toEqual([{ file: "src/greet.ts", range: { start: 2, end: 2 } }, { file: "src/greet.ts", range: { start: 7, end: 7 } }]);
+    expect(findingText(found, files)).toMatch(/^repeated condition: .*\(greetAll\).*\(greet\).*\(greetFormally\)/);
+  });
+
+  test("in a conditional expression or a return, it counts as in an if", () => {
+    const one = 'export function a(n: string) {\n  return n.trim() === "" || n.length > 40;\n}';
+    const two = 'export function b(n: string) {\n  return n.trim() === "" || n.length > 40 ? "no" : "yes";\n}';
+    const three = 'export function c(n: string) {\n  if (n.trim() === "" || n.length > 40) return 1;\n  return 0;\n}';
+    const files = new Map([["src/a.ts", one], ["src/b.ts", two], ["src/c.ts", three]]);
+
+    expect(detectFindings({ files, baseline: new Map(), added: added("src/c.ts", [2]), limit: 10 }).map((finding) => finding.category)).toEqual(["repeated_condition"]);
+  });
+
+  test("a condition with fewer than three operators or calls, or repeated twice, or with no place on the FR's lines, is no finding", () => {
+    const short = greet.replaceAll('name.trim() === "" || name.length > 40', 'name === ""');
+    const shortAll = greetAll.replace('person.trim() === "" || person.length > 40', 'person === ""');
+    const twice = new Map([["src/greet.ts", greet.split("\n").slice(0, 4).join("\n")], ["src/greet-all.ts", greetAll]]);
+    const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", greetAll]]);
+
+    expect(detectFindings({ files: new Map([["src/greet.ts", short], ["src/greet-all.ts", shortAll]]), baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 })).toEqual([]);
+    expect(detectFindings({ files: twice, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 })).toEqual([]);
+    expect(detectFindings({ files, baseline: files, added: added("src/other.ts", [2]), limit: 10 })).toEqual([]);
+  });
+
+  test("the same repeated condition in the same functions is the same finding, wherever its lines move", () => {
+    const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", greetAll]]);
+    const moved = new Map([["src/greet.ts", `\n\n${greet}`], ["src/greet-all.ts", greetAll]]);
+    const [before] = detectFindings({ files, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
+    const [after] = detectFindings({ files: moved, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
+
+    expect(findingSignature(after!, moved)).toBe(findingSignature(before!, files));
+  });
+});
+
+describe("nearCopies", () => {
+  const check = [
+    "function checkedName(person: string): string {",
+    "  const cleaned = person.trim();",
+    "  const length = cleaned.length;",
+    '  if (cleaned === "") {',
+    '    throw new Error("Nobody to greet");',
+    "  }",
+    "  return cleaned;",
+    "}",
+  ].join("\n");
+  const greet = ["export function greet(name: string): string {", "  const trimmed = name.trim();", "  const size = trimmed.length;", '  return size === 0 ? "Hello!" : `Hello, ${trimmed}!`;', "}"].join("\n");
+
+  test("a place whose first statements match the start of a function the FR added, below the duplication threshold, is a near-copy of it", () => {
+    const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", check]]);
+
+    expect(nearCopies({ files, baseline: new Map([["src/greet.ts", greet]]), added: added("src/greet-all.ts", allLines(check)) })).toEqual([
+      { place: { file: "src/greet.ts", range: { start: 1, end: 5 } }, name: "greet", resembles: { file: "src/greet-all.ts", range: { start: 1, end: 8 } }, resemblesName: "checkedName", lines: 2 },
+    ]);
+  });
+
+  test("a function that was there at the run's start, or a start of one statement only, is no near-copy", () => {
+    const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", check]]);
+    const oneStatement = new Map([["src/greet.ts", greet.replace("  const size = trimmed.length;", "  const size = 3;")], ["src/greet-all.ts", check]]);
+
+    expect(nearCopies({ files, baseline: files, added: added("src/greet-all.ts", [3]) })).toEqual([]);
+    expect(nearCopies({ files: oneStatement, baseline: new Map(), added: added("src/greet-all.ts", allLines(check)) })).toEqual([]);
   });
 });
