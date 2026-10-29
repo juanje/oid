@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { detectFindings, findingSignature, findingText, nearCopies, sourceMeasures, worseMeasures } from "../../src/findings.ts";
+import { detectFindings, findingText, nearCopies, sameFinding, sourceMeasures, worseMeasures } from "../../src/findings.ts";
 import { checkBlock } from "./support/source-blocks.ts";
 
 // The detectors run on the FR's diff against the whole source (FR-REF-01): a finding that touches
@@ -114,8 +114,8 @@ describe("findingText", () => {
   });
 });
 
-describe("findingSignature", () => {
-  test("a duplication finding keeps its signature when unrelated lines move it and its message changes", () => {
+describe("sameFinding", () => {
+  test("a duplication finding is the same when unrelated lines move it and its message changes", () => {
     const files = new Map([
       ["src/old.ts", checkBlock("checkOld", "old")],
       ["src/new.ts", checkBlock("checkNew", "new")],
@@ -128,7 +128,7 @@ describe("findingSignature", () => {
     const one = detectFindings({ files, baseline: new Map(), added: added("src/new.ts", everything(checkBlock("x", "x"))), limit: 10 })[0]!;
     const other = detectFindings({ files: moved, baseline: new Map(), added: new Map([["src/new.ts", new Set(everything(moved.get("src/new.ts")!))]]), limit: 10 })[0]!;
 
-    expect(findingSignature(one, files)).toBe(findingSignature(other, moved));
+    expect(sameFinding({ finding: one, files }, { finding: other, files: moved })).toBe(true);
   });
 
   // The check without its first rule: a shorter copy of the same run.
@@ -136,7 +136,7 @@ describe("findingSignature", () => {
   const duplicationIn = (files: Map<string, string>, file: string) =>
     detectFindings({ files, baseline: new Map(), added: added(file, allLines(files.get(file)!)), limit: 10 }).find(({ category }) => category === "duplication")!;
 
-  test("a duplication finding left shorter in the same functions keeps its signature", () => {
+  test("a duplication finding left shorter in the same functions is the same finding", () => {
     const files = new Map([
       ["src/old.ts", checkBlock("checkOld", "old")],
       ["src/new.ts", checkBlock("checkNew", "new")],
@@ -149,10 +149,10 @@ describe("findingSignature", () => {
     const other = duplicationIn(shortened, "src/new.ts");
 
     expect(other.detail).not.toBe(one.detail);
-    expect(findingSignature(other, shortened)).toBe(findingSignature(one, files));
+    expect(sameFinding({ finding: one, files }, { finding: other, files: shortened })).toBe(true);
   });
 
-  test("a duplication finding moved into another function has another signature", () => {
+  test("a duplication finding moved into another function is another finding", () => {
     const files = new Map([
       ["src/old.ts", checkBlock("checkOld", "old")],
       ["src/new.ts", checkBlock("checkNew", "new")],
@@ -162,16 +162,83 @@ describe("findingSignature", () => {
       ["src/new.ts", checkBlock("checkElsewhere", "new")],
     ]);
 
-    expect(findingSignature(duplicationIn(moved, "src/new.ts"), moved)).not.toBe(findingSignature(duplicationIn(files, "src/new.ts"), files));
+    expect(sameFinding({ finding: duplicationIn(files, "src/new.ts"), files }, { finding: duplicationIn(moved, "src/new.ts"), files: moved })).toBe(false);
   });
 
-  test("a complexity finding's signature is its file and function, wherever its lines sit", () => {
+  // A check followed by a second block of another shape; `spare` puts a line between the two in one copy only, so that
+  // each block is a run of its own.
+  const twoChecks = (name: string, spare: boolean) =>
+    [
+      `export function ${name}(raw: string): string {`,
+      `  const value = raw.trim();`,
+      `  if (value === "") {`,
+      `    throw new Error("empty");`,
+      `  }`,
+      `  if (value.length > 40) {`,
+      `    throw new Error("too long");`,
+      `  }`,
+      ...(spare ? [`  let spare = 0;`] : []),
+      `  const words = value.split(" ").filter((word) => word !== "");`,
+      `  const count = words.length;`,
+      `  const first = words[0];`,
+      `  if (count > 3) {`,
+      "    throw new Error(`too many words from ${first}`);",
+      `  }`,
+      `  return value;`,
+      `}`,
+    ].join("\n");
+
+  test("two different blocks repeated between the same functions are two findings", () => {
+    const files = new Map([
+      ["src/old.ts", twoChecks("checkOld", true)],
+      ["src/new.ts", twoChecks("checkNew", false)],
+    ]);
+    const [first, second, ...rest] = detectFindings({ files, baseline: new Map(), added: added("src/new.ts", allLines(files.get("src/new.ts")!)), limit: 10 });
+
+    expect(rest).toEqual([]);
+    expect(sameFinding({ finding: first!, files }, { finding: second!, files })).toBe(false);
+    expect(sameFinding({ finding: second!, files }, { finding: first!, files })).toBe(false);
+    expect(sameFinding({ finding: first!, files }, { finding: first!, files })).toBe(true);
+  });
+
+  // The check with its first rule replaced by a call to a helper that holds it: the remainder a partial cleanup leaves.
+  const withCall = (name: string, message: string) => checkBlock(name, message).replace(/ {2}if \(value === ""\) \{\n.*\n {2}\}\n/, "  requireValue(value);\n");
+  const callLine = (text: string) => text.split("\n").findIndex((line) => line.includes("requireValue")) + 1;
+
+  test("a shorter copy holding a call the cleanup wrote in place of the lines it removed is the same finding", () => {
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkNew", "new")],
+    ]);
+    const called = new Map([
+      ["src/old.ts", withCall("checkOld", "old")],
+      ["src/new.ts", withCall("checkNew", "new")],
+    ]);
+    const written = new Map([...called].map(([file, text]) => [file, new Set([callLine(text)])]));
+    const one = duplicationIn(files, "src/new.ts");
+    const other = duplicationIn(called, "src/new.ts");
+
+    expect(sameFinding({ finding: one, files }, { finding: other, files: called }, written)).toBe(true);
+  });
+
+  test("a copy whose every line the cleanup wrote is another finding", () => {
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkNew", "new")],
+    ]);
+    const written = new Map([...files].map(([file, text]) => [file, new Set(allLines(text))]));
+    const one = duplicationIn(files, "src/new.ts");
+
+    expect(sameFinding({ finding: one, files }, { finding: one, files }, written)).toBe(false);
+  });
+
+  test("a complexity finding is the same in its file and function, wherever its lines sit", () => {
     const text = sized("pickFive", 4);
     const moved = `const unrelated = 1;\n${text}`;
     const one = detectFindings({ files: new Map([["src/pick.ts", text]]), baseline: new Map(), added: added("src/pick.ts", allLines(text)), limit: 3 })[0]!;
     const other = detectFindings({ files: new Map([["src/pick.ts", moved]]), baseline: new Map(), added: added("src/pick.ts", allLines(moved)), limit: 3 })[0]!;
 
-    expect(findingSignature(one, new Map([["src/pick.ts", text]]))).toBe(findingSignature(other, new Map([["src/pick.ts", moved]])));
+    expect(sameFinding({ finding: one, files: new Map([["src/pick.ts", text]]) }, { finding: other, files: new Map([["src/pick.ts", moved]]) })).toBe(true);
   });
 });
 
@@ -262,7 +329,18 @@ describe("repeated condition findings", () => {
     const [before] = detectFindings({ files, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
     const [after] = detectFindings({ files: moved, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
 
-    expect(findingSignature(after!, moved)).toBe(findingSignature(before!, files));
+    expect(sameFinding({ finding: before!, files }, { finding: after!, files: moved })).toBe(true);
+  });
+
+  test("another repeated condition in the same functions is another finding", () => {
+    const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", greetAll]]);
+    const other = (text: string) => text.replaceAll(/(\w+)\.trim\(\) === "" \|\| \1\.length > 40/g, '$1.trim() === "" || $1.length > 80');
+    const changed = new Map([["src/greet.ts", other(greet)], ["src/greet-all.ts", other(greetAll)]]);
+    const [before] = detectFindings({ files, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
+    const [after] = detectFindings({ files: changed, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
+
+    expect(after?.category).toBe("repeated_condition");
+    expect(sameFinding({ finding: before!, files }, { finding: after!, files: changed })).toBe(false);
   });
 });
 
