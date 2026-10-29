@@ -2,7 +2,7 @@ import { realpath, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { CommandOptions, CommandResult } from "../../src/command.ts";
-import { gateError, gateRefusal, runGate } from "../../src/gate.ts";
+import { gateError, gateRefusal, runGate, untakenRefusal } from "../../src/gate.ts";
 import { GREET_02_SECOND, recorded } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
 
@@ -200,5 +200,23 @@ describe("gateRefusal", () => {
 
   test("refuses nothing when every check passes", () => {
     expect(gateRefusal([{ name: "types", passed: true, output: "" }])).toBeUndefined();
+  });
+});
+
+describe("untakenRefusal", () => {
+  const BRANCH = "src/greet.ts:3:10: branch 0 of a conditional expression";
+  const coverage = (failures: string[]) => [{ name: "coverage", passed: failures.length === 0, output: failures.join("\n"), ...(failures.length === 0 ? {} : { failures }) }];
+
+  test("refuses a test attempt for uncovered branches that leaves one of them untaken, naming it", () => {
+    const refusal = untakenRefusal([BRANCH], coverage([BRANCH]));
+
+    expect(refusal?.failed).toMatch(/still untaken/);
+    expect(refusal?.evidence).toContain(BRANCH);
+    expect(refusal?.uncovered).toEqual([BRANCH]);
+  });
+
+  test("accepts one that takes every branch it was sent for, whatever else is untaken", () => {
+    expect(untakenRefusal([BRANCH], coverage([]))).toBeUndefined();
+    expect(untakenRefusal([BRANCH], coverage(["src/other.ts:1:1: branch 1 of an if"]))).toBeUndefined();
   });
 });

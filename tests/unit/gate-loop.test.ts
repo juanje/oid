@@ -153,6 +153,29 @@ describe("gateLoop", () => {
     expect(given[1]!.evidence).toContain(report);
   });
 
+  test("a code attempt for uncovered branches that leaves as many untaken, wherever they now are, is refused as having moved them, and goes back as a retry", async () => {
+    const moved = "src/greet.ts:7:10: branch 0 of a conditional expression";
+    const MOVED: CheckResult[] = [...PASSING, { name: "coverage", passed: false, output: moved, failures: [moved] }];
+    const { gate, afterGate, given, kinds } = fakes([COVERAGE_FAILS, COVERAGE_FAILS, MOVED, PASSING], "No requirement asks for this branch");
+
+    const outcome = await gateLoop(2, gate, afterGate);
+
+    expect(outcome).toEqual({ refusal: undefined });
+    expect(kinds).toEqual(["test", "code", "code"]);
+    expect(given[2]!.failed).toMatch(/\bmoved\b/);
+    expect(given[2]!.evidence).toContain(moved);
+  });
+
+  test("a code attempt for uncovered branches that leaves fewer untaken is not refused as having moved them", async () => {
+    const two = [BRANCH, "src/greet.ts:7:10: branch 0 of a conditional expression"];
+    const TWO: CheckResult[] = [...PASSING, { name: "coverage", passed: false, output: two.join("\n"), failures: two }];
+    const { gate, afterGate, given } = fakes([TWO, TWO, COVERAGE_FAILS, PASSING], "No requirement asks for these branches");
+
+    await gateLoop(2, gate, afterGate);
+
+    expect(given[2]!.failed).not.toMatch(/\bmoved\b/);
+  });
+
   test("an uncovered branch with a failing scenario goes to a code attempt: the code fixes both", async () => {
     const { gate, afterGate, kinds } = fakes([[...SCENARIO_FAILS, COVERAGE_FAILS[3]!], PASSING]);
 
