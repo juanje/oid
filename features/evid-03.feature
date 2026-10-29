@@ -60,3 +60,13 @@ Feature: A mutant where a Red is impossible
     And the executor was asked for every prepared attempt, in order
     And the output gives the new test's Red the class business_assertion, through a mutant
     And the output says the test attempt's request for the second scenario was followed
+
+  Scenario: A mutant under which the scenario does not finish is refused, and the run goes on
+    Given the project's .oid.json sets the check time limit to 5 seconds
+    And the run allows 1 retry
+    And the scripted steps attempt for the second scenario submits a mutant that makes the greeting function loop forever
+    And its retry submits a mutant that joins every name with and
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the steps attempt's retry was given a refusal that says the scenario does not finish under the mutant
+    And the output gives the second scenario's Red the class business_assertion, through a mutant
