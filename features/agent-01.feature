@@ -98,3 +98,9 @@ Feature: One attempt, one agent process
     Then the run succeeds
     And the scripted model was asked for at most 200 tokens of output in each turn
     And the run's log counts one turn cut, in the code attempt
+
+  Scenario: An extra-usage error is billing, and is not retried
+    Given the scripted model answers the code attempt with a provider error that says "You're out of extra usage"
+    When I run "oid run FR-GREET-01"
+    Then the run stops with an error, not a refusal and not a crash
+    And the scripted model was asked for one turn in the code attempt
