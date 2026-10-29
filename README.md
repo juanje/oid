@@ -35,7 +35,7 @@ Name the model the agents run on, as Pi lists it (`pi --list-models`), in your o
 
 The model is yours, not the project's: a project's `.oid.json` that names one is an error.
 
-The project may commit a `.oid.json` with its `limits` (`retries`, `turns`, `rounds`, `complexity`, `outputTokens`) and its `paths`: where it keeps its spec, feature files, step definitions, unit tests and source, and its domain and conventions; [`DOMAIN.md`](DOMAIN.md) gives the defaults, which are `SPEC.md`, `features/`, `features/steps/` and `features/support/`, `tests/` and `src/`. Each FR's text is read from the spec, under a heading `#### FR-AREA-01: <title>` (or `###`) or after a line in bold, `**FR-AREA-01 — <title>**`. oid reads it from the commit the run starts from, never from your uncommitted changes, and says so when you have some. Then, with the FR's feature files approved and committed:
+The project may commit a `.oid.json` with its `limits` (`retries`, `turns`, `rounds`, `complexity`, `outputTokens`, `checkSeconds`), its `source.extensions` (`.ts` in a project with a `tsconfig.json`, any otherwise) and its `paths`: where it keeps its spec, feature files, step definitions, unit tests and source, and its domain and conventions; [`DOMAIN.md`](DOMAIN.md) gives the defaults, which are `SPEC.md`, `features/`, `features/steps/` and `features/support/`, `tests/` and `src/`. Each FR's text is read from the spec, under a heading `#### FR-AREA-01: <title>` (or `###`) or after a line in bold, `**FR-AREA-01 — <title>**`. oid reads it from the commit the run starts from, never from your uncommitted changes, and says so when you have some. Then, with the FR's feature files approved and committed:
 
 ```bash
 oid run FR-AREA-01
