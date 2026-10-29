@@ -4,6 +4,7 @@ import { filesUnder, git, refDir, runScenariosAt, runUnitTestsAt, scenarioNames 
 import { cleanupTask, requestsOf, runBranch, runLog } from "../support/run.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Request } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
 const SECOND = scenarioNames("greet-02/contract/features/greet-02.feature")[1]!;
@@ -66,9 +67,14 @@ Then("every scenario and unit test passes on the run's branch", async function (
 
 /** The one cleanup line of the run's output (DOMAIN.md, Progress lines). */
 function cleanupLine(world: RunWorld): string {
+  return cleanupLines(world, 1)[0]!;
+}
+
+/** The run output's cleanup lines, `count` of them. */
+function cleanupLines(world: RunWorld, count: number): string[] {
   const lines = world.output.split("\n").filter((line) => line.startsWith("cleanup "));
-  assert.equal(lines.length, 1, `Expected one cleanup line in the output:\n${world.output}`);
-  return lines[0]!;
+  assert.equal(lines.length, count, `Expected ${count} cleanup lines in the output:\n${world.output}`);
+  return lines;
 }
 
 Then("the output reports the cleanup item as accepted", function (this: RunWorld) {
@@ -104,14 +110,18 @@ Given(
 );
 
 Then("the retried cleanup attempt was given a refusal that says the duplication is still there, naming both functions", function (this: RunWorld) {
-  const refusal = requestsOf(this, "refactor-code", 2)[1]!.refusal;
+  assertStillThere(requestsOf(this, "refactor-code", 2)[1]!.refusal);
+});
+
+/** A cleanup's refusal that says its duplication between greet and greetAll is still there. */
+function assertStillThere(refusal: Request["refusal"]): void {
   assert.ok(refusal !== undefined, "The retried cleanup attempt came without a refusal");
   assert.match(refusal.failed, /still there/, `The refusal does not say the finding is still there:\n${refusal.failed}`);
   assert.match(refusal.evidence, /\bduplication\b/, `The refusal's evidence names no duplication:\n${refusal.evidence}`);
   for (const name of ["greet", "greetAll"]) {
     assert.ok(refusal.evidence.includes(`(${name})`), `The refusal's evidence does not name ${name}:\n${refusal.evidence}`);
   }
-});
+}
 
 Then("the retried cleanup attempt was given the refused attempt's diff", function (this: RunWorld) {
   const tasks = this.executor!.told.filter((_, at) => this.executor!.requests[at]!.kind === "refactor-code").map(({ task }) => task);
@@ -163,4 +173,56 @@ Then("the output lists the cleanup's note that the two messages differ", functio
   const at = this.output.indexOf(MESSAGES_DIFFER);
   assert.notEqual(at, -1, `The output does not give the cleanup's note:\n${this.output}`);
   assert.match(this.output.slice(Math.max(0, at - 200), at), /\bnotes?\b/i, `The output does not give the cleanup's note as a note:\n${this.output}`);
+});
+
+Given("the scripted first cleanup attempt extracts the shared name check, which moves the punctuation copies' lines", function (this: RunWorld) {
+  cleanupWith(this, "cleanup-extracts-name-only");
+});
+
+Given(
+  "the scripted second cleanup attempt extracts part of the shared punctuation check, leaving a shorter copy in both functions, and its retry extracts the rest",
+  function (this: RunWorld) {
+    cleanupWith(this, "cleanup-extracts-marks-part");
+    cleanupWith(this, "cleanup-extracts-marks");
+  },
+);
+
+Given("the scripted first cleanup attempt extracts both shared checks into one helper", function (this: RunWorld) {
+  cleanupWith(this, "cleanup-extracts-both");
+});
+
+/** The punctuation check's rule, as both copies and every helper that holds it write it. */
+const PUNCTUATION = '".,;:!?"';
+
+Then("the second cleanup attempt's task gives the punctuation copies' lines as the first cleanup left them", async function (this: RunWorld) {
+  const tasks = this.executor!.told.filter((_, at) => this.executor!.requests[at]!.kind === "refactor-code").map(({ task }) => task);
+  assert.ok(tasks.length >= 2, `Expected a second cleanup attempt, got ${tasks.length}`);
+  for (const file of ["src/greet.ts", "src/greet-all.ts"]) {
+    const text = await readFile(join(refDir("cleanup-extracts-name-only"), file), "utf8");
+    const line = text.split("\n").findIndex((row) => row.includes(PUNCTUATION)) + 1;
+    assert.ok(tasks[1]!.includes(`${file}:${line}-`), `The second cleanup attempt's task does not give ${file} from line ${line}:\n${tasks[1]}`);
+  }
+});
+
+Then("the retried second cleanup attempt was given a refusal that says the duplication is still there, naming both functions", function (this: RunWorld) {
+  assertStillThere(requestsOf(this, "refactor-code", 3)[2]!.refusal);
+});
+
+Then("the output reports both cleanup items as accepted", function (this: RunWorld) {
+  for (const line of cleanupLines(this, 2)) assert.match(line, /: accepted\b/, `A cleanup line does not say accepted:\n${line}`);
+});
+
+Then("the FR's commit has the punctuation check in one place", function (this: RunWorld) {
+  const checks = [...committedSource(this)].filter(([, text]) => text.includes(PUNCTUATION));
+  assert.equal(checks.length, 1, `The punctuation check (${PUNCTUATION}) is in ${checks.length} committed source files, not one: ${checks.map(([file]) => file).join(", ")}`);
+});
+
+Then("the executor was asked for one cleanup attempt", function (this: RunWorld) {
+  const asked = (this.executor?.requests ?? []).filter((request) => request.kind === "refactor-code");
+  assert.equal(asked.length, 1, `The executor was asked for ${asked.length} cleanup attempts`);
+});
+
+Then("the output reports one cleanup item, accepted", function (this: RunWorld) {
+  const line = cleanupLine(this);
+  assert.match(line, /: accepted\b/, `The cleanup line does not say accepted:\n${line}`);
 });

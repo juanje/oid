@@ -168,18 +168,50 @@ function namedHolder(functions: FunctionComplexity[], line: number): FunctionCom
   );
 }
 
-/**
- * What identifies a finding across cleanups, where lines move: its kind and the functions it sits in. A complex
- * function by its file and name; a duplication by the functions that hold its occurrences, however long the repeated
- * run now is, so that a shorter copy left behind is the same finding, still there (FR-REF-02).
- */
-export function findingSignature(finding: Finding, files: Map<string, string>): string {
+/** A finding with the source it was found in. */
+export interface SeenFinding {
+  finding: Finding;
+  files: Map<string, string>;
+}
+
+/** The functions that hold a finding, as `<file> <name>`: a complex function itself, or each occurrence's named holder. */
+function holders({ finding, files }: SeenFinding): string {
   if (finding.category === "complexity") {
-    const functions = functionComplexities(files.get(finding.file) ?? "");
-    return `complexity ${finding.file} ${enclosingFunction(functions, finding.range.start)?.name ?? "?"}`;
+    return `${finding.file} ${enclosingFunction(functionComplexities(files.get(finding.file) ?? ""), finding.range.start)?.name ?? "?"}`;
   }
-  const holders = [finding, ...(finding.related ?? [])].map(({ file, range }) => `${file} ${namedHolder(functionComplexities(files.get(file) ?? ""), range.start)?.name ?? "?"}`);
-  return `${finding.category} ${[...new Set(holders)].sort().join(", ")}`;
+  const names = [finding, ...(finding.related ?? [])].map(({ file, range }) => `${file} ${namedHolder(functionComplexities(files.get(file) ?? ""), range.start)?.name ?? "?"}`);
+  return [...new Set(names)].sort().join(", ");
+}
+
+/** The normalised significant lines of a finding's places, but those in `skip`. */
+function placeLines({ finding, files }: SeenFinding, skip: Map<string, Set<number>> = new Map()): string[] {
+  return [finding, ...(finding.related ?? [])].flatMap(({ file, range }) =>
+    normalisedLines(files.get(file) ?? "")
+      .filter(({ line }) => line >= range.start && line <= range.end && skip.get(file)?.has(line) !== true)
+      .map(({ norm }) => norm),
+  );
+}
+
+/** The condition a repeated-condition finding repeats, normalised. */
+function conditionAt({ finding, files }: SeenFinding): string | undefined {
+  return conditionsOf(files.get(finding.file) ?? "").find(({ start, end }) => start === finding.range.start && end === finding.range.end)?.norm;
+}
+
+/**
+ * Whether `later` is `earlier` after a cleanup, where lines move (FR-REF-02): of the same kind in the same functions.
+ * A duplication also repeats only lines of the earlier one, apart from those the cleanup wrote (`written`, by file),
+ * and at least one of them, so that a shorter copy left behind is still there and another block is another finding;
+ * a repeated condition repeats the same condition.
+ */
+export function sameFinding(earlier: SeenFinding, later: SeenFinding, written: Map<string, Set<number>> = new Map()): boolean {
+  if (earlier.finding.category !== later.finding.category || holders(earlier) !== holders(later)) return false;
+  if (later.finding.category === "duplication") {
+    const before = new Set(placeLines(earlier));
+    const kept = placeLines(later, written);
+    return kept.length > 0 && kept.every((line) => before.has(line));
+  }
+  if (later.finding.category === "repeated_condition") return conditionAt(earlier) === conditionAt(later);
+  return true;
 }
 
 /** The measures a cleanup item must not worsen (FR-REF-02): each function's complexity, and the duplicated lines. */

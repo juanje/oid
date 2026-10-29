@@ -29,6 +29,14 @@ Given(
   },
 );
 
+Given(
+  "the scripted code attempt for FR-GREET-02 copies the greeting function's name check and its punctuation check into its new function, with other names and another message",
+  async function (this: RunWorld) {
+    await commitFixture(this.projectDir, refDir("greet-checks-punctuation"), "feat(FR-GREET-01): refuse an empty, overlong or punctuated name");
+    this.script = buildWith(refDir("s2-test-checks-punctuation"), refDir("s2-code-copies-checks"));
+  },
+);
+
 Given("the scripted cleanup attempt extracts the shared check", function (this: RunWorld) {
   this.script = [...this.script, { kind: "refactor-code", scenario: SECOND, dir: refDir("cleanup-extracts") }];
 });

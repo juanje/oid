@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { addedLines } from "./coverage.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { detectFindings, type Finding, type FindingPlace, findingSignature, findingText, nearCopies, sourceMeasures, worseMeasures } from "./findings.ts";
+import { detectFindings, type Finding, type FindingPlace, findingText, nearCopies, sameFinding, type SeenFinding, sourceMeasures, worseMeasures } from "./findings.ts";
 import { calledFunctions, functionSignatures } from "./source-functions.ts";
 import { type CheckResult, runGate } from "./gate.ts";
 import { git } from "./git.ts";
@@ -16,10 +16,21 @@ import { acceptedWork } from "./worktree.ts";
 // detectors run on the FR's diff against the whole source, and each finding gets a cleanup agent,
 // one per attempt, whose item is accepted only when nothing behaviour-shaped moved (FR-REF-01, FR-REF-02).
 
-/** Runs the detectors on the FR's diff since `since` and a cleanup item per finding; never stops the FR. */
+/** A finding an item was given, with the source and its tree when the item started. */
+interface ItemFinding extends SeenFinding {
+  tree: string;
+}
+
+/**
+ * Runs the detectors on the FR's diff since `since` and a cleanup item per finding; never stops the FR. Before each
+ * item they run again on the source as the accepted items left it, so that the item gets its finding with its lines
+ * now, and a finding an earlier item removed gets no item (FR-REF-02).
+ */
 export async function refactorPass(run: FrRun, scenario: Scenario, since: string, scope: string[]): Promise<void> {
-  const findings = await findingsOnDiff(run, since, await sourceNow(run));
-  for (const finding of findings) {
+  const handled: ItemFinding[] = [];
+  for (let next = await nextFinding(run, since, handled); next !== undefined; next = await nextFinding(run, since, handled)) {
+    handled.push(next);
+    const { finding } = next;
     const accepted = await acceptedWork(run.worktree.dir);
     // A cleanup's note reaches the person whatever its verdict, and changes nothing (FR-REF-02).
     let note: string | undefined;
@@ -40,6 +51,21 @@ export async function refactorPass(run: FrRun, scenario: Scenario, since: string
     });
   }
   await recordNearCopies(run, since);
+}
+
+/** The first finding on the source now that is none an item was given, with the source and its tree. */
+async function nextFinding(run: FrRun, since: string, handled: ItemFinding[]): Promise<ItemFinding | undefined> {
+  const files = await sourceNow(run);
+  const tree = await git(run.worktree.dir, "write-tree");
+  const written = await Promise.all(handled.map((one) => writtenBetween(run, one.tree, tree)));
+  const findings = await findingsOnDiff(run, since, files);
+  const finding = findings.find((one) => !handled.some((item, at) => sameFinding(item, { finding: one, files }, written[at])));
+  return finding === undefined ? undefined : { finding, files, tree };
+}
+
+/** The source lines that differ in `to` from `from`, by file: what a cleanup wrote. */
+async function writtenBetween(run: FrRun, from: string, to: string): Promise<Map<string, Set<number>>> {
+  return addedLines(await git(run.worktree.dir, "diff", "-U0", "--no-color", from, to, "--", ...run.layout.writable.code));
 }
 
 /** The near-copies of the functions the FR or its cleanup added, for the person: no cleanup touches them (FR-REF-01). */
@@ -79,19 +105,22 @@ async function sourceAt(dir: string, since: string, source: string[]): Promise<M
   return files;
 }
 
-/** What the item is judged against: the source, its findings, its API and its measures before the attempt. */
+/** What the item is judged against: the source, its tree, its findings, its API and its measures before the attempt. */
 interface BeforeItem {
   files: Map<string, string>;
-  signatures: Set<string>;
+  tree: string;
+  findings: Finding[];
   exports: ModuleExports;
 }
 
 /** One cleanup attempt for one finding, checkpointed when accepted, as any attempt is (FR-REF-02). */
 async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, previous: Refusal | undefined, since: string, scope: string[]) {
   const files = await sourceNow(run);
+  const start = await git(run.worktree.dir, "write-tree");
   const before: BeforeItem = {
     files,
-    signatures: new Set((await findingsOnDiff(run, since, files)).map((one) => findingSignature(one, files))),
+    tree: start,
+    findings: await findingsOnDiff(run, since, files),
     exports: await exportSignatures(run.worktree.dir, [...files.keys()]),
   };
   const context = {
@@ -102,7 +131,6 @@ async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, pre
     calls: calledFunctions(files, [finding, ...(finding.related ?? [])]),
   };
   const judge = () => judgeCleanup(run, finding, before, since, scope);
-  const start = await git(run.worktree.dir, "write-tree");
   const tried = await checkpointedAttempt(run, "refactor-code", scenario, previous, judge, undefined, context);
   if (tried.refusal === undefined) return tried;
   // The retry is given what the refused attempt did, so that it can finish it rather than start again (FR-REF-02).
@@ -116,12 +144,13 @@ const CLEAN_WITHOUT_CHANGING = "Clean without changing behaviour: remove the fin
 async function judgeCleanup(run: FrRun, finding: Finding, before: BeforeItem, since: string, scope: string[]): Promise<Refusal | undefined> {
   const after = await sourceNow(run);
   const findings = await findingsOnDiff(run, since, after);
-  const itemSignature = findingSignature(finding, before.files);
-  const still = findings.find((one) => findingSignature(one, after) === itemSignature);
+  const written = await writtenBetween(run, before.tree, await git(run.worktree.dir, "write-tree"));
+  const isBefore = (earlier: Finding, later: Finding) => sameFinding({ finding: earlier, files: before.files }, { finding: later, files: after }, written);
+  const still = findings.find((one) => isBefore(finding, one));
   if (still !== undefined) {
     return { failed: "The cleanup's finding is still there", evidence: findingText(still, after), next: CLEAN_WITHOUT_CHANGING };
   }
-  const added = findings.filter((one) => !before.signatures.has(findingSignature(one, after)));
+  const added = findings.filter((one) => !before.findings.some((earlier) => isBefore(earlier, one)));
   if (added.length > 0) {
     return { failed: "The cleanup added a new finding", evidence: added.map((one) => findingText(one, after)).join("\n"), next: CLEAN_WITHOUT_CHANGING };
   }
