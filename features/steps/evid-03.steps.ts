@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
 import type { Mutant } from "../../src/executor.ts";
 import { greet02AttemptDir, scenarioNames } from "../support/fixture.ts";
+import { requestsOf } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
 const [FIRST, SECOND] = scenarioNames("greet-02/contract/features/greet-02.feature") as [string, string];
@@ -44,8 +45,14 @@ Given("the scripted code attempt for the first scenario of FR-GREET-02 also buil
   ];
 });
 
+const LOOP: Mutant = {
+  reason: "A greeting that never comes is not the list",
+  files: [{ path: "src/greet-all.ts", edits: [{ oldText: "  const last = names[names.length - 1];\n", newText: "  while (names.length > 0) {}\n  const last = names[names.length - 1];\n" }] }],
+};
+
 const MUTANTS: Record<string, Mutant> = {
   "joins every name with and": JOIN_ALL,
+  "makes the greeting function loop forever": LOOP,
   "removes the greeting function": REMOVE_GREET_ALL,
   "edits its own step definitions": EDIT_STEPS,
   "changes code the scenario does not run": UNRUN,
@@ -103,6 +110,16 @@ Then("the output names the step definition file the mutant edits", function (thi
 Then("the output says the scenario still passes under the mutant", function (this: RunWorld) {
   const refusal = finalRefusal(this);
   assert.ok(refusal.includes(SECOND) && /\bmutant\b/.test(refusal) && /\bpass/.test(refusal), `The refusal does not say the scenario still passes under the mutant:\n${this.output}`);
+});
+
+Given("its retry submits a mutant that joins every name with and", function (this: RunWorld) {
+  this.script = [...this.script, { kind: "steps", scenario: SECOND, dir: greet02AttemptDir("s2-steps"), mutant: JOIN_ALL }];
+});
+
+Then("the steps attempt's retry was given a refusal that says the scenario does not finish under the mutant", function (this: RunWorld) {
+  const retry = requestsOf(this, "steps", 3)[2]!;
+  const refusal = JSON.stringify(retry.refusal ?? {});
+  assert.ok(/\bnot finish\b/.test(refusal) && /\bmutant\b/.test(refusal) && refusal.includes(SECOND), `The retry's refusal does not say the scenario does not finish under the mutant: ${refusal}`);
 });
 
 Given("its retry submits a mutant that joins every name with and, and asks for a code attempt", function (this: RunWorld) {

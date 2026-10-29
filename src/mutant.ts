@@ -62,6 +62,14 @@ const CLASS_NEXT = "Change what the code does, not whether it exists: a removed 
 export function judgeScenarioUnderMutant(result: ScenarioRun, symbolExists: (name: string) => boolean): Refusal | undefined {
   const scenario = `${result.uri}:${result.line} "${result.name}"`;
   if (result.status === "passed") return { failed: "The scenario still passes under the mutant", evidence: scenario, next: PASSES_NEXT };
+  // Code that never returns shows nothing about what the scenario checks (FR-RUN-09).
+  if (result.failure?.status === "NOT FINISHED") {
+    return {
+      failed: "The scenario does not finish under the mutant",
+      evidence: `${scenario}, step "${result.failure.step}": ${result.failure.message}`,
+      next: "Make the mutant return something wrong, so that what the scenario asserts fails: a test tells correct code from broken code by a failing assertion",
+    };
+  }
   const redClass = classifyScenario(result, symbolExists);
   if (redClass === "business_assertion") return undefined;
   return {

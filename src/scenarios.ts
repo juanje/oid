@@ -30,6 +30,10 @@ export async function runScenarios(dir: string, scenarios: Scenario[], run: Comm
   const results = report === undefined ? [] : withStop(scenarioResults(report), stoppedAfter);
   return scenarios.map((scenario) => {
     const result = results.find((ran) => location(ran) === location(scenario));
+    // cucumber-js stopped at the time limit may not have written its report: what was asked for did not finish.
+    if (result === undefined && stoppedAfter !== undefined) {
+      return { ...scenario, status: "failed", failure: { step: "?", kind: "Unknown", status: "NOT FINISHED", message: didNotFinish(stoppedAfter) } };
+    }
     if (result === undefined) return { ...scenario, status: "not run" };
     return { ...scenario, status: result.status, failure: result.failure, ...(result.stepFiles === undefined ? {} : { stepFiles: result.stepFiles }) };
   });
