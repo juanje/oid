@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
 import { filesUnder, git, refDir, runScenariosAt, runUnitTestsAt, scenarioNames } from "../support/fixture.ts";
-import { requestsOf, runBranch, runLog } from "../support/run.ts";
+import { cleanupTask, requestsOf, runBranch, runLog } from "../support/run.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RunWorld } from "../support/world.ts";
@@ -132,4 +132,35 @@ Then("the run's log gives the cleanup's refusal as a new finding", async functio
   const [cleanup] = cleanups;
   assert.ok(cleanup?.event === "cleanup" && cleanup.failed !== undefined, `The cleanup in the run's log has no refusal: ${JSON.stringify(cleanup)}`);
   assert.match(cleanup.failed, /new finding/, `The cleanup's refusal is not a new finding: ${cleanup.failed}`);
+});
+
+// The source's functions when the cleanup starts, as their signatures read in it: FR-GREET-01's name check, the
+// function it calls, and FR-GREET-02's copy.
+const SOURCE_SIGNATURES = ["greet(name: string): string", "lettersIn(name: string): number", "greetAll(names: string[]): string", "greetPair(first: string, second: string): string"];
+
+Then("the cleanup attempt's task names every function of the source with its signature", function (this: RunWorld) {
+  const task = cleanupTask(this);
+  for (const signature of SOURCE_SIGNATURES) assert.ok(task.includes(signature), `The cleanup attempt's task does not give "${signature}":\n${task}`);
+});
+
+Then("the cleanup attempt's task holds the body of each function the copied check calls", async function (this: RunWorld) {
+  const task = cleanupTask(this);
+  // The check calls lettersIn, in both copies.
+  const body = (await readFile(join(refDir("greet-checks-name"), "src/letters.ts"), "utf8")).split("\n").filter((line) => !line.startsWith("/**")).join("\n").trimEnd();
+  assert.ok(task.includes(body), `The cleanup attempt's task does not hold the body of lettersIn:\n${body}\n\nTask:\n${task}`);
+});
+
+const MESSAGES_DIFFER = "The two copies refuse with different messages: greet says \"A greeting needs a name\", greetAll says \"Nobody to greet\". The SPEC does not say a group should be refused otherwise.";
+
+Given(
+  "the scripted cleanup attempt extracts the shared check, with the message as a parameter, and reports a note that the two messages differ",
+  function (this: RunWorld) {
+    this.script = [...this.script, { kind: "refactor-code", scenario: SECOND, dir: refDir("cleanup-extracts-with-message"), note: MESSAGES_DIFFER }];
+  },
+);
+
+Then("the output lists the cleanup's note that the two messages differ", function (this: RunWorld) {
+  const at = this.output.indexOf(MESSAGES_DIFFER);
+  assert.notEqual(at, -1, `The output does not give the cleanup's note:\n${this.output}`);
+  assert.match(this.output.slice(Math.max(0, at - 200), at), /\bnotes?\b/i, `The output does not give the cleanup's note as a note:\n${this.output}`);
 });

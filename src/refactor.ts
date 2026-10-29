@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { addedLines } from "./coverage.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { detectFindings, type Finding, findingSignature, findingText, sourceMeasures, worseMeasures } from "./findings.ts";
+import { detectFindings, type Finding, type FindingPlace, findingSignature, findingText, nearCopies, sourceMeasures, worseMeasures } from "./findings.ts";
+import { calledFunctions, functionSignatures } from "./source-functions.ts";
 import { type CheckResult, runGate } from "./gate.ts";
 import { git } from "./git.ts";
 import { changedExports, exportSignatures, type ModuleExports } from "./module-exports.ts";
@@ -20,10 +21,36 @@ export async function refactorPass(run: FrRun, scenario: Scenario, since: string
   const findings = await findingsOnDiff(run, since, await sourceNow(run));
   for (const finding of findings) {
     const accepted = await acceptedWork(run.worktree.dir);
-    const refusal = await withRetries(run.retries, (previous) => cleanupOnce(run, scenario, finding, previous, since, scope));
+    // A cleanup's note reaches the person whatever its verdict, and changes nothing (FR-REF-02).
+    let note: string | undefined;
+    const refusal = await withRetries(run.retries, async (previous) => {
+      const tried = await cleanupOnce(run, scenario, finding, previous, since, scope);
+      note = tried.note ?? note;
+      return tried;
+    });
     // When the item's retries run out, it goes back to the last checkpoint and the FR goes on (FR-REF-02).
     if (refusal !== undefined) await accepted.restore();
-    await run.record({ event: "cleanup", fr: run.fr, finding, verdict: refusal === undefined ? "accepted" : "not accepted", ...(refusal === undefined ? {} : { failed: refusal.failed }) });
+    await run.record({
+      event: "cleanup",
+      fr: run.fr,
+      finding,
+      verdict: refusal === undefined ? "accepted" : "not accepted",
+      ...(refusal === undefined ? {} : { failed: refusal.failed }),
+      ...(note === undefined ? {} : { note }),
+    });
+  }
+  await recordNearCopies(run, since);
+}
+
+/** The near-copies of the functions the FR or its cleanup added, for the person: no cleanup touches them (FR-REF-01). */
+async function recordNearCopies(run: FrRun, since: string): Promise<void> {
+  const { dir } = run.worktree;
+  const source = run.layout.writable.code;
+  const files = await sourceNow(run);
+  const added = addedLines(await git(dir, "diff", "-U0", "--no-color", since, "--", ...source));
+  for (const near of nearCopies({ files, baseline: await sourceAt(dir, since, source), added })) {
+    const at = ({ file, range }: FindingPlace, name: string) => `${file}:${range.start}-${range.end} (${name})`;
+    await run.record({ event: "near-copy", fr: run.fr, place: at(near.place, near.name), resembles: at(near.resembles, near.resemblesName), lines: near.lines });
   }
 }
 
@@ -67,7 +94,13 @@ async function cleanupOnce(run: FrRun, scenario: Scenario, finding: Finding, pre
     signatures: new Set((await findingsOnDiff(run, since, files)).map((one) => findingSignature(one, files))),
     exports: await exportSignatures(run.worktree.dir, [...files.keys()]),
   };
-  const context = { ...run.texts, steps: [], finding: findingText(finding, files) };
+  const context = {
+    ...run.texts,
+    steps: [],
+    finding: findingText(finding, files),
+    functions: functionSignatures(files),
+    calls: calledFunctions(files, [finding, ...(finding.related ?? [])]),
+  };
   const judge = () => judgeCleanup(run, finding, before, since, scope);
   const start = await git(run.worktree.dir, "write-tree");
   const tried = await checkpointedAttempt(run, "refactor-code", scenario, previous, judge, undefined, context);

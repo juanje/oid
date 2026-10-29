@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
-import { commitFixture, commitProjectConfig, greet02AttemptDir, refDir, scenarioNames } from "../support/fixture.ts";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { commitFixture, commitProjectConfig, git, greet02AttemptDir, refDir, scenarioNames } from "../support/fixture.ts";
+import { cleanupTask, runBranch } from "../support/run.ts";
 import type { PreparedAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -29,14 +32,6 @@ Given(
 Given("the scripted cleanup attempt extracts the shared check", function (this: RunWorld) {
   this.script = [...this.script, { kind: "refactor-code", scenario: SECOND, dir: refDir("cleanup-extracts") }];
 });
-
-/** The task of the one cleanup attempt the executor was asked for. */
-function cleanupTask(world: RunWorld): string {
-  const requests = world.executor?.requests ?? [];
-  const at = requests.findIndex((request) => request.kind === "refactor-code");
-  assert.notEqual(at, -1, "The executor was not asked for a cleanup attempt");
-  return world.executor!.told[at]!.task;
-}
 
 Then("the cleanup attempt's task names a duplication between the greeting function and the new function", function (this: RunWorld) {
   const task = cleanupTask(this);
@@ -98,4 +93,50 @@ Then("the executor was asked for the steps attempt after the gate before the cle
   assert.equal(kinds.filter((kind) => kind === "steps").length, 3, `Expected a steps attempt after the gate; the executor was asked for: ${kinds.join(", ")}`);
   assert.notEqual(cleanup, -1, `The executor was not asked for a cleanup attempt: ${kinds.join(", ")}`);
   assert.ok(afterGate < cleanup, `The cleanup attempt came before the steps attempt after the gate: ${kinds.join(", ")}`);
+});
+
+Given("the source of FR-GREET-01 checks the same name condition on one line in two functions", async function (this: RunWorld) {
+  await commitFixture(this.projectDir, refDir("greet-repeats-condition"), "feat(FR-GREET-01): refuse a name that is empty or too long, also formally");
+});
+
+Given("the scripted code attempt for FR-GREET-02 checks that condition again in its new function", function (this: RunWorld) {
+  this.script = buildWith(refDir("s2-test-checks"), refDir("s2-code-repeats-condition"));
+});
+
+Given("the scripted cleanup attempt extracts the condition", function (this: RunWorld) {
+  this.script = [...this.script, { kind: "refactor-code", scenario: SECOND, dir: refDir("cleanup-extracts-condition") }];
+});
+
+Then("the cleanup attempt's task names a repeated condition in the three functions", function (this: RunWorld) {
+  const task = cleanupTask(this);
+  assert.match(task, /\brepeated condition\b/, `The cleanup attempt's task names no repeated condition:\n${task}`);
+  for (const name of ["greet", "greetFormally", "greetAll"]) {
+    assert.ok(task.includes(`(${name})`), `The cleanup attempt's task does not name the function ${name}:\n${task}`);
+  }
+});
+
+Given("the source of FR-GREET-01 checks whether a name is empty in two functions", async function (this: RunWorld) {
+  await commitFixture(this.projectDir, refDir("greet-checks-empty"), "feat(FR-GREET-01): refuse an empty name, also formally");
+});
+
+Given("the scripted code attempt for FR-GREET-02 checks whether a name is empty in its new function", function (this: RunWorld) {
+  this.script = buildWith(refDir("s2-test-empty"), refDir("s2-code-checks-empty"));
+});
+
+Given("the scripted code attempt for FR-GREET-02 adds a name check function", function (this: RunWorld) {
+  this.script = buildWith(refDir("s2-test-checks"), refDir("s2-code-name-check"));
+});
+
+Given("the source of FR-GREET-01 starts its greeting function with the first two statements of that check", async function (this: RunWorld) {
+  await commitFixture(this.projectDir, refDir("greet-starts-like-check"), "feat(FR-GREET-01): greet a blank name without one");
+});
+
+Then("the output lists the greeting function as a near-copy of the name check function", function (this: RunWorld) {
+  const line = this.output.split("\n").find((text) => /\bnear-cop(y|ies)\b/.test(text) && text.includes("(greet)") && text.includes("(checkedName)"));
+  assert.ok(line !== undefined, `No line of the output lists greet as a near-copy of checkedName:\n${this.output}`);
+});
+
+Then("the run's commit has the greeting function as it was", async function (this: RunWorld) {
+  const was = (await readFile(join(refDir("greet-starts-like-check"), "src/greet.ts"), "utf8")).trimEnd();
+  assert.equal(git(this.projectDir, "show", `${runBranch(this)}:src/greet.ts`), was, "The run's commit changed the greeting function");
 });

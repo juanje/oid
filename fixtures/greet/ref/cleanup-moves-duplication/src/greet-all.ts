@@ -1,6 +1,8 @@
+import { lettersIn } from "./letters.ts";
+
 function cleanedName(person: string): string {
   const cleaned = person.trim();
-  const length = cleaned.length;
+  const length = lettersIn(cleaned);
   if (cleaned === "") {
     throw new Error("Nobody to greet");
   }

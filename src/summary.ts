@@ -34,6 +34,11 @@ export function summarize(events: LogEvent[], logPath: string): string {
     lines.push(`  Branch: ${start.branch}`);
     if (end?.exitCode !== 0) lines.push(`  Checkpoints kept in ${start.checkpoints}`);
   }
+  // What a cleanup noticed but may not change, and the near-copies it may not touch, go to the person (FR-REF-01, FR-REF-02).
+  for (const event of events) {
+    if (event.event === "cleanup" && event.note !== undefined) lines.push(`  note from the cleanup of ${event.fr}, for you to decide: ${event.note}`);
+    if (event.event === "near-copy") lines.push(`  near-copy in ${event.fr}, for you to decide: ${event.place} starts as ${event.resembles} does, for ${event.lines} lines; it was not changed`);
+  }
   if (end !== undefined) lines.push(`  ${measures(end.measures)}`);
   lines.push(`  Log: ${logPath}`);
   lines.push(`  Transcripts: ${transcriptsOf(logPath)}/`);

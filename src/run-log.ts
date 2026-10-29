@@ -122,6 +122,18 @@ export interface CleanupEvent {
   verdict: "accepted" | "not accepted";
   /** What the last cleanup attempt was refused for, when the item was not accepted. */
   failed?: string;
+  /** The note for the person its last report carried, if any. */
+  note?: string;
+}
+
+/** A place that starts as a function the FR or its cleanup added, below the duplication threshold (FR-REF-01). */
+export interface NearCopyEvent {
+  event: "near-copy";
+  fr: string;
+  /** Each as `<file>:<start>-<end> (<function>)`. */
+  place: string;
+  resembles: string;
+  lines: number;
 }
 
 /** The FRs a run builds, in order (FR-RUN-05). */
@@ -193,7 +205,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | CleanupEvent | PlanEvent | BuiltEvent | ScopeEvent | CheckEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | CleanupEvent | NearCopyEvent | PlanEvent | BuiltEvent | ScopeEvent | CheckEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;

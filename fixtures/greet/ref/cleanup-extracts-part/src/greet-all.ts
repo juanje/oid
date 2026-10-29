@@ -1,9 +1,10 @@
+import { lettersIn } from "./letters.ts";
 import { requireName } from "./name-check.ts";
 
 export function greetAll(names: string[]): string {
   const checked = names.map((person) => {
     const cleaned = person.trim();
-    const length = cleaned.length;
+    const length = lettersIn(cleaned);
     requireName(cleaned);
     if (length > 40) {
       throw new Error(`No greeting fits a name this long: ${cleaned}`);

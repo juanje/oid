@@ -48,7 +48,7 @@ const IDENTITY = (spec: string): Record<AttemptKind, string> => ({
     `You value stopping at the failing test, even when ${spec} describes more: code for a behaviour no test asks for yet leaves the next test agent nothing that can fail, so that behaviour can no longer be proved Red first. The other requirements come later, each with its scenario and its tests.`,
   ].join(" "),
   "refactor-code": [
-    "You are oid's cleanup agent. Every scenario of the FR passes; you remove one finding from the source — a duplication or a function too complex — without changing what the code does. You do not change tests, step definitions or feature files.",
+    "You are oid's cleanup agent. Every scenario of the FR passes; you remove one finding from the source — a duplication, a repeated condition or a function too complex — without changing what the code does. You do not change tests, step definitions or feature files.",
     "You value the smallest change that removes the finding: the unchanged tests are the proof that the behaviour did not change, and the unchanged exports keep valid everything that imports them.",
   ].join(" "),
 });
@@ -73,6 +73,7 @@ const PROCEDURE = (spec: string): Record<AttemptKind, string[]> => ({
     "Read the finding in your task and the code at each of its places.",
     "Remove the finding with the smallest change that keeps the behaviour: extract a repeated run into one piece that every place calls, or split a function too complex into smaller ones. Keep every module exporting the same names with the same signatures, and add nothing the finding does not ask for.",
     "Check with try your scenario (scenario: true), and fix the type errors in the files you changed.",
+    "If you see something you may not change, such as two copies that differ where the SPEC says they should not, write it in your report's note: oid shows the note to the person, and you change nothing because of it.",
   ],
 });
 
@@ -152,7 +153,7 @@ const WRITES: Record<AttemptKind, string> = { steps: "step definitions", test: "
  */
 export function taskFor({ kind, fr, scenario, refusal, asked, context }: Pick<Attempt, "kind" | "fr" | "scenario" | "refusal" | "asked" | "context">): string {
   const repair = repairOpening({ kind, fr, scenario, refusal, asked, context });
-  const cleanup = context?.finding === undefined ? undefined : [`Remove this finding from the source of ${fr}, without changing what the code does:\n${context.finding}`];
+  const cleanup = context?.finding === undefined ? undefined : cleanupOpening(fr, context);
   const parts = repair ?? cleanup ?? [`Write the ${kind} attempt of ${fr} for the scenario "${scenario}".`];
   if (context?.fr !== undefined) parts.push(`The FR, from the spec:\n${context.fr}`);
   if (context?.domain !== undefined) parts.push(`The project's domain:\n${context.domain}`);
@@ -169,6 +170,20 @@ export function taskFor({ kind, fr, scenario, refusal, asked, context }: Pick<At
   if (refusal?.diff !== undefined) parts.push(`Its diff, which oid took back: start from it to finish what it started.\n${refusal.diff}`);
   if (refusal?.focus !== undefined) parts.push(focusText(refusal.focus));
   return parts.join("\n\n");
+}
+
+/**
+ * A cleanup's job, its finding, and what it needs to find the rule the copies share: every function's signature, and
+ * the text of the functions the finding's code calls (FR-REF-02).
+ */
+function cleanupOpening(fr: string, { finding, functions = [], calls = [] }: TaskContext): string[] {
+  const parts = [
+    `Remove this finding from the source of ${fr}, without changing what the code does:\n${finding}`,
+    "Extract the smallest rule the copies share, or call a function of the source that already holds it, rather than moving the whole block into a new function.",
+  ];
+  if (functions.length > 0) parts.push(`The source's functions, with their signatures:\n${functions.join("\n")}`);
+  if (calls.length > 0) parts.push(`The functions the finding's code calls:\n${calls.map(({ file, text }) => `--- ${file}\n${text}`).join("\n")}`);
+  return parts;
 }
 
 /** A repair's job and its evidence, or nothing for any other attempt. */

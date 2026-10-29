@@ -83,11 +83,11 @@ export function refDir(name: string): string {
   return join(GREET, "ref", name);
 }
 
-/** Copies a fixture directory over the project and commits it, as code the project had before the run. */
+/** Copies a fixture directory over the project and commits it, as code the project had before the run; a copy already there changes nothing. */
 export async function commitFixture(dir: string, fixture: string, message: string): Promise<void> {
   await cp(fixture, dir, { recursive: true });
   git(dir, "add", "--all");
-  git(dir, "commit", "-q", "-m", message);
+  if (git(dir, "status", "--porcelain") !== "") git(dir, "commit", "-q", "-m", message);
 }
 
 /** Every file under `dir`, relative to it. */

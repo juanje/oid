@@ -36,7 +36,8 @@ const COMMENT = /\/\/.*$/;
 const NUMBER = /\b\d[\w.]*/g;
 const IDENTIFIER = /[A-Za-z_$][\w$]*/g;
 
-function normalise(line: string): string {
+/** A line with its identifiers, its strings and its numbers each made one token, and its trailing comment removed. */
+export function normalise(line: string): string {
   return line
     .replace(TEMPLATE, "⟨s⟩")
     .replace(STRING, "⟨s⟩")

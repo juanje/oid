@@ -1,8 +1,15 @@
 import { enclosingFunction, type FunctionComplexity, functionComplexities } from "./complexity.ts";
-import { cloneRuns, duplicatedLineCount } from "./duplication.ts";
+import { conditionsOf } from "./conditions.ts";
+import { cloneRuns, duplicatedLineCount, LEAST_DUPLICATED_LINES, normalisedLines } from "./duplication.ts";
 
-// The two detectors of the FR-scale refactor (FR-REF-01, D-07), on the whole source given the FR's
+// The three detectors of the FR-scale refactor (FR-REF-01, D-07), on the whole source given the FR's
 // diff: a finding that touches no line the FR added or changed is existing debt and does not count.
+
+// A condition repeated this many times, with at least this many operators and calls, is a rule worth one place.
+const LEAST_REPEATED_CONDITIONS = 3;
+const LEAST_CONDITION_WEIGHT = 3;
+// A near-copy starts with at least this many of a new function's first statements (FR-REF-01).
+const LEAST_NEAR_COPY_LINES = 2;
 
 /** Where a finding, or a related occurrence, sits (DOMAIN.md, Finding). */
 export interface FindingPlace {
@@ -12,7 +19,7 @@ export interface FindingPlace {
 
 export interface Finding extends FindingPlace {
   id: string;
-  category: "duplication" | "complexity";
+  category: "duplication" | "repeated_condition" | "complexity";
   detail: string;
   related?: FindingPlace[];
 }
@@ -35,9 +42,81 @@ function touches(added: Map<string, Set<number>>, place: FindingPlace): boolean 
   return false;
 }
 
-/** The findings of both detectors on the FR's diff, duplication first, each with its own id. */
+/** The findings of the three detectors on the FR's diff, duplication first, each with its own id. */
 export function detectFindings({ files, baseline, added, limit }: DetectorInput): Finding[] {
-  return [...duplicationFindings(files, added), ...complexityFindings(files, baseline, added, limit)];
+  return [...duplicationFindings(files, added), ...repeatedConditionFindings(files, added), ...complexityFindings(files, baseline, added, limit)];
+}
+
+/**
+ * Conditions that appear LEAST_REPEATED_CONDITIONS times or more in the source, each with enough operators and calls
+ * to be a rule, where at least one touches the FR's lines: that one is the finding's place. A rule copied as one line
+ * is invisible to a window of lines.
+ */
+function repeatedConditionFindings(files: Map<string, string>, added: Map<string, Set<number>>): Finding[] {
+  const byRule = new Map<string, FindingPlace[]>();
+  for (const [file, text] of files) {
+    for (const { norm, start, end } of conditionsOf(text).filter((condition) => condition.weight >= LEAST_CONDITION_WEIGHT)) {
+      byRule.set(norm, [...(byRule.get(norm) ?? []), { file, range: { start, end } }]);
+    }
+  }
+  const findings: Finding[] = [];
+  for (const [rule, places] of byRule) {
+    if (places.length < LEAST_REPEATED_CONDITIONS) continue;
+    const sorted = [...places].sort((one, other) => one.file.localeCompare(other.file) || one.range.start - other.range.start);
+    const own = sorted.find((place) => touches(added, place));
+    if (own === undefined) continue;
+    findings.push({
+      id: `cond-${String(findings.length + 1).padStart(4, "0")}`,
+      category: "repeated_condition",
+      ...own,
+      detail: `the condition ${rule} is in ${places.length} places`,
+      related: sorted.filter((place) => place !== own),
+    });
+  }
+  return findings;
+}
+
+/** A place of the source that starts as a function the FR added does, below the duplication threshold (FR-REF-01). */
+export interface NearCopy {
+  place: FindingPlace;
+  name: string;
+  /** The new function it resembles. */
+  resembles: FindingPlace;
+  resemblesName: string;
+  /** How many of the new function's first significant lines it starts with. */
+  lines: number;
+}
+
+/**
+ * The named functions whose first statements, normalised, match the start of a named function the FR added, for at
+ * least LEAST_NEAR_COPY_LINES lines and fewer than a duplication has. They are not findings: changing them could change
+ * behaviour, so they go to the person.
+ */
+export function nearCopies({ files, baseline, added }: Omit<DetectorInput, "limit">): NearCopy[] {
+  const functions = [...files].flatMap(([file, text]) => {
+    const lines = normalisedLines(text);
+    return functionComplexities(text)
+      .filter(({ name }) => name !== "<anonymous>")
+      .map((fn) => ({ file, ...fn, body: lines.filter(({ line }) => line > fn.start && line <= fn.end).map(({ norm }) => norm) }));
+  });
+  const isNew = ({ file, name, start }: (typeof functions)[number]) =>
+    added.get(file)?.has(start) === true && !functionComplexities(baseline.get(file) ?? "").some((fn) => fn.name === name);
+  const found: NearCopy[] = [];
+  for (const added of functions.filter(isNew)) {
+    for (const other of functions.filter((fn) => fn !== added)) {
+      let lines = 0;
+      while (lines < added.body.length && added.body[lines] === other.body[lines]) lines += 1;
+      if (lines < LEAST_NEAR_COPY_LINES || lines >= LEAST_DUPLICATED_LINES) continue;
+      found.push({
+        place: { file: other.file, range: { start: other.start, end: other.end } },
+        name: other.name,
+        resembles: { file: added.file, range: { start: added.start, end: added.end } },
+        resemblesName: added.name,
+        lines,
+      });
+    }
+  }
+  return found;
 }
 
 /** Runs repeated in the source where at least one occurrence touches the FR's lines: that occurrence is the finding's place. */
@@ -100,7 +179,7 @@ export function findingSignature(finding: Finding, files: Map<string, string>): 
     return `complexity ${finding.file} ${enclosingFunction(functions, finding.range.start)?.name ?? "?"}`;
   }
   const holders = [finding, ...(finding.related ?? [])].map(({ file, range }) => `${file} ${namedHolder(functionComplexities(files.get(file) ?? ""), range.start)?.name ?? "?"}`);
-  return `duplication ${[...new Set(holders)].sort().join(", ")}`;
+  return `${finding.category} ${[...new Set(holders)].sort().join(", ")}`;
 }
 
 /** The measures a cleanup item must not worsen (FR-REF-02): each function's complexity, and the duplicated lines. */
@@ -142,5 +221,5 @@ export function findingText(finding: Finding, files: Map<string, string>): strin
     return `${file}:${range.start}-${range.end}${holder === undefined ? "" : ` (${holder.name})`}`;
   };
   const places = [at(finding), ...(finding.related ?? []).map(at)];
-  return `${finding.category}: ${places.join(" repeats ")}: ${finding.detail}`;
+  return `${finding.category.replace("_", " ")}: ${places.join(" repeats ")}: ${finding.detail}`;
 }

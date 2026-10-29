@@ -37,6 +37,14 @@ export function requestsOf(world: RunWorld, kind: PreparedAttempt["kind"], count
   return requests;
 }
 
+/** The task of the first cleanup attempt the executor was asked for. */
+export function cleanupTask(world: RunWorld): string {
+  const requests = world.executor?.requests ?? [];
+  const at = requests.findIndex((request) => request.kind === "refactor-code");
+  assert.notEqual(at, -1, "The executor was not asked for a cleanup attempt");
+  return world.executor!.told[at]!.task;
+}
+
 export interface OidRun {
   exitCode: number | undefined;
   output: string;
