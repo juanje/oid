@@ -63,3 +63,23 @@ Feature: The code pass
     Then the run succeeds
     And the output reports the cleanup item as accepted
     And the output lists the cleanup's note that the two messages differ
+
+  Scenario: A cleanup after another is given its finding with the lines the first one left, and a remainder of it is refused as still there
+    Given the scripted code attempt for FR-GREET-02 copies the greeting function's name check and its punctuation check into its new function, with other names and another message
+    And the run allows 1 retry
+    And the scripted first cleanup attempt extracts the shared name check, which moves the punctuation copies' lines
+    And the scripted second cleanup attempt extracts part of the shared punctuation check, leaving a shorter copy in both functions, and its retry extracts the rest
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the second cleanup attempt's task gives the punctuation copies' lines as the first cleanup left them
+    And the retried second cleanup attempt was given a refusal that says the duplication is still there, naming both functions
+    And the output reports both cleanup items as accepted
+    And the FR's commit has the punctuation check in one place
+
+  Scenario: A finding that an earlier cleanup removed gets no cleanup item
+    Given the scripted code attempt for FR-GREET-02 copies the greeting function's name check and its punctuation check into its new function, with other names and another message
+    And the scripted first cleanup attempt extracts both shared checks into one helper
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the executor was asked for one cleanup attempt
+    And the output reports one cleanup item, accepted
