@@ -32,6 +32,7 @@ describe("a provider error that may pass", () => {
       "429 insufficient_quota: You exceeded your current quota, please check your plan and billing details.",
       "401 authentication_error: invalid x-api-key",
       "403 permission_error: Your API key does not have permission to use the specified resource.",
+      "400 invalid_request_error: You're out of extra usage. Add more at claude.ai/settings/usage and keep going.",
     ]) {
       expect(agentError("code", SCENARIO, { turns: 1, stoppedAtLimit: false, error: message })?.passes).toBe(false);
     }
