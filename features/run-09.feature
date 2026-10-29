@@ -37,5 +37,5 @@ Feature: Limits
     And the scripted code attempt writes a greeting function that never returns, and its retry builds it
     When I run "oid run FR-GREET-01"
     Then the run succeeds
-    And the code attempt's retry was given a refusal that says the scenario did not finish within 5 seconds
+    And the code attempt's retry was given a refusal that says the unit tests did not finish within 5 seconds
     And the run's log counts one check stopped by the time limit
