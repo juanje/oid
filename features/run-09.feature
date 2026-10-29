@@ -31,3 +31,11 @@ Feature: Limits
     And the output names the round limit, the scenario and its last failure
     And the output gives the last report of each attempt kind
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: Code that does not finish fails its check at the time limit, and the attempt is refused for it
+    Given the project's .oid.json sets the check time limit to 5 seconds
+    And the scripted code attempt writes a greeting function that never returns, and its retry builds it
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the code attempt's retry was given a refusal that says the scenario did not finish within 5 seconds
+    And the run's log counts one check stopped by the time limit
