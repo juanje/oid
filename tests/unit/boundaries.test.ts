@@ -105,6 +105,35 @@ describe("forbiddenLines", () => {
   });
 });
 
+describe("forbiddenLines, by the kind of attempt", () => {
+  test("finds an import() whose path is not a string literal in step definitions and unit tests, and not in source", () => {
+    const variable = { file: "tests/greet.test.ts", text: "  const { greet } = await import(modulePath);" };
+    const literal = { file: "tests/greet.test.ts", text: '  const { greet } = await import("../src/greet.ts");' };
+    const steps = { file: "features/steps/greet.steps.ts", text: "  const { greet } = await import(`../../src/${name}.ts`);" };
+
+    expect(forbiddenLines([variable, literal], "test").map((line) => line.text)).toEqual([variable.text]);
+    expect(forbiddenLines([steps], "steps").map((line) => line.text)).toEqual([steps.text]);
+    expect(forbiddenLines([{ ...variable, file: "src/load.ts" }], "code")).toEqual([]);
+  });
+});
+
+describe("judgeBoundary, on the project's source extensions", () => {
+  const layout = (extensions?: string[]): Layout => ({ ...DEFAULT_LAYOUT, ...(extensions === undefined ? {} : { extensions }) });
+
+  test("refuses source in another extension than the project's, naming the file and the extensions", () => {
+    const refusal = judgeBoundary("code", { files: ["src/greet.ts", "src/greet.js"], added: [] }, layout([".ts"]));
+
+    expect(refusal?.evidence).toContain("src/greet.js");
+    expect(refusal?.evidence).not.toContain("src/greet.ts");
+    expect(`${refusal?.failed}\n${refusal?.next}`).toMatch(/(?<![\w/])\.ts\b/);
+  });
+
+  test("accepts source in any extension the project names, and in any extension when it names none", () => {
+    expect(judgeBoundary("code", { files: ["src/greet.ts", "src/helper.js"], added: [] }, layout([".ts", ".js"]))).toBeUndefined();
+    expect(judgeBoundary("refactor-code", { files: ["src/helper.js"], added: [] }, layout())).toBeUndefined();
+  });
+});
+
 describe("judgeBoundary", () => {
   test("accepts a diff inside the attempt's boundary with no forbidden line", () => {
     expect(judgeBoundary("test", { files: ["tests/greet.test.ts"], added: [{ file: "tests/greet.test.ts", text: 'test("greets", () => {' }] })).toBeUndefined();

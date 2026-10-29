@@ -34,6 +34,16 @@ describe("readLayout", () => {
     });
   });
 
+  test("takes the source extensions the project's .oid.json names, else .ts in a project with a tsconfig.json, else any", async () => {
+    const named = await tempRepo({ ".oid.json": JSON.stringify({ source: { extensions: [".ts", ".js"] } }), "tsconfig.json": "{}\n" });
+    const typescript = await tempRepo({ "tsconfig.json": "{}\n" });
+    const any = await tempRepo({ "a.txt": "a\n" });
+
+    expect((await readLayout(named)).extensions).toEqual([".ts", ".js"]);
+    expect((await readLayout(typescript)).extensions).toEqual([".ts"]);
+    expect((await readLayout(any)).extensions).toBeUndefined();
+  });
+
   test("keeps oid's defaults for what the project does not say", async () => {
     const dir = await tempRepo({ ".oid.json": JSON.stringify({ paths: { code: ["lib/"] } }) });
     const none = await tempRepo({ "a.txt": "a\n" });
