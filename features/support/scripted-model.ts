@@ -49,6 +49,8 @@ export interface ModelAttempt {
   next?: NextAttempt;
   /** The mutant its report submits (FR-EVID-03). */
   mutant?: Mutant;
+  /** The note for the person a cleanup's report carries (FR-REF-02). */
+  note?: string;
 }
 
 /** What the model was shown in one request. */
@@ -131,6 +133,7 @@ export class ScriptedModel {
     if (prepared.loops) return fauxAssistantMessage(fauxToolCall("read", { path: "package.json" }));
     const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt`, ...(prepared.next === undefined ? {} : { next: { kind: prepared.next.kind, reason: prepared.next.reason } }),
       ...(prepared.mutant === undefined ? {} : { mutant: JSON.parse(JSON.stringify(prepared.mutant)) }),
+      ...(prepared.note === undefined ? {} : { note: prepared.note }),
     });
     const probed = prepared.probes !== undefined && prepared.probes.length > 0;
     if (probed && this.attempts[index]!.length === 1) return fauxAssistantMessage(prepared.probes!.map(({ tool, args }) => fauxToolCall(tool, args)));

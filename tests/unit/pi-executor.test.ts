@@ -25,7 +25,7 @@ afterEach(async () => {
 
 /** One code attempt for GREET-01's scenario, whose try answers `tried` and whose report is kept. */
 function codeAttempt(turns = 40, tried: TryResult = { passed: true }, outputTokens = 16000) {
-  const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[], mutants: [] as (Mutant | undefined)[] };
+  const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[], mutants: [] as (Mutant | undefined)[], notes: [] as (string | undefined)[] };
   const attempt: Attempt = {
     kind: "code",
     fr: "FR-GREET-01",
@@ -38,10 +38,11 @@ function codeAttempt(turns = 40, tried: TryResult = { passed: true }, outputToke
         calls.tries.push(target);
         return tried;
       },
-      report: (result, next, mutant) => {
+      report: (result, next, mutant, note) => {
         calls.reports.push(result);
         calls.next.push(next);
         calls.mutants.push(mutant);
+        calls.notes.push(note);
       },
     },
   };
@@ -91,6 +92,16 @@ describe("piExecutor", () => {
     await executorOn(model).run(attempt);
 
     expect(calls.mutants).toEqual([mutant]);
+  });
+
+  test("gives oid's report the note for the person the agent writes", async () => {
+    const note = "The two copies refuse with different messages";
+    const model = await scripted({ dir: attemptDir("code"), note });
+    const { attempt, calls } = codeAttempt();
+
+    await executorOn(model).run(attempt);
+
+    expect(calls.notes).toEqual([note]);
   });
 
   test("keeps its agent's whole session as JSONL where the attempt says, creating the directory", async () => {
