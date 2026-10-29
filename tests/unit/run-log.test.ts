@@ -17,6 +17,16 @@ const attempt = (kind: AttemptEvent["kind"], verdict: AttemptEvent["verdict"], e
 });
 
 describe("measuresOf", () => {
+  test("counts the checks the time limit stopped, as a mutant's, an attempt's or the gate's", () => {
+    const events: LogEvent[] = [
+      { event: "check", stopped: "attempt", seconds: 5 },
+      { event: "check", stopped: "mutant", seconds: 5 },
+      { event: "check", stopped: "mutant", seconds: 5 },
+    ];
+
+    expect(measuresOf(events, 1).stoppedChecks).toEqual({ attempt: 1, mutant: 2 });
+  });
+
   test("counts attempts and rejections per kind, and a retry refused as the attempt before it as a blind retry", () => {
     const events = [
       attempt("steps", "accepted"),

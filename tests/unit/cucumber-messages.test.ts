@@ -33,6 +33,13 @@ describe("scenarioResults", () => {
     ]);
   });
 
+  test("fails a scenario that started and did not finish, at its first step that did not finish", () => {
+    // The report as a run stopped while the first scenario's Then step ran: its When step had passed.
+    const cut = RUN.trimEnd().split("\n").slice(0, 7).join("\n");
+
+    expect(scenarioResults(cut)).toEqual([{ ...FIRST, status: "failed", failure: { step: 'I get "Hello, Ada and Grace!"', kind: "Outcome", status: "NOT FINISHED", message: "" } }]);
+  });
+
   test("keeps the error type in the message of a failed step", () => {
     // Recorded with FR-GREET-02's second scenario failing on an assertion in its Then step.
     const [result] = scenarioResults(recorded("cucumber-greet-02-assertion.ndjson"));

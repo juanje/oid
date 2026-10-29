@@ -57,6 +57,12 @@ describe("judgeCode", () => {
   const GREEN = { uri: "features/greet-01.feature", line: 4, name: "A person is greeted by name" };
   const unit = (failed: string[]) => ({ ran: true, passed: ["tests/greet.test.ts > greets a person by name"], failed, output: "" });
 
+  test("refuses code under which the unit suite did not finish within the time limit, saying so", () => {
+    const refusal = judgeCode({ ran: false, passed: [], failed: [], output: "", stoppedAfter: 5 }, []);
+
+    expect(`${refusal?.failed}\n${refusal?.evidence}`).toContain("did not finish within 5 s");
+  });
+
   test("accepts code when every unit test passes and every scenario that was green still passes", () => {
     expect(judgeCode(unit([]), [{ ...GREEN, status: "passed" }])).toBeUndefined();
   });

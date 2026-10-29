@@ -6,18 +6,18 @@ import { tempRepo } from "./support/repo.ts";
 
 describe("readLimits", () => {
   test("takes the limits the project's .oid.json sets", async () => {
-    const dir = await tempRepo({ ".oid.json": JSON.stringify({ limits: { retries: 1, turns: 3, rounds: 4, complexity: 3, outputTokens: 200 } }) });
+    const dir = await tempRepo({ ".oid.json": JSON.stringify({ limits: { retries: 1, turns: 3, rounds: 4, complexity: 3, outputTokens: 200, checkSeconds: 5 } }) });
 
-    expect(await readLimits(dir)).toEqual({ retries: 1, turns: 3, rounds: 4, complexity: 3, outputTokens: 200 });
+    expect(await readLimits(dir)).toEqual({ retries: 1, turns: 3, rounds: 4, complexity: 3, outputTokens: 200, checkSeconds: 5 });
   });
 
-  test("allows 2 retries, 40 turns per attempt, 6 rounds per scenario, complexity 10 and 16,000 tokens of output per turn when the project does not say", async () => {
+  test("allows 2 retries, 40 turns per attempt, 6 rounds per scenario, complexity 10, 16,000 tokens of output per turn and 300 s per check when the project does not say", async () => {
     const dir = await tempRepo({ ".oid.json": JSON.stringify({ limits: { retries: 1 } }) });
     const none = await tempRepo({ "a.txt": "a\n" });
 
     expect({ some: await readLimits(dir), none: await readLimits(none) }).toEqual({
-      some: { retries: 1, turns: 40, rounds: 6, complexity: 10, outputTokens: 16000 },
-      none: { retries: 2, turns: 40, rounds: 6, complexity: 10, outputTokens: 16000 },
+      some: { retries: 1, turns: 40, rounds: 6, complexity: 10, outputTokens: 16000, checkSeconds: 300 },
+      none: { retries: 2, turns: 40, rounds: 6, complexity: 10, outputTokens: 16000, checkSeconds: 300 },
     });
   });
 });

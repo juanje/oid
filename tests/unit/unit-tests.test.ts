@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { CommandResult } from "../../src/command.ts";
 import { runUnitTests } from "../../src/unit-tests.ts";
 import { recorded, recordedVitest } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
@@ -13,6 +14,13 @@ describe("runUnitTests", () => {
       passed: ["tests/greet.test.ts > greets a person by name"],
       failed: ["tests/greet-all.test.ts > greets two people together"],
     });
+  });
+
+  test("says when vitest was stopped at the time limit", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const stopped = async (): Promise<CommandResult> => ({ exitCode: 1, output: "did not finish within 5 s", stoppedAfter: 5 });
+
+    expect(await runUnitTests(dir, [], stopped)).toMatchObject({ ran: false, stoppedAfter: 5 });
   });
 
   test("runs the whole suite when given no files", async () => {
