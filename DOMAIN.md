@@ -177,10 +177,10 @@ None of the three parts may be empty. "Retry" is never the only next step.
 }
 ```
 
-Categories: `complexity` and `duplication`; `dead_code`, `magic_value` and `doc_drift` after the MVP.
+Categories: `complexity`, `duplication` and `repeated_condition`; `dead_code`, `magic_value` and `doc_drift` after the MVP.
 
 - **Significant line:** a source line that is not blank, a comment, or only brackets and punctuation.
-- **Normalised:** identifiers become one placeholder, and string, template and number literals another, so a copy with other names or another message matches.
+- **Normalised:** identifiers become one placeholder, string and template literals another, and numbers a third, so a copy with other names or another message matches, and a string where the copy has a number does not.
 - **Complexity:** cyclomatic: 1, plus each `if`, `for`, `while`, `do`, `case`, `catch`, `&&`, `||`, `??` and `? :` in the function, not counting the functions nested in it.
 
 ## How the tools behave

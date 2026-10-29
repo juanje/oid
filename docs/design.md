@@ -62,7 +62,7 @@ INPUT: SPEC.md and approved feature files
 - **Inner loop.** A test attempt is accepted when every new test fails with a valid Red against the previous checkpoint. A code attempt is accepted when those tests pass and nothing that was green turns red. That is checked on the current scenario, the feature's green scenarios and the full unit suite; the gate checks the whole project. How many tests, and how small, is guidance.
 - **The next attempt** (D-03). By default the inner loop alternates test and code. An agent may ask in its report for another kind next (fix a step, another test, more code) with its reason. The request ends the round, whatever the attempt's verdict, and the next round starts with that kind, its task giving the reason and the scenario's failure. The evidence and the write boundary judge whatever comes: a steps or test attempt asked for must show its Red on the code from before the scenario's first code attempt, in a scratch copy, and keep every scenario that passed passing.
 - **Retries.** A refused attempt goes back to the last checkpoint and is retried with the refusal in its task, up to the limit: `limits.retries` in the project's `.oid.json`, 2 when the file does not set it. The limits of FR-RUN-09 cap what retries cost. An error (exit code 2) is never retried: no attempt can fix it. A provider error that may pass, not one of credentials, billing or quota, runs the same attempt once more from its checkpoint, a provider retry outside these retries (FR-AGENT-01). When the retries run out, oid asks the person: retry with a note, shelve the scenario, or stop.
-- **Limits.** Turns per attempt: `limits.turns` in `.oid.json`, 40 when the file does not set it. Rounds per scenario: `limits.rounds`, 6 when the file does not set it; built scenarios have needed at most 2. The refactor's complexity limit: `limits.complexity`, 10 when the file does not set it. Output per turn: `limits.outputTokens`, 16,000 when the file does not set it; a turn cut at it runs none of its tool calls, the agent is told so, and the run's measures count it. The executor counts its agent's turns and ends the agent between turns at the limit (with Pi, `finishTurn` returning `{ action: "end" }`); it reports the turns to oid in the attempt's outcome, never through a tool the model calls, which it could forget. Reaching a limit ends the run at the work accepted so far, with exit code 3, and says which limit. It is not retried.
+- **Limits.** Turns per attempt: `limits.turns` in `.oid.json`, 40 when the file does not set it. Rounds per scenario: `limits.rounds`, 6 when the file does not set it; built scenarios have needed at most 2. The refactor's complexity limit: `limits.complexity`, 10 when the file does not set it. Output per turn: `limits.outputTokens`, 16,000 when the file does not set it; a turn cut at it runs none of its tool calls, the agent is told so, and the run's measures count it. Time per check run: `limits.checkSeconds`, 300 when the file does not set it; a check stopped at it fails with "did not finish", which refuses a mutant or goes to a code attempt, and the run's measures count it. The executor counts its agent's turns and ends the agent between turns at the limit (with Pi, `finishTurn` returning `{ action: "end" }`); it reports the turns to oid in the attempt's outcome, never through a tool the model calls, which it could forget. Reaching a limit ends the run at the work accepted so far, with exit code 3, and says which limit. It is not retried.
 - **Wiring.** When every unit test of a scenario is green and the scenario is still red, the next attempt is code that connects the parts. That is legal once the scenario has at least one unit test.
 
 ## 3. An attempt
@@ -84,16 +84,17 @@ An attempt is the unit of work (D-04):
 |:--|:--|
 | steps | step definitions |
 | test | unit tests |
-| code | source |
-| refactor-code | source |
+| code | source, in the project's source extensions |
+| refactor-code | source, in the project's source extensions |
 | refactor-tests (after the MVP) | unit tests and step definitions |
 
-No kind writes feature files, the spec, the gate's configuration (with the files a runner's configuration loads) or oid's state, `.oid/`, wherever the paths put them. The forbidden patterns in added lines are `.only`, `.skip`, and branches on a test environment.
+No kind writes feature files, the spec, the gate's configuration (with the files a runner's configuration loads) or oid's state, `.oid/`, wherever the paths put them. The forbidden patterns in added lines are `.only`, `.skip`, branches on a test environment, and, in step definitions and unit tests, an `import()` whose path is not a string literal.
 
 **The report** ends every attempt. It holds a result in a few words, and may also hold:
 - a request for the next kind;
 - a contract-change proposal;
-- a mutant.
+- a mutant;
+- for a cleanup, a note for the person.
 
 An attempt without a report is refused.
 
@@ -147,11 +148,12 @@ The gate also runs at the start of a run as the baseline. A red test stops the r
 
 At FR scale, after the FR's gate passes and before its commit (D-07).
 1. **Detectors**, on the FR's diff against the whole source:
-   - duplication: runs of at least 5 significant lines, compared after normalising identifiers and literals;
+   - duplication: runs of at least 5 significant lines, compared after normalising identifiers, strings and numbers;
+   - repeated condition: the same normalised condition three or more times, with at least three operators or calls;
    - complexity: a changed function above `limits.complexity` and above its value at the run's start.
 
-   A finding that touches no line of the FR's diff is existing debt. With none, there is no agent.
-2. **Code pass.** A cleanup agent (refactor-code) gets one finding per attempt and may change source only.
+   A finding that touches no line of the FR's diff is existing debt. With none, there is no agent. Near-copies of a function the FR or its cleanup added, below the duplication threshold, are not findings: the end-of-run summary lists them for the person.
+2. **Code pass.** A cleanup agent (refactor-code) gets one finding per attempt, with the source's function signatures and the bodies its finding calls, and may change source only. It is asked for the smallest shared rule, or an existing function that holds it. Its report may carry a note, which the end-of-run summary lists.
 3. **Acceptance.** Tests and scenarios unchanged and passing; the item's findings gone and none new (a same finding in the same functions, shorter, is still there, not new); the same exports with the same signatures; the coverage check still passing; no measure worse. Each accepted item gets a checkpoint. A refused one is retried with its diff, then goes back and is reported, and the FR goes on to its commit.
 
 After the MVP, a test pass (FR-REF-03) cleans tests and steps with the code fixed, each changed test still failing on a mutant. A change that needs both passes (a rename the tests import) then takes three items.
