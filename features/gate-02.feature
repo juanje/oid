@@ -74,3 +74,21 @@ Feature: Coverage of the FR's new branches
     When I run "oid run FR-GREET-01"
     Then the run succeeds
     And the code attempt after the gate was given the uncovered branch and the test attempt's report
+
+  Scenario: A test attempt for an uncovered branch whose test does not take it is refused, and its retry covers it
+    Given the run allows 2 retries
+    And the scripted code attempt adds a branch the SPEC states, on a line its test covers, which no test takes
+    And the scripted test attempt after the gate adds a unit test of other behaviour, with a mutant on which it fails, and its retry adds a unit test that takes the branch, with a mutant of the branch on which it fails
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the test attempt's retry after the gate was given a refusal that names the branch still untaken
+    And the executor was not asked for a code attempt after the gate
+
+  Scenario: A code attempt that moves an uncovered branch instead of removing it is refused
+    Given the run allows 2 retries
+    And the scripted code attempt adds a branch on a line its test covers, which no test takes
+    And the scripted test attempt after the gate adds no test and reports that no requirement asks for the branch
+    And the scripted code attempt after the gate moves the branch into a new helper function, and its retry removes it
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the code attempt's retry after the gate was given a refusal that says the branch was moved, not removed
