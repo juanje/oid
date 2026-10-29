@@ -218,6 +218,21 @@ describe("the cleanup agent's prompt (FR-REF-02)", () => {
     expect(task).not.toContain("Write the refactor-code attempt");
   });
 
+  test("a cleanup task gives the source's function signatures, the bodies of the functions its finding calls, and asks for the smallest shared rule", () => {
+    const finding = "duplication: src/greet-all.ts:2-8 (greetAll) repeats src/greet.ts:2-7 (greet): 5 duplicated lines";
+    const functions = ["src/greet.ts: greet(name: string): string", "src/letters.ts: lettersIn(name: string): number"];
+    const calls = [{ file: "src/letters.ts", name: "lettersIn", text: "export function lettersIn(name: string): number {\n  return [...name].length;\n}" }];
+    const task = taskFor({ kind: "refactor-code", fr: "FR-GREET-02", scenario: SCENARIO, context: { ...CONTEXT, steps: [], finding, functions, calls } });
+
+    for (const signature of functions) expect(task).toContain(signature);
+    expect(task).toContain(calls[0]!.text);
+    expect(task).toMatch(/\bsmallest\b.*\brule\b/);
+  });
+
+  test("a cleanup's system prompt says its report may carry a note for the person, which changes nothing", () => {
+    expect(systemPromptFor("refactor-code")).toMatch(/\bnote\b.*\bperson\b/);
+  });
+
   test("a cleanup retry is given the refused attempt's diff after its refusal, so it can finish what it started", () => {
     const finding = "duplication: src/greet-all.ts:2-8 (greetAll) repeats src/greet.ts:2-7 (greet): 5 duplicated lines";
     const diff = "--- a/src/greet.ts\n+++ b/src/greet.ts\n+  requireName(trimmed);";

@@ -86,6 +86,22 @@ describe("summarize", () => {
     expect(text).toMatch(/\brounds with no progress 2\b/);
   });
 
+  test("lists the cleanups' notes and the near-copies, for the person to decide", () => {
+    const finding = { id: "dup-0001", category: "duplication" as const, file: "src/greet-all.ts", range: { start: 2, end: 8 }, detail: "5 duplicated lines" };
+    const note = "The two copies refuse with different messages.";
+    const events: LogEvent[] = [
+      START,
+      { event: "cleanup", fr: "FR-GREET-02", finding, verdict: "accepted", note },
+      { event: "near-copy", fr: "FR-GREET-02", place: "src/greet.ts:1-5 (greet)", resembles: "src/greet-all.ts:1-8 (checkedName)", lines: 2 },
+      { event: "end", exitCode: 0, measures: MEASURES },
+    ];
+
+    const text = summarize(events, "/repo/.git/oid/runs/FR-GREET-02-1.jsonl");
+
+    expect(text.split("\n").find((line) => line.includes(note))).toMatch(/\bnote\b/i);
+    expect(text.split("\n").find((line) => line.includes("(greet)"))).toMatch(/\bnear-copy\b.*\(checkedName\)/);
+  });
+
   test("a run that stopped: what is built and not, where it stopped and why, and the ref that keeps its checkpoints", () => {
     const refusal = { failed: "The scenario passes before its code exists: test_bug", evidence: "…", next: "…" };
     const events: LogEvent[] = [
