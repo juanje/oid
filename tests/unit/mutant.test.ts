@@ -56,6 +56,16 @@ describe("judgeScenarioUnderMutant", () => {
     expect(judgeScenarioUnderMutant({ ...SCENARIO, status: "failed", failure }, nothingExists)).toBeUndefined();
   });
 
+  test("refuses a scenario that does not finish under the mutant, saying so and naming it", () => {
+    const stopped = { step: 'I greet "Ada", "Grace" and "Linus"', kind: "Action" as const, status: "NOT FINISHED", message: "did not finish within 5 s" };
+
+    const refusal = judgeScenarioUnderMutant({ ...SCENARIO, status: "failed", failure: stopped }, nothingExists);
+
+    expect(refusal?.failed).toMatch(/does not finish under the mutant/);
+    expect(refusal?.evidence).toContain(SCENARIO.name);
+    expect(refusal?.evidence).toContain("did not finish within 5 s");
+  });
+
   test("refuses a scenario that still passes under the mutant, or fails with any other class, naming it", () => {
     const missing = { step: 'I greet "Ada", "Grace" and "Linus"', kind: "Action" as const, status: "FAILED", message: "TypeError: greetAll is not a function" };
 

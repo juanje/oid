@@ -74,6 +74,15 @@ describe("runScenarios", () => {
     expect(result).toMatchObject({ ...FIRST, status: "failed", failure: { step: 'I get "Hello, Ada and Grace!"', message: "did not finish within 5 s" } });
   });
 
+  test("fails every scenario asked for when cucumber-js was stopped at the time limit before it wrote a report", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const stopped = async (): Promise<CommandResult> => ({ exitCode: 1, output: "did not finish within 5 s", stoppedAfter: 5 });
+
+    const [result] = await runScenarios(dir, [FIRST], stopped);
+
+    expect(result).toMatchObject({ ...FIRST, status: "failed", failure: { status: "NOT FINISHED", message: "did not finish within 5 s" } });
+  });
+
   test("reports a scenario it asked for that did not run as not run", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     const missing = { uri: "features/greet-02.feature", line: 12, name: "A scenario that is not there" };
