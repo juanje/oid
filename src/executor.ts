@@ -60,6 +60,10 @@ export interface TaskContext {
   conventions?: string;
   /** For a cleanup attempt, the finding it removes, rendered with its places (FR-REF-02). */
   finding?: string;
+  /** For a cleanup attempt, every named function of the source with its signature, as `<file>: <signature>`. */
+  functions?: string[];
+  /** For a cleanup attempt, the functions of the source its finding's places call, with their text. */
+  calls?: { file: string; name: string; text: string }[];
 }
 
 /** What the executor reports of an attempt: its agent's turns, which the executor counts, never the model. */
@@ -90,8 +94,11 @@ export type TryResult = { passed: true } | ({ passed: false } & Refusal);
 export interface AttemptTools {
   /** Runs the target, then the type check on the files the attempt changed. It records nothing. */
   try(target: TryTarget): Promise<TryResult>;
-  /** Ends the attempt with its result in a few words, and may ask for another attempt kind next. An attempt that never calls it is refused. */
-  report(result: string, next?: NextAttempt, mutant?: Mutant): void;
+  /**
+   * Ends the attempt with its result in a few words, and may ask for another attempt kind next. A cleanup's may carry
+   * a note for the person (FR-REF-02). An attempt that never calls it is refused.
+   */
+  report(result: string, next?: NextAttempt, mutant?: Mutant, note?: string): void;
 }
 
 /** Runs one attempt's agent: Pi, or the scripted executor of oid's own tests. oid judges the diff the same way for both. */

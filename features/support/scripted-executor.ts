@@ -17,6 +17,8 @@ export interface PreparedAttempt {
   next?: NextAttempt;
   /** The mutant its report submits (FR-EVID-03). */
   mutant?: Mutant;
+  /** The note for the person a cleanup's report carries (FR-REF-02). */
+  note?: string;
   /** How many turns its agent would take to finish; 1 when left out. */
   turns?: number;
   /** What the executor reports of the agent's use: its model, tokens, cost and denied tool calls. */
@@ -105,7 +107,7 @@ export class ScriptedExecutor implements Executor {
     if (outcome.stoppedAtLimit) return outcome;
     await cp(next.dir, attempt.worktree, { recursive: true });
     for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
-    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`, next.next, next.mutant);
+    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`, next.next, next.mutant, next.note);
     return outcome;
   }
 }

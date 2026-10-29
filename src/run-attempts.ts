@@ -142,14 +142,20 @@ export async function checkpointedAttempt(
   judge: (attempt: { files: string[]; mutant?: Mutant }) => Promise<Refusal | undefined>,
   asked?: Attempt["asked"],
   given?: TaskContext,
-): Promise<Tried & { next?: NextAttempt; report?: string }> {
+): Promise<Tried & { next?: NextAttempt; report?: string; note?: string }> {
   const accepted = await acceptedWork(run.worktree.dir);
   const attempt = await attemptFor(run, kind, scenario, previous, asked, given);
   if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
   const refusal = attempt.refusal ?? (await judge({ files: attempt.files, ...(attempt.mutant === undefined ? {} : { mutant: attempt.mutant }) }));
   await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, asked: asked !== undefined }));
   if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
-  return { refusal, rollback: accepted.restore, ...(attempt.next === undefined ? {} : { next: attempt.next }), ...(attempt.report === undefined ? {} : { report: attempt.report }) };
+  return {
+    refusal,
+    rollback: accepted.restore,
+    ...(attempt.next === undefined ? {} : { next: attempt.next }),
+    ...(attempt.report === undefined ? {} : { report: attempt.report }),
+    ...(attempt.note === undefined ? {} : { note: attempt.note }),
+  };
 }
 
 /**
