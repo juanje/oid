@@ -74,7 +74,19 @@ export async function readLayout(dir: string): Promise<Layout> {
       `${CONFIG_FILE}: paths.${outer.key} "${outer.path}" holds paths.${inner.key} "${inner.path}": a file there would belong to two kinds of attempt. Give each kind paths of its own.`,
     );
   }
-  return { spec: paths?.spec ?? DEFAULT_LAYOUT.spec, features: paths?.features ?? DEFAULT_LAYOUT.features, writable, loaded: await filesRunnersLoad(dir) };
+  const extensions = (await readConfig(dir)).source?.extensions ?? defaultExtensions(dir);
+  return {
+    spec: paths?.spec ?? DEFAULT_LAYOUT.spec,
+    features: paths?.features ?? DEFAULT_LAYOUT.features,
+    writable,
+    loaded: await filesRunnersLoad(dir),
+    ...(extensions === undefined ? {} : { extensions }),
+  };
+}
+
+/** The source extensions of a project whose .oid.json names none: TypeScript's in a project the type checker checks, else any. */
+function defaultExtensions(dir: string): string[] | undefined {
+  return existsSync(join(dir, "tsconfig.json")) ? [".ts"] : undefined;
 }
 
 export async function readPaths(dir: string): Promise<Paths> {
@@ -113,7 +125,7 @@ export async function uncommittedProjectConfig(projectDir: string): Promise<bool
   return (await git(projectDir, "status", "--porcelain", "--", CONFIG_FILE)) !== "";
 }
 
-async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; paths?: Paths & { spec?: string; features?: string; steps?: string[]; tests?: string[]; code?: string[] } }> {
+async function readConfig(dir: string): Promise<{ limits?: Partial<Limits>; source?: { extensions?: string[] }; paths?: Paths & { spec?: string; features?: string; steps?: string[]; tests?: string[]; code?: string[] } }> {
   const path = join(dir, CONFIG_FILE);
   return existsSync(path) ? JSON.parse(await readFile(path, "utf8")) : {};
 }

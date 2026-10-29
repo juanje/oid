@@ -8,12 +8,17 @@ import { assertOutputNames, runBranch } from "../support/run.ts";
 import { lastAttempt } from "../support/scripted-executor.ts";
 import type { RunWorld } from "../support/world.ts";
 
-// The prepared attempt that adds each pattern of the outline's examples.
+// The prepared attempt that adds each pattern of the outline's examples, by its kind and the pattern.
 const PATTERN_ATTEMPTS: Record<string, string> = {
-  ".only": "test-only",
-  ".skip": "test-skip",
-  "process.env.VITEST": "code-vitest-env",
+  "test .only": "test-only",
+  "test .skip": "test-skip",
+  "code process.env.VITEST": "code-vitest-env",
+  "steps import(modulePath)": "steps-dynamic-import",
+  "test import(modulePath)": "test-dynamic-import",
 };
+
+// The prepared attempt each scenario of the outline used, for the step that looks for its file in the output.
+const patternAttempt = new WeakMap<RunWorld, string>();
 
 Given("the scripted test attempt also writes the source its test needs", function (this: RunWorld) {
   this.script = lastAttempt(this.script, "test", GREET_01_SCENARIO, attemptDir("test-writes-source"));
@@ -28,10 +33,29 @@ Given("the scripted code attempt also changes the project's package.json", funct
 });
 
 Given("the scripted {word} attempt adds a line with {}", function (this: RunWorld, kind: string, pattern: string) {
-  assert.ok(kind === "test" || kind === "code", `No prepared ${kind} attempt adds a pattern`);
-  const prepared = PATTERN_ATTEMPTS[pattern];
-  assert.ok(prepared !== undefined, `No prepared attempt adds ${pattern}`);
+  assert.ok(kind === "steps" || kind === "test" || kind === "code", `No prepared ${kind} attempt adds a pattern`);
+  const prepared = PATTERN_ATTEMPTS[`${kind} ${pattern}`];
+  assert.ok(prepared !== undefined, `No prepared ${kind} attempt adds ${pattern}`);
+  patternAttempt.set(this, prepared);
   this.script = lastAttempt(this.script, kind, GREET_01_SCENARIO, attemptDir(prepared));
+});
+
+Given("the scripted code attempt writes the greeting function in src\\/greet.js", function (this: RunWorld) {
+  this.script = lastAttempt(this.script, "code", GREET_01_SCENARIO, attemptDir("code-javascript"));
+});
+
+Then("the output names src\\/greet.js and the project's source extension .ts", function (this: RunWorld) {
+  assertOutputNames(this, "src/greet.js");
+  // The extension on its own, not as the end of a file's name.
+  assert.match(this.output, /(?<![\w./-])\.ts\b/, `The output does not name the extension .ts:\n${this.output}`);
+});
+
+Given("the project's .oid.json sets the source extensions to .ts and .js", async function (this: RunWorld) {
+  await commitProjectConfig(this.projectDir, (config) => (config.source = { ...config.source, extensions: [".ts", ".js"] }), "chore: oid config");
+});
+
+Given("the scripted code attempt writes a helper in src\\/helper.js, which its TypeScript source imports", function (this: RunWorld) {
+  this.script = this.script.map((attempt) => (attempt.kind === "code" ? { ...attempt, dir: attemptDir("code-javascript-helper") } : attempt));
 });
 
 Given("the scripted code attempt also writes .oid\\/progress.json", function (this: RunWorld) {
@@ -56,7 +80,7 @@ Then("the output names package.json", function (this: RunWorld) {
 
 Then("the output names {} and the file that has it", async function (this: RunWorld, pattern: string) {
   assertOutputNames(this, pattern);
-  const [file] = await filesUnder(attemptDir(PATTERN_ATTEMPTS[pattern]!));
+  const [file] = await filesUnder(attemptDir(patternAttempt.get(this)!));
   assertOutputNames(this, file);
 });
 

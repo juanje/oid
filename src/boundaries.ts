@@ -16,6 +16,8 @@ export interface Layout {
   writable: Record<PathsKind, string[]>;
   /** The files a runner's configuration loads with every test, when it loads any: the gate's configuration, wherever they sit. */
   loaded?: string[];
+  /** The extensions source files may have; any when there are none (FR-AGENT-04). */
+  extensions?: string[];
 }
 
 /** The paths an attempt of `kind` may write: a cleanup (refactor-code) writes the source, as a code attempt does (FR-REF-02). */
@@ -90,16 +92,27 @@ export interface ForbiddenLine extends AddedLine {
   pattern: string;
 }
 
-// Patterns that let a check pass without the code working (DOMAIN.md, Edge cases).
-const FORBIDDEN: { pattern: string; matches: RegExp }[] = [
+// Patterns that let a check pass without the code working (DOMAIN.md, Edge cases), and the kinds they are forbidden
+// to, when not every kind. A module imported through a variable has no type: the type check does not see the calls
+// that steps and tests make to it.
+const FORBIDDEN: { pattern: string; matches: RegExp; kinds?: AttemptKind[] }[] = [
   { pattern: ".only", matches: /\.only\s*\(/ },
   { pattern: ".skip", matches: /\.skip\s*\(/ },
   { pattern: "process.env.VITEST", matches: /process\.env\.VITEST\b/ },
+  { pattern: "import() of a path that is not a string literal", matches: /\bimport\s*\(\s*(?!"[^"]*"\s*\)|'[^']*'\s*\)|`[^`$]*`\s*\))/, kinds: ["steps", "test"] },
 ];
 
-/** The added lines with a forbidden pattern, each with the pattern it has. */
-export function forbiddenLines(added: AddedLine[]): ForbiddenLine[] {
-  return added.flatMap((line) => FORBIDDEN.filter(({ matches }) => matches.test(line.text)).map(({ pattern }) => ({ ...line, pattern })));
+/** The added lines with a pattern forbidden to `kind`, each with the pattern it has. */
+export function forbiddenLines(added: AddedLine[], kind?: AttemptKind): ForbiddenLine[] {
+  const patterns = FORBIDDEN.filter((forbidden) => forbidden.kinds === undefined || (kind !== undefined && forbidden.kinds.includes(kind)));
+  return added.flatMap((line) => patterns.filter(({ matches }) => matches.test(line.text)).map(({ pattern }) => ({ ...line, pattern })));
+}
+
+/** The source files written with an extension the project does not name (FR-AGENT-04). */
+function otherLanguage(kind: AttemptKind, files: string[], layout: Layout): string[] {
+  const { extensions } = layout;
+  if (extensions === undefined || (kind !== "code" && kind !== "refactor-code")) return [];
+  return files.filter((file) => layout.writable.code.some((path) => file.startsWith(path)) && !extensions.some((extension) => file.endsWith(extension)));
 }
 
 /** Refuses an attempt whose diff writes outside its boundary, or adds a line with a forbidden pattern. */
@@ -112,7 +125,16 @@ export function judgeBoundary(kind: AttemptKind, diff: { files: string[]; added:
       next: `Write only under ${writablePaths(kind, layout).join(", ")}; feature files, ${layout.spec} and the gate's configuration belong to no attempt`,
     };
   }
-  const forbidden = forbiddenLines(diff.added);
+  const other = otherLanguage(kind, diff.files, layout);
+  if (other.length > 0) {
+    const extensions = layout.extensions!.join(", ");
+    return {
+      failed: `The ${kind} attempt wrote source in another language than the project's: its source extensions are ${extensions}`,
+      evidence: other.join("\n"),
+      next: `Write the source in files ending in ${extensions}: the type check checks only those, and source in another language would pass the gate unchecked`,
+    };
+  }
+  const forbidden = forbiddenLines(diff.added, kind);
   if (forbidden.length > 0) {
     return {
       failed: "Added lines would let a check pass without the code working",
