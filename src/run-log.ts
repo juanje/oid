@@ -143,6 +143,16 @@ export interface ScopeEvent {
   leftOut: Scenario[];
 }
 
+/** Where a check ran: under a mutant, to judge an attempt, or at the gate. */
+export type CheckPlace = "mutant" | "attempt" | "gate";
+
+/** A check stopped at its time limit (FR-RUN-09). */
+export interface CheckEvent {
+  event: "check";
+  stopped: CheckPlace;
+  seconds: number;
+}
+
 export interface StopEvent {
   event: "stop";
   limit: "turns" | "rounds";
@@ -162,6 +172,8 @@ export interface Measures {
   deniedToolCalls: number;
   /** The turns the output limit cut, per attempt kind (FR-RUN-09); logs before 0.1.22 do not have it. */
   cutTurns?: Partial<Record<AttemptKind, number>>;
+  /** The checks the time limit stopped, by where they ran (FR-RUN-09); logs before 0.1.23 do not have it. */
+  stoppedChecks?: Partial<Record<CheckPlace, number>>;
   /**
    * Requests for another attempt kind: all of them, those the run followed that changed the next kind, and the attempts
    * asked for that were accepted (FR-RUN-04); logs before 0.1.11 do not have it, and those of 0.1.11 not `changing`.
@@ -181,7 +193,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | CleanupEvent | PlanEvent | BuiltEvent | ScopeEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | CleanupEvent | PlanEvent | BuiltEvent | ScopeEvent | CheckEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;
@@ -255,6 +267,9 @@ export function measuresOf(events: LogEvent[], timeMs: number): Measures {
     last.set(attempt.kind, attempt);
   }
   for (const event of events) if (event.event === "red") provisional[event.verdict] += 1;
+  const stoppedChecks: Partial<Record<CheckPlace, number>> = {};
+  for (const event of events) if (event.event === "check") stoppedChecks[event.stopped] = (stoppedChecks[event.stopped] ?? 0) + 1;
+  measures.stoppedChecks = stoppedChecks;
   // A refusal of the gate rejects the work of the attempt kind it goes back to.
   for (const kind of gateRejections) measures.rejections[kind] = (measures.rejections[kind] ?? 0) + 1;
   return measures;

@@ -1,4 +1,4 @@
-import type { CommandRunner } from "./command.ts";
+import { type CommandRunner, didNotFinish } from "./command.ts";
 import { NO_DEFINITION, type Scenario } from "./cucumber-messages.ts";
 import { classifyFailure, classifyScenario, isValidRed, type RedClass } from "./red-class.ts";
 import type { Refusal } from "./refusal.ts";
@@ -94,6 +94,14 @@ export function noTestSuiteFiles(unit: UnitRun): string[] {
 }
 
 export function judgeCode(unit: UnitRun, greenScenarios: ScenarioRun[]): Refusal | undefined {
+  // Code that never returns is the code's to fix, wherever it was found (FR-GATE-04).
+  if (unit.stoppedAfter !== undefined) {
+    return {
+      failed: `The unit suite ${didNotFinish(unit.stoppedAfter)}`,
+      evidence: unit.output,
+      next: "Find the code the tests call that does not return, such as a loop whose condition never changes, and make it end",
+    };
+  }
   if (!unit.ran) {
     return {
       failed: "The unit suite did not run",

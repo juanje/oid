@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { runCommand } from "./command.ts";
 import { addedLines } from "./coverage.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { detectFindings, type Finding, findingSignature, findingText, sourceMeasures, worseMeasures } from "./findings.ts";
@@ -101,7 +100,7 @@ async function judgeCleanup(run: FrRun, finding: Finding, before: BeforeItem, si
   if (worse.length > 0) {
     return { failed: "The cleanup made a measure worse", evidence: worse.join("\n"), next: CLEAN_WITHOUT_CHANGING };
   }
-  const checks = await runGate(run.worktree.dir, runCommand, { start: since, scenarios: scope, source: run.layout.writable.code, vitest: run.vitest });
+  const checks = await runGate(run.worktree.dir, run.check("attempt"), { start: since, scenarios: scope, source: run.layout.writable.code, vitest: run.vitest });
   return checksRefusal(checks);
 }
 

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { type CommandRunner, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
+import { type CommandRunner, didNotFinish, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
 import { type Scenario, type ScenarioResult, type StepFailure, scenarioResults, scenarioSteps, scenariosIn } from "./cucumber-messages.ts";
 import { reportPath } from "./git.ts";
 import { RUNNERS } from "./runners.ts";
@@ -26,8 +26,8 @@ export async function frScenarios(dir: string, fr: string, run: CommandRunner): 
 
 /** Runs the scenarios by location. A scenario asked for that did not run is "not run", never passed. */
 export async function runScenarios(dir: string, scenarios: Scenario[], run: CommandRunner): Promise<ScenarioRun[]> {
-  const { report } = await cucumber(dir, scenarios.map(location), run);
-  const results = report === undefined ? [] : scenarioResults(report);
+  const { report, stoppedAfter } = await cucumber(dir, scenarios.map(location), run);
+  const results = report === undefined ? [] : withStop(scenarioResults(report), stoppedAfter);
   return scenarios.map((scenario) => {
     const result = results.find((ran) => location(ran) === location(scenario));
     if (result === undefined) return { ...scenario, status: "not run" };
@@ -48,14 +48,20 @@ export async function runAllScenarios(
 ): Promise<{ ran: boolean; results: ScenarioResult[]; steps: Map<string, string[]>; output: string }> {
   // With a coverage dir, Node writes the V8 coverage of every process cucumber-js runs there (FR-GATE-02). Given
   // locations, it runs only those scenarios: the gate's scope (FR-GATE-01).
-  const { report, output } = await cucumber(dir, locations, run, v8CoverageDir === undefined ? env : { NODE_V8_COVERAGE: v8CoverageDir, ...env });
+  const { report, output, stoppedAfter } = await cucumber(dir, locations, run, v8CoverageDir === undefined ? env : { NODE_V8_COVERAGE: v8CoverageDir, ...env });
   if (report === undefined) return { ran: false, results: [], steps: new Map(), output };
   // A configuration that names paths runs them all, whatever locations it is given (DOMAIN.md, cucumber-js): only the
   // scenarios asked for count.
   const asked = locations.length === 0 ? undefined : new Set(locations);
-  const results = scenarioResults(report).filter((result) => asked === undefined || asked.has(location(result)));
+  const results = withStop(scenarioResults(report), stoppedAfter).filter((result) => asked === undefined || asked.has(location(result)));
   const steps = new Map([...scenarioSteps(report)].filter(([where]) => asked === undefined || asked.has(where)));
   return { ran: true, results, steps, output };
+}
+
+/** A scenario that did not finish says it was stopped at the time limit (FR-RUN-09). */
+function withStop(results: ScenarioResult[], stoppedAfter: number | undefined): ScenarioResult[] {
+  if (stoppedAfter === undefined) return results;
+  return results.map((result) => (result.failure?.status === "NOT FINISHED" ? { ...result, failure: { ...result.failure, message: didNotFinish(stoppedAfter) } } : result));
 }
 
 function location(scenario: Scenario): string {
@@ -63,12 +69,12 @@ function location(scenario: Scenario): string {
 }
 
 /** Runs the project's cucumber-js and reads its message report; a load error stops cucumber before it writes one. */
-async function cucumber(dir: string, args: string[], run: CommandRunner, env: Record<string, string> = {}): Promise<{ report: string | undefined; output: string }> {
+async function cucumber(dir: string, args: string[], run: CommandRunner, env: Record<string, string> = {}): Promise<{ report: string | undefined; output: string; stoppedAfter?: number }> {
   const reportFile = await reportPath(dir, "oid-scenarios.ndjson");
   await rm(reportFile, { force: true });
-  const { output } = await run(projectBin(dir, RUNNERS.scenarios.bin), [...args, "--format", `message:${reportFile}`], {
+  const { output, stoppedAfter } = await run(projectBin(dir, RUNNERS.scenarios.bin), [...args, "--format", `message:${reportFile}`], {
     cwd: dir,
     env: { ...process.env, ...TYPESCRIPT_STEPS_ENV, ...env },
   });
-  return { report: existsSync(reportFile) ? await readFile(reportFile, "utf8") : undefined, output };
+  return { report: existsSync(reportFile) ? await readFile(reportFile, "utf8") : undefined, output, ...(stoppedAfter === undefined ? {} : { stoppedAfter }) };
 }

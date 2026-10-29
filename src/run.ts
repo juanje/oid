@@ -1,5 +1,5 @@
 import { AgentError } from "./agent-error.ts";
-import { runCommand } from "./command.ts";
+import { type CommandRunner, checkRunner } from "./command.ts";
 import { ConfigError, readLayout, readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import type { AttemptKind, Executor } from "./executor.ts";
@@ -16,7 +16,7 @@ import { brokenBaseRefusal, gateScope, runIdOf, startingScenarios } from "./run-
 import { git } from "./git.ts";
 import { formatRefusal, type Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
-import { type LogEvent, startRunLog } from "./run-log.ts";
+import { type CheckPlace, type LogEvent, startRunLog } from "./run-log.ts";
 import { progressLine } from "./progress.ts";
 import { summarize, transcriptsOf } from "./summary.ts";
 import { oidVersion } from "./version.ts";
@@ -116,10 +116,15 @@ async function buildFrs(
   const project = await projectSetup(worktree.dir);
   if (project instanceof ConfigError) return stop(project.message, out);
   const { layout, vitest } = project;
+  const { retries, turns, rounds, complexity, outputTokens, checkSeconds } = await readLimits(worktree.dir);
+  // Every run of a check has the time limit; one stopped there is counted by where it ran (FR-RUN-09).
+  const check = (place: CheckPlace): CommandRunner => checkRunner(checkSeconds, () => record({ event: "check", stopped: place, seconds: checkSeconds }));
+  // The runs before the first attempt are the gate's at the start of the run (FR-RUN-10).
+  const start = check("gate");
   await record({ event: "stage", stage: "scenarios" });
   const listed: { fr: string; scenarios: Scenario[]; steps: Map<string, string[]> }[] = [];
   for (const fr of frs) {
-    const { scenarios, steps } = await frScenarios(worktree.dir, fr, runCommand);
+    const { scenarios, steps } = await frScenarios(worktree.dir, fr, start);
     if (scenarios.length === 0) {
       await record({ event: "start", oid: oidVersion(), fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
       return stop(`cucumber-js finds no scenario for ${fr}: check the project's cucumber-js configuration and the tag @${fr} on its feature file.`, out);
@@ -128,14 +133,13 @@ async function buildFrs(
     // A task without the FR's what and why would build its scenarios without their reason (FR-AGENT-03).
     if ((await frTexts(worktree.dir, fr, layout.spec)).fr === undefined) return stop(noFrText(fr, layout.spec), out);
   }
-  const { results } = await runAllScenarios(worktree.dir, runCommand);
-  const start = startingScenarios(results, new Set(listed.flatMap(({ scenarios }) => scenarios.map(locationOf))));
-  if (start.broken.length > 0) return refuse(brokenBaseRefusal(start.broken), out);
+  const { results } = await runAllScenarios(worktree.dir, start);
+  const starting = startingScenarios(results, new Set(listed.flatMap(({ scenarios }) => scenarios.map(locationOf))));
+  if (starting.broken.length > 0) return refuse(brokenBaseRefusal(starting.broken), out);
   const noProvider = missingCoverageProvider(worktree.dir);
   if (noProvider !== undefined) return stop(noProvider, out);
   await record({ event: "stage", stage: "unit tests" });
-  const baseline = await runUnitTests(worktree.dir, [], runCommand);
-  const { retries, turns, rounds, complexity, outputTokens } = await readLimits(worktree.dir);
+  const baseline = await runUnitTests(worktree.dir, [], start);
   // One run for every FR: the scenarios built, the tests there are, the transcripts' numbering are the run's.
   const run: FrRun = {
     executor,
@@ -154,6 +158,7 @@ async function buildFrs(
     complexity,
     reports: new Map(),
     record,
+    check,
     texts: await frTexts(worktree.dir, listed[0]!.fr, layout.spec),
     steps: listed[0]!.steps,
     latest: new Map(),
@@ -166,7 +171,7 @@ async function buildFrs(
   for (const { fr, scenarios, steps } of listed) {
     await record({ event: "start", oid: oidVersion(), fr, scenarios, branch: worktree.branch, checkpoints: worktree.checkpoints });
     Object.assign(run, { fr, steps, texts: await frTexts(worktree.dir, fr, layout.spec) });
-    const exitCode = await buildOneFr(run, scenarios, all, start.passing, since);
+    const exitCode = await buildOneFr(run, scenarios, all, starting.passing, since);
     if (exitCode !== EXIT_BUILT) return exitCode;
     await record({ event: "stage", stage: "commit" });
     await commitFr(worktree, since, `feat(${fr}): built by oid run`);
@@ -188,7 +193,7 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   await record({ event: "scope", fr, leftOut });
   const gate = await gateLoop(
     retries,
-    () => runGate(worktree.dir, runCommand, { start: since, scenarios: scope, source: run.layout.writable.code, vitest: run.vitest }),
+    () => runGate(worktree.dir, run.check("gate"), { start: since, scenarios: scope, source: run.layout.writable.code, vitest: run.vitest }),
     (kind, refusal) => attemptAfterGate(run, kind, last, refusal),
     (refusal, sendTo) =>
       record({ event: "gate", verdict: refusal === undefined ? "passed" : "refused", ...(refusal === undefined ? {} : { refusal }), ...(sendTo === undefined ? {} : { sendTo }) }),

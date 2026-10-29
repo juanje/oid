@@ -1,6 +1,6 @@
 import { agentError } from "./agent-error.ts";
 import { type Layout, judgeBoundary } from "./boundaries.ts";
-import { runCommand } from "./command.ts";
+import type { CommandRunner } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext, TryTarget } from "./executor.ts";
 import { LimitReached, turnLimitReached } from "./limits.ts";
@@ -29,6 +29,8 @@ export interface AttemptRequest {
   transcript?: string;
   /** For an attempt another one asked for: which kind asked, and why (FR-RUN-04). */
   asked?: Attempt["asked"];
+  /** How `try` runs its check: within the run's time limit (FR-RUN-09). */
+  check: CommandRunner;
 }
 
 /**
@@ -50,12 +52,13 @@ export async function runAttempt({
   context,
   transcript,
   asked,
+  check,
 }: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string; next?: NextAttempt; mutant?: Mutant }> {
   let reported: string | undefined;
   let next: NextAttempt | undefined;
   let mutant: Mutant | undefined;
   const tools = {
-    try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, runCommand),
+    try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, check),
     report: (result: string, asks?: NextAttempt, submits?: Mutant) => {
       reported = result;
       next = asks;

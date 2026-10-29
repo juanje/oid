@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WRITABLE } from "./boundaries.ts";
-import { runCommand } from "./command.ts";
+import type { CommandRunner } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import type { Mutant } from "./executor.ts";
 import { git } from "./git.ts";
@@ -94,9 +94,16 @@ export function judgeTestsUnderMutant(unit: UnitRun, passing: string[], symbolEx
 }
 
 /** Steps whose scenario passes before its code, under a mutant: in a scratch copy, the scenario fails on an assertion. */
-export async function stepsUnderMutant(worktree: RunWorktree, source: string[], scenario: Scenario, files: string[], mutant: Mutant): Promise<{ reds: string[] } | { refusal: Refusal }> {
+export async function stepsUnderMutant(
+  worktree: RunWorktree,
+  source: string[],
+  scenario: Scenario,
+  files: string[],
+  mutant: Mutant,
+  run: CommandRunner,
+): Promise<{ reds: string[] } | { refusal: Refusal }> {
   return underMutant(worktree, source, files, mutant, async (dir) => {
-    const result = (await runScenarios(dir, [scenario], runCommand))[0]!;
+    const result = (await runScenarios(dir, [scenario], run))[0]!;
     const stepFile = result.failure?.definedIn;
     const exists = await importedSymbolsOf(dir, stepFile === undefined ? [] : [stepFile]);
     const refusal = judgeScenarioUnderMutant(result, (name) => exists(name, stepFile ?? ""));
@@ -105,9 +112,16 @@ export async function stepsUnderMutant(worktree: RunWorktree, source: string[], 
 }
 
 /** New tests that pass before their code, under a mutant: in a scratch copy, each fails on an assertion. */
-export async function testsUnderMutant(worktree: RunWorktree, source: string[], testFiles: string[], mutant: Mutant, passing: string[]): Promise<{ reds: string[] } | { refusal: Refusal }> {
+export async function testsUnderMutant(
+  worktree: RunWorktree,
+  source: string[],
+  testFiles: string[],
+  mutant: Mutant,
+  passing: string[],
+  run: CommandRunner,
+): Promise<{ reds: string[] } | { refusal: Refusal }> {
   return underMutant(worktree, source, testFiles, mutant, async (dir) => {
-    const unit = await runUnitTests(dir, testFiles, runCommand);
+    const unit = await runUnitTests(dir, testFiles, run);
     return judgeTestsUnderMutant(unit, passing, await importedSymbolsOf(dir, testFiles));
   });
 }

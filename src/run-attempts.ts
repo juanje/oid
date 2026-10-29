@@ -3,7 +3,7 @@ import type { VitestDialect } from "./vitest-dialect.ts";
 import { join } from "node:path";
 import { AgentError } from "./agent-error.ts";
 import { runAttempt } from "./attempt.ts";
-import { runCommand } from "./command.ts";
+import type { CommandRunner } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { isTestFile } from "./boundaries.ts";
 import { judgeCode, judgeNewTests, noTestSuiteFiles } from "./evidence.ts";
@@ -13,7 +13,7 @@ import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttemp
 import type { Failing } from "./inner-loop.ts";
 import type { Refusal } from "./refusal.ts";
 import type { Tried } from "./retries.ts";
-import type { AttemptEvent, LogEvent } from "./run-log.ts";
+import type { AttemptEvent, CheckPlace, LogEvent } from "./run-log.ts";
 import { runScenarios, type ScenarioRun } from "./scenarios.ts";
 import { type FrTexts, taskContext } from "./task-context.ts";
 import { runUnitTests, testsIn, type UnitRun } from "./unit-tests.ts";
@@ -53,6 +53,8 @@ export interface FrRun {
   reports: Map<AttemptKind, string>;
   /** Appends to the run log. */
   record: (event: LogEvent) => Promise<void>;
+  /** Runs a check's command within the time limit, counting it by where it runs when it is stopped (FR-RUN-09). */
+  check: (place: CheckPlace) => CommandRunner;
   /** The FR's text and the project's domain and conventions, for every task (FR-AGENT-03). */
   texts: FrTexts;
   /** Each scenario's steps, by `<uri>:<line>`. */
@@ -105,7 +107,7 @@ export async function attemptFor(run: FrRun, kind: AttemptKind, scenario: Scenar
     await run.record({ event: "attempting", kind, scenario: scenario.name, retry: previous !== undefined, ...(providerRetry ? { providerRetry: true as const } : {}) });
     run.attempts += 1;
     const transcript = join(run.transcripts, `${String(run.attempts).padStart(2, "0")}-${kind}.jsonl`);
-    return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, layout: run.layout, refusal: previous, turns: run.turns, outputTokens: run.outputTokens, context, transcript, asked });
+    return runAttempt({ executor: run.executor, kind, fr: run.fr, scenario, worktreeDir: run.worktree.dir, layout: run.layout, refusal: previous, turns: run.turns, outputTokens: run.outputTokens, context, transcript, asked, check: run.check("attempt") });
   };
   const accepted = await acceptedWork(run.worktree.dir);
   try {
@@ -159,8 +161,8 @@ export async function judgeCoverTests(run: FrRun, { files, mutant }: { files: st
   const { worktree, layout } = run;
   const testFiles = files.filter((file) => isTestFile(file, layout));
   if (testFiles.length === 0) return undefined;
-  const underMutant = mutant === undefined ? undefined : (passing: string[]) => testsUnderMutant(worktree, layout.writable.code, testFiles, mutant, passing);
-  const judgment = await judgeNewTests(worktree.dir, testFiles, runCommand, await importedSymbolsOf(worktree.dir, testFiles), run.known, {
+  const underMutant = mutant === undefined ? undefined : (passing: string[]) => testsUnderMutant(worktree, layout.writable.code, testFiles, mutant, passing, run.check("mutant"));
+  const judgment = await judgeNewTests(worktree.dir, testFiles, run.check("attempt"), await importedSymbolsOf(worktree.dir, testFiles), run.known, {
     offerMutant: true,
     ...(underMutant === undefined ? {} : { underMutant }),
   });
@@ -170,8 +172,8 @@ export async function judgeCoverTests(run: FrRun, { files, mutant }: { files: st
 /** A code attempt's judgment: the whole unit suite, and the scenarios built so far. */
 export async function judgeCodeAttempt(run: FrRun): Promise<Refusal | undefined> {
   const { worktree, green, known } = run;
-  const greenRuns = green.length === 0 ? [] : await runScenarios(worktree.dir, green, runCommand);
-  const unit = await runUnitTests(worktree.dir, [], runCommand);
+  const greenRuns = green.length === 0 ? [] : await runScenarios(worktree.dir, green, run.check("attempt"));
+  const unit = await runUnitTests(worktree.dir, [], run.check("attempt"));
   for (const test of testsIn(unit)) known.add(test);
   if (unit.ran) run.tests = testCount(unit);
   // A file with no vitest test goes back to a test attempt, whose tests in it are new.

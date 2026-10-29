@@ -1,6 +1,5 @@
 import { isTestFile } from "./boundaries.ts";
 import { judgeAsked, passingScenarios } from "./asked-judgment.ts";
-import { runCommand } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeNewTests, judgeSteps, provisionalOf } from "./evidence.ts";
 import type { Attempt, AttemptKind, Mutant, NextAttempt } from "./executor.ts";
@@ -148,14 +147,14 @@ class ScenarioBuild {
   /** A steps or test attempt another one asked for (FR-RUN-04), judged by asked-judgment.ts. */
   private askedOnce(kind: AttemptKind, asked: NonNullable<Attempt["asked"]>) {
     return async (previous: Refusal | undefined): Promise<Tried> => {
-      const passing = await passingScenarios(this.run.worktree.dir);
+      const passing = await passingScenarios(this.run.worktree.dir, this.run.check("attempt"));
       const base = this.state.beforeCode ?? (await git(this.run.worktree.dir, "rev-parse", "HEAD"));
       return this.once(kind, (files) => judgeAsked(this.run, this.scenario, kind, files, passing, base), asked)(previous);
     };
   }
 
   private async runScenario(): Promise<ScenarioRun> {
-    const result = (await runScenarios(this.run.worktree.dir, [this.scenario], runCommand))[0]!;
+    const result = (await runScenarios(this.run.worktree.dir, [this.scenario], this.run.check("attempt")))[0]!;
     this.run.latest.set(locationOf(this.scenario), result);
     return result;
   }
@@ -170,7 +169,7 @@ class ScenarioBuild {
     const result = await this.runScenario();
     const takes = takesMutant("steps", this.state.phase, "own");
     if (result.status === "passed" && mutant !== undefined && takes) {
-      const judged = await stepsUnderMutant(this.run.worktree, this.run.layout.writable.code, this.scenario, files, mutant);
+      const judged = await stepsUnderMutant(this.run.worktree, this.run.layout.writable.code, this.scenario, files, mutant, this.run.check("mutant"));
       if ("refusal" in judged) return { refusal: judged.refusal, reds: [] };
       this.state = { ...this.state, provedByMutant: { ...this.state.provedByMutant, steps: true } };
       return { refusal: undefined, reds: judged.reds };
@@ -189,8 +188,8 @@ class ScenarioBuild {
       const testFiles = [...new Set([...files.filter((file) => isTestFile(file, this.run.layout)), ...also])];
       if (testFiles.length === 0) return { refusal: undefined, reds: [] };
       const takes = takesMutant("test", this.state.phase, origin);
-      const underMutant = takes && mutant !== undefined ? (passing: string[]) => testsUnderMutant(this.run.worktree, this.run.layout.writable.code, testFiles, mutant, passing) : undefined;
-      const judgment = await judgeNewTests(this.run.worktree.dir, testFiles, runCommand, await this.symbolsOf(testFiles), this.run.known, {
+      const underMutant = takes && mutant !== undefined ? (passing: string[]) => testsUnderMutant(this.run.worktree, this.run.layout.writable.code, testFiles, mutant, passing, this.run.check("mutant")) : undefined;
+      const judgment = await judgeNewTests(this.run.worktree.dir, testFiles, this.run.check("attempt"), await this.symbolsOf(testFiles), this.run.known, {
         offerMutant: takes,
         ...(underMutant === undefined ? {} : { underMutant }),
       });

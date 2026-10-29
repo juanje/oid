@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isTestFile, writablePaths } from "./boundaries.ts";
-import { runCommand } from "./command.ts";
+import type { CommandRunner } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
 import { type Judgment, judgeNewTests, judgeSteps } from "./evidence.ts";
 import type { AttemptKind } from "./executor.ts";
@@ -16,8 +16,8 @@ import { scratchCopy } from "./worktree.ts";
 // scenario's first code attempt, and what passed kept passing.
 
 /** The scenarios of the project that pass now, by `<uri>:<line>`. */
-export async function passingScenarios(dir: string): Promise<Set<string>> {
-  const { results } = await runAllScenarios(dir, runCommand);
+export async function passingScenarios(dir: string, check: CommandRunner): Promise<Set<string>> {
+  const { results } = await runAllScenarios(dir, check);
   return new Set(results.filter((result) => result.status === "passed").map(locationOf));
 }
 
@@ -27,19 +27,20 @@ export async function passingScenarios(dir: string): Promise<Set<string>> {
  */
 export async function judgeAsked(run: FrRun, scenario: Scenario, kind: AttemptKind, files: string[], passing: Set<string>, base: string): Promise<Judgment> {
   const written = files.filter((file) => writablePaths(kind, run.layout).some((path) => file.startsWith(path)));
+  const check = run.check("attempt");
   if (kind === "test") {
-    const unit = await runUnitTests(run.worktree.dir, [], runCommand);
+    const unit = await runUnitTests(run.worktree.dir, [], check);
     if (unit.ran && testCount(unit) < run.tests) return { refusal: fewerTests(run.tests, testCount(unit)), reds: [] };
     for (const test of testsIn(unit)) run.known.add(test);
   }
-  const { results } = await runAllScenarios(run.worktree.dir, runCommand);
+  const { results } = await runAllScenarios(run.worktree.dir, check);
   const turnedRed = results.filter((result) => passing.has(locationOf(result)) && result.status !== "passed");
   if (turnedRed.length > 0) return { refusal: turnedRedRefusal(turnedRed), reds: [] };
   const scratch = await scratchCopy(run.worktree, base);
   try {
     if (kind === "steps") {
       await scratch.put(written, "attempt");
-      const result = (await runScenarios(scratch.dir, [scenario], runCommand))[0]!;
+      const result = (await runScenarios(scratch.dir, [scenario], check))[0]!;
       const stepFile = result.failure?.definedIn;
       const exists = await importedSymbolsOf(scratch.dir, stepFile === undefined ? [] : [stepFile]);
       return judgeSteps(result, (name) => exists(name, stepFile ?? ""));
@@ -49,10 +50,10 @@ export async function judgeAsked(run: FrRun, scenario: Scenario, kind: AttemptKi
     // The tests that passed there as they were before this attempt are not its to prove; any other must fail.
     await scratch.put(testFiles, "checkpoint");
     const before = testFiles.filter((file) => existsSync(join(scratch.dir, file)));
-    const passedBefore = before.length === 0 ? [] : (await runUnitTests(scratch.dir, before, runCommand)).passed;
+    const passedBefore = before.length === 0 ? [] : (await runUnitTests(scratch.dir, before, check)).passed;
     await scratch.put(testFiles, "attempt");
     // Awaited here: the scratch copy is removed in finally, once the judgment is done.
-    return await judgeNewTests(scratch.dir, testFiles, runCommand, await importedSymbolsOf(scratch.dir, testFiles), new Set(passedBefore));
+    return await judgeNewTests(scratch.dir, testFiles, check, await importedSymbolsOf(scratch.dir, testFiles), new Set(passedBefore));
   } finally {
     await scratch.remove();
   }

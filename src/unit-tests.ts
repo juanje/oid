@@ -13,6 +13,8 @@ export interface UnitRun {
   /** Each failed test or test file with its message; present when vitest ran. */
   failures?: TestFailure[];
   output: string;
+  /** The time limit, in seconds, vitest was stopped at (FR-RUN-09). */
+  stoppedAfter?: number;
 }
 
 /**
@@ -33,7 +35,9 @@ export async function runUnitTests(dir: string, files: string[], run: CommandRun
           `--coverage.reportsDirectory=${coverage.dir}`,
           ...coverage.source.map((path) => `--coverage.include=${path}**`),
         ];
-  const { output } = await run(projectBin(dir, RUNNERS.unit.bin), ["run", ...files, "--reporter=json", `--outputFile=${report}`, ...measured], { cwd: dir });
+  const { output, stoppedAfter } = await run(projectBin(dir, RUNNERS.unit.bin), ["run", ...files, "--reporter=json", `--outputFile=${report}`, ...measured], { cwd: dir });
+  // vitest writes its report at its end: one stopped at the time limit wrote none (FR-RUN-09).
+  if (stoppedAfter !== undefined) return { ran: false, passed: [], failed: [], output, stoppedAfter };
   if (!existsSync(report)) return { ran: false, passed: [], failed: [], output };
   const parsed = JSON.parse(await readFile(report, "utf8"));
   // vitest reports real paths, and the worktree may sit behind a symlink such as macOS's /var.

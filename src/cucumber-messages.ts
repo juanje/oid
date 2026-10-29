@@ -51,10 +51,12 @@ interface Messages {
   started: Map<string, string>;
   /** testCaseStarted id → its steps as they finished. */
   finished: Map<string, FinishedStep[]>;
+  /** The testCaseStarted ids of the test cases that finished. */
+  done: Set<string>;
 }
 
 function parse(ndjson: string): Messages {
-  const messages: Messages = { pickles: new Map(), pickleStepIds: new Map(), pickleSteps: new Map(), testCases: new Map(), testCaseSteps: new Map(), testSteps: new Map(), definitions: new Map(), started: new Map(), finished: new Map() };
+  const messages: Messages = { pickles: new Map(), pickleStepIds: new Map(), pickleSteps: new Map(), testCases: new Map(), testCaseSteps: new Map(), testSteps: new Map(), definitions: new Map(), started: new Map(), finished: new Map(), done: new Set() };
   for (const line of ndjson.split("\n")) {
     if (line.trim() === "") continue;
     const message = JSON.parse(line);
@@ -78,6 +80,8 @@ function parse(ndjson: string): Messages {
       const { testCaseStartedId, testStepId, testStepResult } = message.testStepFinished;
       const step = { testStepId, status: testStepResult.status, message: stepMessage(testStepResult) };
       messages.finished.set(testCaseStartedId, [...(messages.finished.get(testCaseStartedId) ?? []), step]);
+    } else if (message.testCaseFinished) {
+      messages.done.add(message.testCaseFinished.testCaseStartedId);
     }
   }
   return messages;
@@ -116,6 +120,11 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
       ),
     ].filter((uri) => uri !== undefined);
     const defined = stepFiles.length === 0 ? {} : { stepFiles };
+    // A run stopped while the scenario ran (FR-RUN-09): it fails at the first step that did not finish.
+    if (!messages.done.has(startedId)) {
+      results.push({ ...scenario, status: "failed", failure: unfinished(messages, testCaseId, steps), ...defined });
+      continue;
+    }
     // A step with no usable definition decides the class wherever it is, so it is the failure to report.
     const notPassed = steps.find((step) => NO_DEFINITION.has(step.status)) ?? steps.find((step) => step.status !== "PASSED");
     if (steps.length > 0 && notPassed === undefined) {
@@ -137,6 +146,14 @@ export function scenarioResults(ndjson: string): ScenarioResult[] {
     results.push({ ...scenario, status: "failed", failure, ...defined });
   }
   return results;
+}
+
+/** Where a scenario that did not finish stopped: its first step, past the hooks, that did not finish. */
+function unfinished(messages: Messages, testCaseId: string, steps: FinishedStep[]): StepFailure {
+  const ended = new Set(steps.map((step) => step.testStepId));
+  const stepId = (messages.testCaseSteps.get(testCaseId) ?? []).find((id) => !ended.has(id) && messages.testSteps.get(id)?.pickleStepId !== undefined);
+  const pickleStep = messages.pickleSteps.get(messages.testSteps.get(stepId ?? "")?.pickleStepId ?? "");
+  return { step: pickleStep?.text ?? "a hook", kind: pickleStep?.kind ?? "Unknown", status: "NOT FINISHED", message: "" };
 }
 
 /** The step's message with its error type: `exception.message` drops the type that `message` starts with. */

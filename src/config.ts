@@ -18,6 +18,8 @@ const DEFAULT_ROUNDS = 6;
 const DEFAULT_COMPLEXITY = 10;
 // Twice the largest turn seen in real runs: it bounds a model streaming filler without cutting real work (FR-RUN-09).
 const DEFAULT_OUTPUT_TOKENS = 16_000;
+// Long enough for a real project's whole unit suite or scenarios; code that never returns is stopped there (FR-RUN-09).
+const DEFAULT_CHECK_SECONDS = 300;
 
 export interface Limits {
   /** How many times a refused attempt is retried (docs/design.md §2). */
@@ -30,6 +32,8 @@ export interface Limits {
   complexity: number;
   /** How many tokens of output one turn of an agent may take; a turn that reaches it is cut (FR-RUN-09). */
   outputTokens: number;
+  /** How many seconds one run of a check may take; a check that reaches it is stopped and fails (FR-RUN-09). */
+  checkSeconds: number;
 }
 
 export async function readLimits(dir: string): Promise<Limits> {
@@ -41,6 +45,7 @@ export async function readLimits(dir: string): Promise<Limits> {
     rounds: limits?.rounds ?? DEFAULT_ROUNDS,
     complexity: limits?.complexity ?? DEFAULT_COMPLEXITY,
     outputTokens: limits?.outputTokens ?? DEFAULT_OUTPUT_TOKENS,
+    checkSeconds: limits?.checkSeconds ?? DEFAULT_CHECK_SECONDS,
   };
 }
 

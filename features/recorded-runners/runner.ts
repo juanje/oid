@@ -16,6 +16,8 @@ export interface RecordedReply {
   report: string | null;
   /** The files the tool wrote in its coverage directory, by name: vitest's istanbul report, or Node's V8 coverage. */
   coverage?: Record<string, string>;
+  /** oid stopped the tool at its time limit before it finished: replayed, it runs until it is stopped again. */
+  stopped?: true;
 }
 
 const OID_ROOT = resolve(import.meta.dirname, "../..");
@@ -102,6 +104,9 @@ function realCommand(): [string, string[]] {
   return [join(OID_ROOT, "node_modules/.bin", tool), args];
 }
 
+// What the real tool has written so far: a tool stopped at the time limit is recorded with it.
+let captured = "";
+
 function runReal(capture: boolean): Promise<{ exitCode: number; output: string }> {
   return new Promise((done) => {
     const [command, commandArgs] = realCommand();
@@ -112,10 +117,12 @@ function runReal(capture: boolean): Promise<{ exitCode: number; output: string }
     let output = "";
     child.stdout?.on("data", (chunk: Buffer) => {
       output += chunk.toString();
+      captured = output;
       process.stdout.write(chunk);
     });
     child.stderr?.on("data", (chunk: Buffer) => {
       output += chunk.toString();
+      captured = output;
       process.stderr.write(chunk);
     });
     child.on("close", (code) => done({ exitCode: code ?? 1, output }));
@@ -133,18 +140,27 @@ async function main(): Promise<void> {
   if (!cwd.includes("/.oid-worktrees/")) refuse(`asked to run in ${cwd}, which is not a run's worktree`);
 
   if (mode === "record") {
-    const { exitCode, output } = await runReal(true);
-    const report = reportArg(args);
-    const replies: RecordedReply[] = JSON.parse(readFileSync(recording, "utf8"));
-    replies.push({
-      tool,
-      args: normalizedArgs(args),
-      exitCode,
-      output: normalize(output),
-      report: report !== undefined && existsSync(report.path) ? normalize(readFileSync(report.path, "utf8")) : null,
-      ...(coverageDir(args) === undefined ? {} : { coverage: coverageFiles(coverageDir(args)!) }),
+    const record = (exitCode: number, output: string, stopped: boolean): void => {
+      const report = reportArg(args);
+      const replies: RecordedReply[] = JSON.parse(readFileSync(recording, "utf8"));
+      replies.push({
+        tool,
+        args: normalizedArgs(args),
+        exitCode,
+        output: normalize(output),
+        report: report !== undefined && existsSync(report.path) ? normalize(readFileSync(report.path, "utf8")) : null,
+        ...(coverageDir(args) === undefined ? {} : { coverage: coverageFiles(coverageDir(args)!) }),
+        ...(stopped ? { stopped: true as const } : {}),
+      });
+      writeFileSync(recording, `${JSON.stringify(replies, null, 2)}\n`);
+    };
+    // oid stops a check at its time limit with SIGTERM to the runner's process group, the real tool included.
+    process.on("SIGTERM", () => {
+      record(143, captured, true);
+      process.exit(143);
     });
-    writeFileSync(recording, `${JSON.stringify(replies, null, 2)}\n`);
+    const { exitCode, output } = await runReal(true);
+    record(exitCode, output, false);
     process.exit(exitCode);
   }
 
@@ -165,6 +181,11 @@ async function main(): Promise<void> {
     for (const [name, content] of Object.entries(reply.coverage)) writeFileSync(join(dir, name), denormalize(content));
   }
   process.stdout.write(denormalize(reply.output));
+  // A tool that did not finish when recorded does not finish now: it runs until oid stops it at the time limit.
+  if (reply.stopped === true) {
+    setInterval(() => {}, 60_000);
+    return;
+  }
   process.exit(reply.exitCode);
 }
 
