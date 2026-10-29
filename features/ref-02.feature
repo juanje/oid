@@ -47,3 +47,19 @@ Feature: The code pass
     Then the run succeeds
     And the output reports the cleanup item as not accepted
     And the run's log gives the cleanup's refusal as a new finding
+
+  Scenario: The cleanup's task holds the source's functions, with the bodies of those its finding calls
+    Given the scripted code attempt for FR-GREET-02 copies the greeting function's name check into its new function, with other names and another message
+    And the scripted cleanup attempt extracts the shared check
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the cleanup attempt's task names every function of the source with its signature
+    And the cleanup attempt's task holds the body of each function the copied check calls
+
+  Scenario: A cleanup's note reaches the person, and changes nothing
+    Given the scripted code attempt for FR-GREET-02 copies the greeting function's name check into its new function, with other names and another message
+    And the scripted cleanup attempt extracts the shared check, with the message as a parameter, and reports a note that the two messages differ
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the output reports the cleanup item as accepted
+    And the output lists the cleanup's note that the two messages differ
