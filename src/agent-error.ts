@@ -1,7 +1,7 @@
 import type { AttemptKind, AttemptOutcome } from "./executor.ts";
 
 // Errors that trying again does not clear: credentials, billing and quota (FR-AGENT-01), in the words providers use.
-const LASTING = /\b(?:401|402|403)\b|unauthori[sz]ed|authenticat|api[ _-]?key|credential|permission|forbidden|billing|credit|quota|budget|payment|usage limit/i;
+const LASTING = /\b(?:401|402|403)\b|unauthori[sz]ed|authenticat|api[ _-]?key|credential|permission|forbidden|billing|credit|quota|budget|payment|usage limit|extra usage/i;
 
 /**
  * An attempt's agent stopped on an error no attempt can fix, such as a provider that keeps failing: the run stops with

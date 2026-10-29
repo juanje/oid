@@ -142,6 +142,13 @@ Given("the scripted model answers the code attempt with a provider error that sa
   errorThenRetry(this, { dir: builds.dir! });
 });
 
+Given("the scripted model answers the code attempt with a provider error that says {string}", function (this: RunWorld, says: string) {
+  const builds = codeAttemptOf(this);
+  codeAttemptAnswers(this, { error: `400 invalid_request_error: ${says}` });
+  // What a retry would get: a run that retried would build, and not stop.
+  errorThenRetry(this, { dir: builds.dir! });
+});
+
 Then("the scripted model was asked for one turn in the code attempt", function (this: RunWorld) {
   const model = scriptedModel(this);
   // Every session of a code attempt, a retry's included.
