@@ -334,7 +334,7 @@ describe("repeated condition findings", () => {
 
   test("another repeated condition in the same functions is another finding", () => {
     const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", greetAll]]);
-    const other = (text: string) => text.replaceAll(/(\w+)\.trim\(\) === "" \|\| \1\.length > 40/g, '$1.trim() === "" || $1.length > 80');
+    const other = (text: string) => text.replaceAll(/(\w+)\.trim\(\) === "" \|\| \1\.length > 40/g, '$1.trim() === "" || $1.startsWith(" ")');
     const changed = new Map([["src/greet.ts", other(greet)], ["src/greet-all.ts", other(greetAll)]]);
     const [before] = detectFindings({ files, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
     const [after] = detectFindings({ files: changed, baseline: new Map(), added: added("src/greet-all.ts", [2]), limit: 10 });
