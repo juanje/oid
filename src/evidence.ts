@@ -1,6 +1,8 @@
+import { realpath } from "node:fs/promises";
+import { relative } from "node:path";
 import { type CommandRunner, didNotFinish } from "./command.ts";
 import { NO_DEFINITION, type Scenario } from "./cucumber-messages.ts";
-import { classifyFailure, classifyScenario, isValidRed, type RedClass } from "./red-class.ts";
+import { classifyFailure, classifyScenario, isValidRed, missingModule, type RedClass } from "./red-class.ts";
 import type { Refusal } from "./refusal.ts";
 import type { ScenarioRun } from "./scenarios.ts";
 import { isInFile, runUnitTests, testsIn, type UnitRun } from "./unit-tests.ts";
@@ -148,9 +150,16 @@ export async function judgeNewTests(
   run: CommandRunner,
   symbolExists: (name: string, file: string) => boolean,
   known: Set<string>,
-  { offerMutant = false, underMutant }: { offerMutant?: boolean; underMutant?: (passing: string[]) => Promise<{ reds: string[] } | { refusal: Refusal }> } = {},
+  {
+    offerMutant = false,
+    underMutant,
+    source,
+  }: { offerMutant?: boolean; underMutant?: (passing: string[]) => Promise<{ reds: string[] } | { refusal: Refusal }>; source?: string[] } = {},
 ): Promise<Judgment> {
   const unit = await runUnitTests(worktreeDir, testFiles, run);
+  // vitest reports real paths, and the worktree may sit behind a symlink such as macOS's /var.
+  const root = await realpath(worktreeDir);
+  const inSource = (path: string): boolean => source === undefined || source.some((prefix) => relative(root, path).startsWith(prefix));
   if (!unit.ran) {
     return refused({
       failed: "The new tests did not run: not_run",
@@ -187,13 +196,18 @@ export async function judgeNewTests(
     .map((failure) => {
       // A name exists or not as the failing test's own file imports it.
       const file = failure.test.split(" > ")[0]!;
-      return { ...failure, redClass: classifyFailure(failure.message, (name) => symbolExists(name, file)) };
+      return { ...failure, redClass: classifyFailure(failure.message, (name) => symbolExists(name, file), inSource) };
     });
   const invalid = classified.filter((failure) => !isAccepted(failure.redClass));
   if (invalid.length > 0) {
+    // A module looked for outside the source: where it resolves to is what the test has wrong.
+    const resolved = (message: string): string => {
+      const path = missingModule(message);
+      return path === undefined || inSource(path) ? "" : ` (it resolves to ${relative(root, path)}, which is not under the source: ${source!.join(", ")})`;
+    };
     return refused({
       failed: `New tests fail, but not with a valid Red: ${[...new Set(invalid.map((failure) => failure.redClass))].join(", ")}`,
-      evidence: invalid.map((failure) => `${failure.test}: ${failure.redClass}: ${failure.message}`).join("\n"),
+      evidence: invalid.map((failure) => `${failure.test}: ${failure.redClass}: ${failure.message}${resolved(failure.message)}`).join("\n"),
       next: NEXT[invalid[0]!.redClass],
     });
   }

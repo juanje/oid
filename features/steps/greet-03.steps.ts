@@ -143,6 +143,14 @@ Given("the scripted test attempt writes its test in a file vitest does not colle
   replaceAttempt(this, "test", "test-not-collected");
 });
 
+Given("the scripted test attempt writes its test under tests\\/unit\\/ and imports the source one directory short", function (this: RunWorld) {
+  replaceAttempt(this, "test", "test-outside-source");
+});
+
+Then("the output names the resolved path, which is not under the source", function (this: RunWorld) {
+  assertOutputNames(this, "tests/src/greet.ts");
+});
+
 Then("the output names the undefined step", function (this: RunWorld) {
   assertOutputNames(this, stepText("Then"));
 });

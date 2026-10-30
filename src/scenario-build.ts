@@ -191,6 +191,7 @@ class ScenarioBuild {
       const underMutant = takes && mutant !== undefined ? (passing: string[]) => testsUnderMutant(this.run.worktree, this.run.layout.writable.code, testFiles, mutant, passing, this.run.check("mutant")) : undefined;
       const judgment = await judgeNewTests(this.run.worktree.dir, testFiles, this.run.check("attempt"), await this.symbolsOf(testFiles), this.run.known, {
         offerMutant: takes,
+        source: this.run.layout.writable.code,
         ...(underMutant === undefined ? {} : { underMutant }),
       });
       if (judgment.refusal === undefined && judgment.reds.some((red) => red.endsWith(" (mutant)"))) {

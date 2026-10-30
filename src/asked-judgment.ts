@@ -53,7 +53,7 @@ export async function judgeAsked(run: FrRun, scenario: Scenario, kind: AttemptKi
     const passedBefore = before.length === 0 ? [] : (await runUnitTests(scratch.dir, before, check)).passed;
     await scratch.put(testFiles, "attempt");
     // Awaited here: the scratch copy is removed in finally, once the judgment is done.
-    return await judgeNewTests(scratch.dir, testFiles, check, await importedSymbolsOf(scratch.dir, testFiles), new Set(passedBefore));
+    return await judgeNewTests(scratch.dir, testFiles, check, await importedSymbolsOf(scratch.dir, testFiles), new Set(passedBefore), { source: run.layout.writable.code });
   } finally {
     await scratch.remove();
   }
