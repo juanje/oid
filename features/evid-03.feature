@@ -70,3 +70,10 @@ Feature: A mutant where a Red is impossible
     Then the run succeeds
     And the steps attempt's retry was given a refusal that says the scenario does not finish under the mutant
     And the output gives the second scenario's Red the class business_assertion, through a mutant
+
+  Scenario: A new unit test that asserts a promise rejects is proved by a mutant under which the promise resolves
+    Given the scripted steps attempt for the second scenario asks for a function that does not exist yet
+    And the scripted test attempt for the second scenario writes a test that a greeting of no names rejects, which passes already, and submits a mutant under which that greeting resolves
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the output gives the new test's Red the class business_assertion, through a mutant
