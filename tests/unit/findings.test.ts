@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { detectFindings, findingText, nearCopies, sameFinding, sourceMeasures, worseMeasures } from "../../src/findings.ts";
+import { detectFindings, findingText, isShorter, nearCopies, sameFinding, sourceMeasures, worseMeasures } from "../../src/findings.ts";
 import { checkBlock } from "./support/source-blocks.ts";
 
 // The detectors run on the FR's diff against the whole source (FR-REF-01): a finding that touches
@@ -150,6 +150,21 @@ describe("sameFinding", () => {
 
     expect(other.detail).not.toBe(one.detail);
     expect(sameFinding({ finding: one, files }, { finding: other, files: shortened })).toBe(true);
+  });
+
+  test("a duplication left with fewer repeated lines is shorter, and one as long as it was is not", () => {
+    const files = new Map([
+      ["src/old.ts", checkBlock("checkOld", "old")],
+      ["src/new.ts", checkBlock("checkNew", "new")],
+    ]);
+    const shortened = new Map([
+      ["src/old.ts", shorter("checkOld", "old")],
+      ["src/new.ts", shorter("checkNew", "new")],
+    ]);
+    const one = { finding: duplicationIn(files, "src/new.ts"), files };
+    const other = { finding: duplicationIn(shortened, "src/new.ts"), files: shortened };
+
+    expect([isShorter(one, other), isShorter(one, one), isShorter(other, one)]).toEqual([true, false, false]);
   });
 
   test("a duplication finding moved into another function is another finding", () => {
