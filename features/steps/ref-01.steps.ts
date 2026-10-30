@@ -135,8 +135,17 @@ Given("the scripted code attempt for FR-GREET-02 adds a name check function", fu
   this.script = buildWith(refDir("s2-test-checks"), refDir("s2-code-name-check"));
 });
 
-Given("the source of FR-GREET-01 starts its greeting function with the first two statements of that check", async function (this: RunWorld) {
-  await commitFixture(this.projectDir, refDir("greet-starts-like-check"), "feat(FR-GREET-01): greet a blank name without one");
+Given("the source of FR-GREET-01 starts its greeting function with the first four statements of that check", async function (this: RunWorld) {
+  await commitFixture(this.projectDir, refDir("greet-starts-like-check"), "feat(FR-GREET-01): refuse a blank name");
+});
+
+Given("the source of FR-GREET-01 starts its greeting function with the first three statements of that check", async function (this: RunWorld) {
+  await commitFixture(this.projectDir, refDir("greet-starts-like-check-three"), "feat(FR-GREET-01): greet a blank name without one");
+});
+
+Then("the output lists no near-copy", function (this: RunWorld) {
+  const lines = this.output.split("\n").filter((text) => /\bnear-cop(y|ies)\b/.test(text));
+  assert.deepEqual(lines, [], `The output lists near-copies:\n${this.output}`);
 });
 
 Then("the output lists the greeting function as a near-copy of the name check function", function (this: RunWorld) {

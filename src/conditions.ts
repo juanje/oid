@@ -23,13 +23,21 @@ function weightOf(node: ts.Node): number {
   return weight;
 }
 
+/**
+ * A condition with `?.` read as `.`, and `?.(` and `?.[` as `(` and `[`: the same rule reached through an optional
+ * chain in one copy is still one rule (FR-REF-01). `?.` before a digit is a conditional expression's `? .5`.
+ */
+function withoutOptionalChains(text: string): string {
+  return text.replace(/\?\.(?=[([])/g, "").replace(/\?\.(?!\d)/g, ".");
+}
+
 /** The conditions of `text`, in source order. */
 export function conditionsOf(text: string): Condition[] {
   const file = ts.createSourceFile("source.ts", text, ts.ScriptTarget.Latest, true);
   const found: Condition[] = [];
   const add = (node: ts.Expression): void => {
     found.push({
-      norm: normalise(node.getText().replace(/\s*\n\s*/g, " ")),
+      norm: normalise(withoutOptionalChains(node.getText().replace(/\s*\n\s*/g, " "))),
       start: file.getLineAndCharacterOfPosition(node.getStart()).line + 1,
       end: file.getLineAndCharacterOfPosition(node.getEnd()).line + 1,
       weight: weightOf(node),

@@ -8,8 +8,9 @@ import { cloneRuns, duplicatedLineCount, LEAST_DUPLICATED_LINES, normalisedLines
 // A condition repeated this many times, with at least this many operators and calls, is a rule worth one place.
 const LEAST_REPEATED_CONDITIONS = 3;
 const LEAST_CONDITION_WEIGHT = 3;
-// A near-copy starts with at least this many of a new function's first statements (FR-REF-01).
-const LEAST_NEAR_COPY_LINES = 2;
+// A near-copy starts with at least this many of a new function's first statements (FR-REF-01): two or three are a
+// lookup and its guard, which every function that reads the same store has.
+const LEAST_NEAR_COPY_LINES = 4;
 
 /** Where a finding, or a related occurrence, sits (DOMAIN.md, Finding). */
 export interface FindingPlace {
