@@ -147,10 +147,25 @@ describe("gateLoop", () => {
 
     const outcome = await gateLoop(1, gate, afterGate);
 
-    expect(outcome).toEqual({ refusal: undefined });
+    expect(outcome).toEqual({ refusal: undefined, removed: { branches: [BRANCH], report } });
     expect(kinds).toEqual(["test", "code"]);
     expect(given[1]!.evidence).toContain(BRANCH);
     expect(given[1]!.evidence).toContain(report);
+  });
+
+  test("a test attempt for uncovered branches whose retries run out ends the run with its refusal, and no code attempt has them", async () => {
+    const ranOut: Refusal = { failed: "The branches the test attempt was sent for are still untaken", evidence: BRANCH, next: "", uncovered: [BRANCH] };
+    const kinds: AttemptKind[] = [];
+    const answers = [COVERAGE_FAILS, COVERAGE_FAILS, PASSING];
+    const afterGate = async (kind: AttemptKind) => {
+      kinds.push(kind);
+      return { refusal: kind === "test" ? ranOut : undefined, rollback: async () => {} };
+    };
+
+    const outcome = await gateLoop(1, async () => answers.shift()!, afterGate);
+
+    expect(outcome).toEqual({ refusal: ranOut });
+    expect(kinds).toEqual(["test"]);
   });
 
   test("a code attempt for uncovered branches that leaves as many untaken, wherever they now are, is refused as having moved them, and goes back as a retry", async () => {

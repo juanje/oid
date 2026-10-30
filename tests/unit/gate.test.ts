@@ -2,7 +2,7 @@ import { realpath, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { describe, expect, test } from "vitest";
 import type { CommandOptions, CommandResult } from "../../src/command.ts";
-import { gateError, gateRefusal, runGate, untakenRefusal } from "../../src/gate.ts";
+import { coverRanOut, gateError, gateRefusal, runGate, untakenRefusal } from "../../src/gate.ts";
 import { GREET_02_SECOND, recorded } from "./support/recorded.ts";
 import { tempRepo } from "./support/repo.ts";
 
@@ -218,5 +218,26 @@ describe("untakenRefusal", () => {
   test("accepts one that takes every branch it was sent for, whatever else is untaken", () => {
     expect(untakenRefusal([BRANCH], coverage([]))).toBeUndefined();
     expect(untakenRefusal([BRANCH], coverage(["src/other.ts:1:1: branch 1 of an if"]))).toBeUndefined();
+  });
+});
+
+describe("coverRanOut", () => {
+  const BRANCH = "src/greet.ts:3:10: branch 0 of a conditional expression";
+
+  test("names the branches still untaken, the test attempt's last refusal and the tests it wrote", () => {
+    const last = { failed: "The branches the test attempt was sent for are still untaken: its tests do not take them", evidence: BRANCH, next: "", uncovered: [BRANCH] };
+
+    const refusal = coverRanOut([BRANCH], last, ["tests/greet-another.test.ts"]);
+
+    expect(refusal.evidence).toContain(BRANCH);
+    expect(refusal.evidence).toContain(last.failed);
+    expect(refusal.evidence).toContain("tests/greet-another.test.ts");
+    expect(refusal.uncovered).toEqual([BRANCH]);
+  });
+
+  test("names the branches it was sent for when its last refusal was for something else", () => {
+    const last = { failed: "New tests fail, but not with a valid Red: test_bug", evidence: "tests/greet-another.test.ts: test_bug", next: "" };
+
+    expect(coverRanOut([BRANCH], last, []).uncovered).toEqual([BRANCH]);
   });
 });

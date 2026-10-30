@@ -135,12 +135,15 @@ async function runAt(dir: string, ref: string, args: string[]): Promise<{ exitCo
   }
 }
 
-/** Changes the project's .oid.json with `change`, keeping the rest, and commits it, as the person would. */
+/**
+ * Changes the project's .oid.json with `change`, keeping the rest, and commits it, as the person would. A change that
+ * leaves it as it was, such as a scenario repeating its Background's Given, commits nothing.
+ */
 export async function commitProjectConfig(dir: string, change: (config: Record<string, any>) => void, message: string): Promise<void> {
   const path = join(dir, ".oid.json");
   const config = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {};
   change(config);
   await writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
   git(dir, "add", ".oid.json");
-  git(dir, "commit", "-q", "-m", message);
+  if (git(dir, "status", "--porcelain") !== "") git(dir, "commit", "-q", "-m", message);
 }

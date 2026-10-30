@@ -86,6 +86,16 @@ describe("summarize", () => {
     expect(text).toMatch(/\brounds with no progress 2\b/);
   });
 
+  test("lists each branch removed on a test attempt's report, with the report, for the person to check", () => {
+    const report = "No requirement asks for the empty-name branch of greet.";
+    const branches = ["src/greet.ts:3:10: branch 0 of a conditional expression", "src/greet.ts:7:3: branch 1 of an if"];
+    const events: LogEvent[] = [START, { event: "removed", fr: "FR-GREET-01", branches, report }, { event: "end", exitCode: 0, measures: MEASURES }];
+
+    const lines = summarize(events, "/repo/.git/oid/runs/FR-GREET-01-1.jsonl").split("\n");
+
+    for (const branch of branches) expect(lines.find((line) => line.includes(branch))).toMatch(new RegExp(`\\bremoved\\b.*${report.replaceAll(".", "\\.")}`));
+  });
+
   test("lists the cleanups' notes and the near-copies, for the person to decide", () => {
     const finding = { id: "dup-0001", category: "duplication" as const, file: "src/greet-all.ts", range: { start: 2, end: 8 }, detail: "5 duplicated lines" };
     const note = "The two copies refuse with different messages.";
