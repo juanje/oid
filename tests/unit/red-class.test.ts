@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { classifyFailure, classifyScenario } from "../../src/red-class.ts";
+import { classifyFailure, classifyScenario, missingModule } from "../../src/red-class.ts";
 import { nothingExists } from "./support/symbols.ts";
 import { recorded } from "./support/recorded.ts";
 import { testFailures } from "../../src/vitest-report.ts";
@@ -23,6 +23,18 @@ describe("classifyFailure", () => {
     expect(
       classifyFailure("Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/work/src/greet.ts' imported from /work/features/steps/greet.steps.ts", nothingExists),
     ).toBe("missing_implementation");
+  });
+
+  test("a relative module that, from the failing file, is not under the source is test_bug: no code can create it there", () => {
+    const inSource = (path: string): boolean => path.startsWith("/work/src/");
+    expect(classifyFailure("Error: Cannot find module '../src/greet.ts' imported from '/work/tests/unit/greet-with.test.ts'", nothingExists, inSource)).toBe("test_bug");
+    expect(classifyFailure("Error: Cannot find module '../../src/greet.ts' imported from '/work/tests/unit/greet-with.test.ts'", nothingExists, inSource)).toBe("missing_implementation");
+  });
+
+  test("the module a failure cannot find is resolved against the file that imports it", () => {
+    expect(missingModule("Error: Cannot find module '../src/greet.ts' imported from '/work/tests/unit/greet-with.test.ts'")).toBe("/work/tests/src/greet.ts");
+    expect(missingModule("Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/work/src/greet.ts' imported from /work/features/steps/greet.steps.ts")).toBe("/work/src/greet.ts");
+    expect(missingModule("Cannot find package 'left-pad' imported from '/work/tests/greet-with.test.ts'")).toBeUndefined();
   });
 
   test("X is not a function, where X does not exist in the project, is missing_implementation", () => {

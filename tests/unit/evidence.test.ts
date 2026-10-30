@@ -152,6 +152,17 @@ describe("judgeNewTests", () => {
     expect(judgment).toEqual({ refusal: undefined, reds: ["tests/greet-all.test.ts > greets two people together: undecided (provisional)"] });
   });
 
+  test("refuses a new test that looks for a module outside the source as test_bug, giving the path it resolves to", async () => {
+    const dir = await tempRepo({ "a.txt": "a\n" });
+    const report = recorded("vitest-greet-02-load.json").replaceAll("'../src/greet-all.ts'", "'../lib/greet-all.ts'");
+    const run = recordedVitest(dir, ["tests/greet-all.test.ts"], report);
+
+    const { refusal } = await judgeNewTests(dir, ["tests/greet-all.test.ts"], run, nothingExists, NONE_KNOWN, { source: ["src/"] });
+
+    expect(refusal?.failed).toContain("test_bug");
+    expect(refusal?.evidence).toMatch(/\blib\/greet-all\.ts\b.*\bnot under\b.*\bsrc\//);
+  });
+
   test("refuses a new test file the report does not mention as not_run, naming it", async () => {
     const dir = await tempRepo({ "a.txt": "a\n" });
     // The recording covers other files only: vitest did not collect this one.
