@@ -113,6 +113,17 @@ const STRANGER_TEST = {
   },
 };
 
+// A test of other behaviour, which leaves the branch untaken, and a mutant on which it fails.
+const OTHER_TEST = {
+  kind: "test" as const,
+  scenario: GREET_01_SCENARIO,
+  dir: attemptDir("test-greets-another"),
+  mutant: {
+    reason: "Another salutation fails a greeting by name",
+    files: [{ path: "src/greet.ts", edits: [{ oldText: "`Hello, ${name}!`", newText: "`Hi, ${name}!`" }] }],
+  },
+};
+
 Given(
   "the scripted test attempt after the gate adds a unit test that takes the branch, with a mutant of the branch on which it fails",
   function (this: RunWorld) {
@@ -123,13 +134,28 @@ Given(
 Given(
   "the scripted test attempt after the gate adds a unit test of other behaviour, with a mutant on which it fails, and its retry adds a unit test that takes the branch, with a mutant of the branch on which it fails",
   function (this: RunWorld) {
-    const other = {
-      reason: "Another salutation fails a greeting by name",
-      files: [{ path: "src/greet.ts", edits: [{ oldText: "`Hello, ${name}!`", newText: "`Hi, ${name}!`" }] }],
-    };
-    this.script = [...this.script, { kind: "test", scenario: GREET_01_SCENARIO, dir: attemptDir("test-greets-another"), mutant: other }, STRANGER_TEST];
+    this.script = [...this.script, OTHER_TEST, STRANGER_TEST];
   },
 );
+
+Given("the scripted test attempt after the gate adds a unit test of other behaviour, with a mutant on which it fails, and so does its retry", function (this: RunWorld) {
+  this.script = [...this.script, OTHER_TEST, OTHER_TEST];
+});
+
+Then("the output names the branch still untaken and the test attempt's last refusal", function (this: RunWorld) {
+  // Its retry was refused as it was: by the same failure, which the retry was given.
+  const given = requestsOf(this, "test", 3)[2]!.refusal;
+  assert.ok(given !== undefined, "The test attempt's retry after the gate came without a refusal");
+  const refusal = this.output.slice(this.output.lastIndexOf("Refused: "));
+  assert.match(refusal, /src\/greet\.ts:3\b/, `The refusal does not name src/greet.ts and the branch's line, 3:\n${this.output}`);
+  assert.ok(refusal.includes(given.failed), `The refusal does not give the test attempt's last refusal, "${given.failed}":\n${this.output}`);
+  assert.ok(refusal.includes("tests/greet-another.test.ts"), `The refusal does not name the test the attempt wrote:\n${this.output}`);
+});
+
+Then("the output lists the removed branch with the test attempt's report", function (this: RunWorld) {
+  const line = this.output.split("\n").find((text) => /\bremoved\b/.test(text) && /src\/greet\.ts:3\b/.test(text) && text.includes(NO_REQUIREMENT));
+  assert.ok(line !== undefined, `No line of the output lists the removed branch src/greet.ts:3 with the test attempt's report:\n${this.output}`);
+});
 
 Then("the test attempt's retry after the gate was given a refusal that names the branch still untaken", function (this: RunWorld) {
   const refusal = requestsOf(this, "test", 3)[2]!.refusal;

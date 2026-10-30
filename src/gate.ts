@@ -177,6 +177,25 @@ export function untakenRefusal(sent: string[], results: CheckResult[]): Refusal 
   };
 }
 
+/**
+ * The gate's refusal when the test attempt for uncovered branches runs out without reporting that no requirement asks
+ * for them (FR-GATE-02): the person reads it, since nobody has shown that the branches can go.
+ */
+export function coverRanOut(sent: string[], last: Refusal, tests: string[]): Refusal {
+  const untaken = last.uncovered ?? sent;
+  return {
+    from: "gate",
+    failed: "The test attempt for the branches no test runs ran out of retries without covering them, and did not report that no requirement asks for them",
+    evidence: [
+      `Still untaken:\n${untaken.join("\n")}`,
+      `The test attempt's last refusal: ${last.failed}\n${last.evidence}`,
+      `The tests it wrote: ${tests.length === 0 ? "none" : tests.join(", ")}`,
+    ].join("\n"),
+    next: "Decide whether a requirement asks for these branches: if one does, add a test that takes each; if none does, remove them",
+    uncovered: untaken,
+  };
+}
+
 /** The gate's refusal: every failed check, with its failures, or its output when it has none, as the evidence; its next step is for the kind of attempt it goes back to. */
 export function gateRefusal(results: CheckResult[], sendTo: PathsKind = "code"): Refusal | undefined {
   const failed = results.filter((result) => !result.passed);

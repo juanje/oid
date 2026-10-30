@@ -34,8 +34,12 @@ export function summarize(events: LogEvent[], logPath: string): string {
     lines.push(`  Branch: ${start.branch}`);
     if (end?.exitCode !== 0) lines.push(`  Checkpoints kept in ${start.checkpoints}`);
   }
-  // What a cleanup noticed but may not change, and the near-copies it may not touch, go to the person (FR-REF-01, FR-REF-02).
+  // What a cleanup noticed but may not change, the near-copies it may not touch, and the branches removed because no
+  // requirement asks for them, as a test attempt judged, go to the person (FR-REF-01, FR-REF-02, FR-GATE-02).
   for (const event of events) {
+    if (event.event === "removed") {
+      for (const branch of event.branches) lines.push(`  branch removed in ${event.fr} on the test attempt's report, for you to check: ${branch}; it reported: ${event.report}`);
+    }
     if (event.event === "cleanup" && event.note !== undefined) lines.push(`  note from the cleanup of ${event.fr}, for you to decide: ${event.note}`);
     if (event.event === "near-copy") lines.push(`  near-copy in ${event.fr}, for you to decide: ${event.place} starts as ${event.resembles} does, for ${event.lines} lines; it was not changed`);
   }

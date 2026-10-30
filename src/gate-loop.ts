@@ -4,7 +4,8 @@ import { type CheckResult, gateError, gateRefusal } from "./gate.ts";
 import type { Refusal } from "./refusal.ts";
 import { type Tried, withRetries } from "./retries.ts";
 
-export type GateOutcome = { error: string } | { refusal: Refusal | undefined };
+/** The gate's outcome; one that passed tells the branches a code attempt removed on a test attempt's report. */
+export type GateOutcome = { error: string } | { refusal: Refusal | undefined; removed?: { branches: string[]; report: string } };
 
 const KEEP_THE_CODE = async (): Promise<void> => {};
 
@@ -15,7 +16,8 @@ const OUTSIDE_IN: PathsKind[] = ["steps", "test", "code"];
  * Runs the gate before the FR's commit (FR-GATE-04). A failure goes back to the attempt kind that can fix it, with
  * the gate's refusal and its focus, and the gate runs again, up to `retries`: a type error to the owner of its file,
  * failing tests and scenarios to a code attempt, one kind at a time, outside-in. An uncovered branch goes to a test
- * attempt first, and to a code attempt once a test attempt has had it, with that attempt's report (FR-GATE-02). That
+ * attempt first, and to a code attempt only once that attempt was accepted, with its report; a test attempt that runs
+ * out ends the run with its refusal (FR-GATE-02). That
  * attempt starts from the code the gate refused, to fix it, and must not leave fewer tests than the gate ran before
  * it. An option a runner does not know is an error.
  */
@@ -32,6 +34,8 @@ export async function gateLoop(
   // Once a test attempt has had the uncovered branches, they go to a code attempt, with what it reported.
   let coverTried = false;
   let coverReport: string | undefined;
+  // The branches sent to a code attempt on that report, to remove: the person sees each one (FR-GATE-02).
+  let removing: string[] | undefined;
   /** One run of the gate, judged: an error, fewer tests than before, or the refusal for the kind it goes back to. */
   const judged = async (): Promise<Tried> => {
     const results = await gate();
@@ -48,6 +52,7 @@ export async function gateLoop(
     const sendTo = ownerOfFailures(results, owner, coverTried ? "code" : "test");
     if (sendTo !== undefined) kind = sendTo;
     const refusal = withCoverReport(gateRefusal(results, sendTo), sendTo, coverReport);
+    if (sendTo === "code" && coverReport !== undefined && removing === undefined) removing = refusal?.uncovered;
     await onGate(refusal, refusal === undefined ? undefined : sendTo);
     return { refusal, rollback: KEEP_THE_CODE, final: sendTo === undefined };
   };
@@ -65,10 +70,15 @@ export async function gateLoop(
     // The test attempt for uncovered branches has retries of its own: it is not one of the gate's (FR-GATE-02).
     if (kind !== "test" || tried.refusal?.uncovered === undefined || coverTried) return tried;
     coverTried = true;
-    coverReport = (await afterGate("test", tried.refusal)).report;
+    const covered = await afterGate("test", tried.refusal);
+    // Run out without the report that no requirement asks for them: a code attempt would delete a requirement unseen.
+    if (covered.refusal !== undefined) return { ...covered, final: true };
+    coverReport = covered.report;
     return judged();
   });
-  return error === undefined ? { refusal } : { error };
+  if (error !== undefined) return { error };
+  if (refusal === undefined && removing !== undefined && coverReport !== undefined) return { refusal, removed: { branches: removing, report: coverReport } };
+  return { refusal };
 }
 
 /**

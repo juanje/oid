@@ -170,6 +170,7 @@ export async function judgeCoverTests(run: FrRun, { files, mutant }: { files: st
   const underMutant = mutant === undefined ? undefined : (passing: string[]) => testsUnderMutant(worktree, layout.writable.code, testFiles, mutant, passing, run.check("mutant"));
   const judgment = await judgeNewTests(worktree.dir, testFiles, run.check("attempt"), await importedSymbolsOf(worktree.dir, testFiles), run.known, {
     offerMutant: true,
+    source: layout.writable.code,
     ...(underMutant === undefined ? {} : { underMutant }),
   });
   return judgment.refusal;

@@ -175,7 +175,7 @@ describe("gateLoop", () => {
 
     const outcome = await gateLoop(2, gate, afterGate);
 
-    expect(outcome).toEqual({ refusal: undefined });
+    expect(outcome).toEqual({ refusal: undefined, removed: { branches: [BRANCH], report: "No requirement asks for this branch" } });
     expect(kinds).toEqual(["test", "code", "code"]);
     expect(given[2]!.failed).toMatch(/\bmoved\b/);
     expect(given[2]!.evidence).toContain(moved);

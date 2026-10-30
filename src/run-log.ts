@@ -136,6 +136,14 @@ export interface NearCopyEvent {
   lines: number;
 }
 
+/** The branches a code attempt removed after the gate, on a test attempt's report that no requirement asks for them (FR-GATE-02). */
+export interface RemovedEvent {
+  event: "removed";
+  fr: string;
+  branches: string[];
+  report: string;
+}
+
 /** The FRs a run builds, in order (FR-RUN-05). */
 export interface PlanEvent {
   event: "plan";
@@ -205,7 +213,7 @@ export interface EndEvent {
   measures: Measures;
 }
 
-export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | CleanupEvent | NearCopyEvent | PlanEvent | BuiltEvent | ScopeEvent | CheckEvent | StopEvent | EndEvent;
+export type LogEvent = StageEvent | StartEvent | AttemptingEvent | AttemptEvent | GateEvent | ScenarioEvent | RedEvent | RoundEvent | RequestEvent | CleanupEvent | NearCopyEvent | RemovedEvent | PlanEvent | BuiltEvent | ScopeEvent | CheckEvent | StopEvent | EndEvent;
 
 export interface RunLog {
   path: string;
