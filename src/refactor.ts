@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { addedLines } from "./coverage.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import { detectFindings, type Finding, type FindingPlace, findingText, nearCopies, sameFinding, type SeenFinding, sourceMeasures, worseMeasures } from "./findings.ts";
+import { detectFindings, type Finding, type FindingPlace, findingText, isShorter, nearCopies, sameFinding, type SeenFinding, sourceMeasures, worseMeasures } from "./findings.ts";
 import { calledFunctions, functionSignatures } from "./source-functions.ts";
 import { type CheckResult, runGate } from "./gate.ts";
 import { git } from "./git.ts";
@@ -53,13 +53,18 @@ export async function refactorPass(run: FrRun, scenario: Scenario, since: string
   await recordNearCopies(run, since);
 }
 
-/** The first finding on the source now that is none an item was given, with the source and its tree. */
+/**
+ * The first finding on the source now that is none an item was given, with the source and its tree. A duplication an
+ * accepted item left shorter is a finding of its own; one as long as an item found it gets no item again, so the pass
+ * ends.
+ */
 async function nextFinding(run: FrRun, since: string, handled: ItemFinding[]): Promise<ItemFinding | undefined> {
   const files = await sourceNow(run);
   const tree = await git(run.worktree.dir, "write-tree");
   const written = await Promise.all(handled.map((one) => writtenBetween(run, one.tree, tree)));
   const findings = await findingsOnDiff(run, since, files);
-  const finding = findings.find((one) => !handled.some((item, at) => sameFinding(item, { finding: one, files }, written[at])));
+  const given = (one: Finding) => handled.some((item, at) => sameFinding(item, { finding: one, files }, written[at]) && !isShorter(item, { finding: one, files }));
+  const finding = findings.find((one) => !given(one));
   return finding === undefined ? undefined : { finding, files, tree };
 }
 
@@ -147,7 +152,8 @@ async function judgeCleanup(run: FrRun, finding: Finding, before: BeforeItem, si
   const written = await writtenBetween(run, before.tree, await git(run.worktree.dir, "write-tree"));
   const isBefore = (earlier: Finding, later: Finding) => sameFinding({ finding: earlier, files: before.files }, { finding: later, files: after }, written);
   const still = findings.find((one) => isBefore(finding, one));
-  if (still !== undefined) {
+  // A duplication left shorter is progress: its remainder is the next item's (FR-REF-02).
+  if (still !== undefined && !isShorter({ finding, files: before.files }, { finding: still, files: after })) {
     return { failed: "The cleanup's finding is still there", evidence: findingText(still, after), next: CLEAN_WITHOUT_CHANGING };
   }
   const added = findings.filter((one) => !before.findings.some((earlier) => isBefore(earlier, one)));

@@ -215,6 +215,16 @@ export function sameFinding(earlier: SeenFinding, later: SeenFinding, written: M
   return true;
 }
 
+/**
+ * Whether `later`, a duplication, repeats fewer lines than `earlier` did: a cleanup that shortens its duplication has
+ * made progress, and the shorter copy is a finding of its own (FR-REF-02).
+ */
+export function isShorter(earlier: SeenFinding, later: SeenFinding): boolean {
+  if (earlier.finding.category !== "duplication" || later.finding.category !== "duplication") return false;
+  const repeated = ({ finding, files }: SeenFinding) => normalisedLines(files.get(finding.file) ?? "").filter(({ line }) => line >= finding.range.start && line <= finding.range.end).length;
+  return repeated(later) < repeated(earlier);
+}
+
 /** The measures a cleanup item must not worsen (FR-REF-02): each function's complexity, and the duplicated lines. */
 export interface SourceMeasures {
   /** Each function's complexity, by `<file> <name>`; functions sharing a name keep the highest. */

@@ -1,14 +1,14 @@
-import { marksIn } from "./marks.ts";
-import { checkedName } from "./name-check.ts";
+import { lettersIn } from "./letters.ts";
 
 export function greetAll(names: string[]): string {
   const checked = names.map((person) => {
-    const cleaned = checkedName(person);
-    const signs = marksIn(cleaned);
-    const total = signs.length;
-    const shown = signs[0];
-    if (total > 0) {
-      throw new Error(`No greeting for a name with ${shown}: ${cleaned}`);
+    const cleaned = person.trim();
+    const count = lettersIn(cleaned);
+    if (cleaned === "") {
+      throw new Error("Nobody to greet");
+    }
+    if (count > 40) {
+      throw new Error(`No greeting fits a name this long: ${cleaned}`);
     }
     return cleaned;
   });
