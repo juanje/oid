@@ -16,7 +16,7 @@ export const AGENT_TOOLS = [
   {
     name: "report",
     does:
-      "ends the attempt with its result in a few words; when the cause of a failure lies in paths another kind of attempt writes, it asks for that kind next (next: steps, test or code, with the reason); when your scenario or new test passes before its code because the code already has the behaviour, it submits a mutant (mutant: the reason, and files, each a path and edits of oldText and newText as edit takes them): a small change to the source the test runs, which oid applies only in a copy, and which must make the test fail on an assertion",
+      "ends the attempt with its result in a few words; when the cause of a failure lies in paths another kind of attempt writes, it asks for that kind next (next: steps, test or code, with the reason); when your scenario or new test passes before its code because the code already has the behaviour, it submits a mutant (mutant: the reason, and files, each a path and edits of oldText and newText as edit takes them): a small change to the source the test runs, which oid applies only in a copy, and which must make the test fail on an assertion; when you were sent for branches no test runs, it names each branch no requirement asks for (unasked: each branch as the refusal gives it, with the reason no requirement asks for it)",
   },
 ] as const;
 

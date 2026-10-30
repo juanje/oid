@@ -2,7 +2,7 @@ import { agentError } from "./agent-error.ts";
 import { type Layout, judgeBoundary } from "./boundaries.ts";
 import type { CommandRunner } from "./command.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext, TryTarget } from "./executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext, TryTarget, Unasked } from "./executor.ts";
 import { LimitReached, turnLimitReached } from "./limits.ts";
 import type { Refusal } from "./refusal.ts";
 import { judgeReport } from "./report.ts";
@@ -53,18 +53,20 @@ export async function runAttempt({
   transcript,
   asked,
   check,
-}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string; next?: NextAttempt; mutant?: Mutant; note?: string }> {
+}: AttemptRequest): Promise<{ refusal: Refusal | undefined; files: string[]; outcome: AttemptOutcome; report?: string; next?: NextAttempt; mutant?: Mutant; note?: string; unasked?: Unasked[] }> {
   let reported: string | undefined;
   let next: NextAttempt | undefined;
   let mutant: Mutant | undefined;
   let note: string | undefined;
+  let unasked: Unasked[] | undefined;
   const tools = {
     try: (target: TryTarget) => tryAttempt(worktreeDir, scenario, target, check),
-    report: (result: string, asks?: NextAttempt, submits?: Mutant, notes?: string) => {
+    report: (result: string, asks?: NextAttempt, submits?: Mutant, notes?: string, names?: Unasked[]) => {
       reported = result;
       next = asks;
       mutant = submits;
       note = notes;
+      unasked = names;
     },
   };
   const outcome = await executor.run({
@@ -85,5 +87,5 @@ export async function runAttempt({
   if (turnLimitReached(outcome, turns)) throw new LimitReached(kind, scenario.name, turns, outcome);
   const diff = await takeAttemptDiff(worktreeDir);
   const refusal = judgeReport(kind, scenario.name, reported) ?? judgeBoundary(kind, diff, layout);
-  return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }), ...(next === undefined ? {} : { next }), ...(mutant === undefined ? {} : { mutant }), ...(note === undefined ? {} : { note }) };
+  return { refusal, files: diff.files, outcome, ...(reported === undefined ? {} : { report: reported }), ...(next === undefined ? {} : { next }), ...(mutant === undefined ? {} : { mutant }), ...(note === undefined ? {} : { note }), ...(unasked === undefined ? {} : { unasked }) };
 }

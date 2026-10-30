@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { cp, readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TryResult, TryTarget, Unasked } from "../../src/executor.ts";
 
 /** One attempt the scripted executor answers with: the request it expects, and the files that land as its diff. */
 export interface PreparedAttempt {
@@ -19,6 +19,8 @@ export interface PreparedAttempt {
   mutant?: Mutant;
   /** The note for the person a cleanup's report carries (FR-REF-02). */
   note?: string;
+  /** The branches its report names as unasked for, each with its reason, or how it names them from its refusal (FR-GATE-02). */
+  unasked?: Unasked[] | ((refusal: Attempt["refusal"]) => Unasked[]);
   /** How many turns its agent would take to finish; 1 when left out. */
   turns?: number;
   /** What the executor reports of the agent's use: its model, tokens, cost and denied tool calls. */
@@ -107,7 +109,7 @@ export class ScriptedExecutor implements Executor {
     if (outcome.stoppedAtLimit) return outcome;
     await cp(next.dir, attempt.worktree, { recursive: true });
     for (const target of next.tries ?? []) this.tried.push({ kind: attempt.kind, target, result: await attempt.tools.try(target) });
-    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`, next.next, next.mutant, next.note);
+    if (next.report !== null) attempt.tools.report(next.report ?? `scripted ${attempt.kind} attempt`, next.next, next.mutant, next.note, typeof next.unasked === "function" ? next.unasked(attempt.refusal) : next.unasked);
     return outcome;
   }
 }

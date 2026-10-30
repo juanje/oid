@@ -136,7 +136,7 @@ export class ScriptedModel {
     const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt`, ...(prepared.next === undefined ? {} : { next: { kind: prepared.next.kind, reason: prepared.next.reason } }),
       ...(prepared.mutant === undefined ? {} : { mutant: JSON.parse(JSON.stringify(prepared.mutant)) }),
       ...(prepared.note === undefined ? {} : { note: prepared.note }),
-      ...(prepared.unasked === undefined ? {} : { unasked: prepared.unasked }),
+      ...(prepared.unasked === undefined ? {} : { unasked: prepared.unasked.map(({ branch, reason }) => ({ branch, reason })) }),
     });
     const probed = prepared.probes !== undefined && prepared.probes.length > 0;
     if (probed && this.attempts[index]!.length === 1) return fauxAssistantMessage(prepared.probes!.map(({ tool, args }) => fauxToolCall(tool, args)));

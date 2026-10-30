@@ -15,6 +15,13 @@ export interface Mutant {
   files: { path: string; edits: { oldText: string; newText: string }[] }[];
 }
 
+/** A branch no test runs that a test attempt's report says no requirement asks for, with its reason (FR-GATE-02). */
+export interface Unasked {
+  /** The branch as the gate's refusal gives it, or its place in the source. */
+  branch: string;
+  reason: string;
+}
+
 /** What a report can ask for: another attempt kind next, with its reason (FR-RUN-04). */
 export interface NextAttempt {
   kind: AttemptKind;
@@ -96,9 +103,10 @@ export interface AttemptTools {
   try(target: TryTarget): Promise<TryResult>;
   /**
    * Ends the attempt with its result in a few words, and may ask for another attempt kind next. A cleanup's may carry
-   * a note for the person (FR-REF-02). An attempt that never calls it is refused.
+   * a note for the person (FR-REF-02). A test attempt sent for uncovered branches may name those no requirement asks
+   * for (FR-GATE-02). An attempt that never calls it is refused.
    */
-  report(result: string, next?: NextAttempt, mutant?: Mutant, note?: string): void;
+  report(result: string, next?: NextAttempt, mutant?: Mutant, note?: string, unasked?: Unasked[]): void;
 }
 
 /** Runs one attempt's agent: Pi, or the scripted executor of oid's own tests. oid judges the diff the same way for both. */

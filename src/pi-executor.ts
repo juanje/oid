@@ -158,9 +158,10 @@ function oidTools(attempt: Attempt, onReport: () => void) {
           }),
         ),
         note: Type.Optional(Type.String()),
+        unasked: Type.Optional(Type.Array(Type.Object({ branch: Type.String(), reason: Type.String() }))),
       }),
-      execute: async (_id, { result, next, mutant, note }) => {
-        attempt.tools.report(result, next, mutant, note);
+      execute: async (_id, { result, next, mutant, note, unasked }) => {
+        attempt.tools.report(result, next, mutant, note, unasked);
         onReport();
         return text("Reported: the attempt ends with this turn.");
       },

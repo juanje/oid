@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { type CommandRunner, TYPESCRIPT_STEPS_ENV, projectBin } from "./command.ts";
 import { type CoverageReport, addedLines, scenarioCoverage, uncoveredNew, unitCoverage, untaken } from "./coverage.ts";
 import type { ScenarioResult } from "./cucumber-messages.ts";
-import type { PathsKind } from "./executor.ts";
+import type { PathsKind, Unasked } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
 import { git, withReportDir } from "./git.ts";
 import { runAllScenarios } from "./scenarios.ts";
@@ -164,20 +164,30 @@ const NEXT_STEP: Record<PathsKind, string> = {
 };
 
 // A test attempt sent back for branches no test runs: a branch a requirement states gets its test, one none states goes
-// to a code attempt with the report that says so (FR-GATE-02).
+// to a code attempt with the reason the report names it as unasked (FR-GATE-02).
 const COVER_NEXT =
-  "For each branch, if the SPEC or the FR's scenarios state what it does, add a unit test that takes it and submit in your report a mutant of the branch on which that test fails; if no requirement asks for a branch, add no test for it and say why in your report";
+  "For each branch, if the SPEC or the FR's scenarios state what it does, add a unit test that takes it and submit in your report a mutant of the branch on which that test fails; if no requirement asks for a branch, add no test for it and name it in your report's unasked, with why";
+
+/** The branches the gate's coverage check finds untaken. */
+export function untakenIn(results: CheckResult[]): string[] {
+  return results.find((result) => result.name === "coverage")?.failures ?? [];
+}
+
+/** Whether a report's unasked names `branch`: as the gate gives it, or by its place, `<file>:<line>` or `<file>:<line>:<column>`. */
+export function namesBranch(unasked: Unasked[], branch: string): boolean {
+  return unasked.some((named) => branch === named.branch || branch.startsWith(`${named.branch}:`));
+}
 
 /**
- * A test attempt sent for uncovered branches, refused when a branch it was sent for is still untaken by every test,
- * after it (FR-GATE-02): a test of something else leaves the gap where it was.
+ * A test attempt sent for uncovered branches, refused when a branch it was sent for is still in `untakenNow`, by every test,
+ * after it, and its report does not name it as unasked (FR-GATE-02): a test of something else leaves the gap where it
+ * was, and so does a claim that a test covers it already.
  */
-export function untakenRefusal(sent: string[], results: CheckResult[]): Refusal | undefined {
-  const untaken = new Set(results.find((result) => result.name === "coverage")?.failures ?? []);
-  const left = sent.filter((branch) => untaken.has(branch));
+export function untakenRefusal(sent: string[], untakenNow: string[], unasked: Unasked[] = []): Refusal | undefined {
+  const left = sent.filter((branch) => untakenNow.includes(branch) && !namesBranch(unasked, branch));
   if (left.length === 0) return undefined;
   return {
-    failed: "The branches the test attempt was sent for are still untaken: its tests do not take them",
+    failed: "The branches the test attempt was sent for are untaken by every test, the existing ones included, and its report does not name them as unasked",
     evidence: left.join("\n"),
     next: COVER_NEXT,
     uncovered: left,
@@ -185,14 +195,14 @@ export function untakenRefusal(sent: string[], results: CheckResult[]): Refusal 
 }
 
 /**
- * The gate's refusal when the test attempt for uncovered branches runs out without reporting that no requirement asks
- * for them (FR-GATE-02): the person reads it, since nobody has shown that the branches can go.
+ * The gate's refusal when the test attempt for uncovered branches runs out without naming them as unasked
+ * (FR-GATE-02): the person reads it, since nobody has shown that the branches can go.
  */
 export function coverRanOut(sent: string[], last: Refusal, tests: string[]): Refusal {
   const untaken = last.uncovered ?? sent;
   return {
     from: "gate",
-    failed: "The test attempt for the branches no test runs ran out of retries without covering them, and did not report that no requirement asks for them",
+    failed: "The test attempt for the branches no test runs ran out of retries without covering them, and did not name them as unasked",
     evidence: [
       `Still untaken:\n${untaken.join("\n")}`,
       `The test attempt's last refusal: ${last.failed}\n${last.evidence}`,

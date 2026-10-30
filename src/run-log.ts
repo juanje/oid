@@ -1,7 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { AttemptKind, Mutant } from "./executor.ts";
+import type { AttemptKind, Mutant, Unasked } from "./executor.ts";
 import type { Finding } from "./findings.ts";
 import { git } from "./git.ts";
 import { provisionalOf } from "./evidence.ts";
@@ -136,12 +136,11 @@ export interface NearCopyEvent {
   lines: number;
 }
 
-/** The branches a code attempt removed after the gate, on a test attempt's report that no requirement asks for them (FR-GATE-02). */
+/** The branches a code attempt removed after the gate, each named as unasked by a test attempt, with its reason (FR-GATE-02). */
 export interface RemovedEvent {
   event: "removed";
   fr: string;
-  branches: string[];
-  report: string;
+  branches: Unasked[];
 }
 
 /** The FRs a run builds, in order (FR-RUN-05). */

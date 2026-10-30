@@ -9,7 +9,7 @@ import { isTestFile } from "./boundaries.ts";
 import { judgeCode, judgeNewTests, noTestSuiteFiles } from "./evidence.ts";
 import { importedSymbolsOf } from "./imported-symbols.ts";
 import { testsUnderMutant } from "./mutant.ts";
-import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext } from "./executor.ts";
+import type { Attempt, AttemptKind, AttemptOutcome, Executor, Mutant, NextAttempt, TaskContext, Unasked } from "./executor.ts";
 import type { Failing } from "./inner-loop.ts";
 import type { Refusal } from "./refusal.ts";
 import type { Tried } from "./retries.ts";
@@ -139,14 +139,16 @@ export async function checkpointedAttempt(
   kind: AttemptKind,
   scenario: Scenario,
   previous: Refusal | undefined,
-  judge: (attempt: { files: string[]; mutant?: Mutant }) => Promise<Refusal | undefined>,
+  judge: (attempt: { files: string[]; mutant?: Mutant; unasked?: Unasked[] }) => Promise<Refusal | undefined>,
   asked?: Attempt["asked"],
   given?: TaskContext,
-): Promise<Tried & { next?: NextAttempt; report?: string; note?: string }> {
+): Promise<Tried & { next?: NextAttempt; report?: string; note?: string; unasked?: Unasked[] }> {
   const accepted = await acceptedWork(run.worktree.dir);
   const attempt = await attemptFor(run, kind, scenario, previous, asked, given);
   if (attempt.report !== undefined) run.reports.set(kind, attempt.report);
-  const refusal = attempt.refusal ?? (await judge({ files: attempt.files, ...(attempt.mutant === undefined ? {} : { mutant: attempt.mutant }) }));
+  const refusal =
+    attempt.refusal ??
+    (await judge({ files: attempt.files, ...(attempt.mutant === undefined ? {} : { mutant: attempt.mutant }), ...(attempt.unasked === undefined ? {} : { unasked: attempt.unasked }) }));
   await run.record(attemptEvent({ kind, scenario: scenario.name, refusal, retry: previous !== undefined, outcome: attempt.outcome, asked: asked !== undefined }));
   if (refusal === undefined) await checkpoint(run.worktree, `${kind} attempt for "${scenario.name}"`);
   return {
@@ -155,13 +157,14 @@ export async function checkpointedAttempt(
     ...(attempt.next === undefined ? {} : { next: attempt.next }),
     ...(attempt.report === undefined ? {} : { report: attempt.report }),
     ...(attempt.note === undefined ? {} : { note: attempt.note }),
+    ...(attempt.unasked === undefined ? {} : { unasked: attempt.unasked }),
   };
 }
 
 /**
- * A test attempt's judgment for branches no test runs (FR-GATE-02): its new tests take a branch the code has, so they
- * pass, and each must fail on the mutant of the branch it submits. One that adds no test is accepted: its report says
- * why no requirement asks for the branch.
+ * A test attempt's judgment of its new tests for branches no test runs (FR-GATE-02): they take a branch the code has,
+ * so they pass, and each must fail on the mutant of the branch it submits. One that adds no test has none to judge:
+ * whether its branches are taken or named as unasked is judged apart.
  */
 export async function judgeCoverTests(run: FrRun, { files, mutant }: { files: string[]; mutant?: Mutant }): Promise<Refusal | undefined> {
   const { worktree, layout } = run;

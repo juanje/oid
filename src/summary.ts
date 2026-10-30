@@ -38,7 +38,7 @@ export function summarize(events: LogEvent[], logPath: string): string {
   // requirement asks for them, as a test attempt judged, go to the person (FR-REF-01, FR-REF-02, FR-GATE-02).
   for (const event of events) {
     if (event.event === "removed") {
-      for (const branch of event.branches) lines.push(`  branch removed in ${event.fr} on the test attempt's report, for you to check: ${branch}; it reported: ${event.report}`);
+      for (const { branch, reason } of event.branches) lines.push(`  branch removed in ${event.fr} as unasked for, for you to check: ${branch}; the test attempt's reason: ${reason}`);
     }
     if (event.event === "cleanup" && event.note !== undefined) lines.push(`  note from the cleanup of ${event.fr}, for you to decide: ${event.note}`);
     if (event.event === "near-copy") lines.push(`  near-copy in ${event.fr}, for you to decide: ${event.place} starts as ${event.resembles} does, for ${event.lines} lines; it was not changed`);

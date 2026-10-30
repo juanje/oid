@@ -2,11 +2,11 @@ import { AgentError } from "./agent-error.ts";
 import { type CommandRunner, checkRunner } from "./command.ts";
 import { ConfigError, readLayout, readLimits, uncommittedProjectConfig } from "./config.ts";
 import type { Scenario } from "./cucumber-messages.ts";
-import type { AttemptKind, Executor, Mutant } from "./executor.ts";
+import type { AttemptKind, Executor, Mutant, Unasked } from "./executor.ts";
 import { EXIT_BUILT, EXIT_ERROR, EXIT_LIMIT, EXIT_REFUSED } from "./exit.ts";
 import { LimitReached, RoundLimitReached } from "./limits.ts";
 import { missingCoverageProvider } from "./coverage.ts";
-import { type CheckResult, coverRanOut, runGate, untakenRefusal } from "./gate.ts";
+import { type CheckResult, coverRanOut, runGate, untakenIn, untakenRefusal } from "./gate.ts";
 import { gateLoop } from "./gate-loop.ts";
 import { type Layout, isTestFile, ownerOf } from "./boundaries.ts";
 import { attemptEvent, checkpointedAttempt, codeAttempt, type FrRun, judgeCoverTests, locationOf, testCount } from "./run-attempts.ts";
@@ -202,7 +202,7 @@ async function buildOneFr(run: FrRun, scenarios: Scenario[], all: Scenario[], pa
   );
   if ("error" in gate) return stop(gate.error, out);
   if (gate.refusal !== undefined) return refuse(gate.refusal, out);
-  if (gate.removed !== undefined) await record({ event: "removed", fr, ...gate.removed });
+  if (gate.removed !== undefined) await record({ event: "removed", fr, branches: gate.removed });
   // The FR's refactor, once its gate passes: a cleanup is judged by every check passing, so it starts on a tree where
   // they all do (FR-REF-01, D-07).
   await refactorPass(run, last, since, scope);
@@ -246,26 +246,30 @@ async function buildScenarios(run: FrRun, scenarios: Scenario[]): Promise<Refusa
  * its boundary and its report only, with no new Red: its tests have theirs, and the gate runs again after it. A test
  * attempt for uncovered branches is the exception: its new tests need a mutant as their Red (FR-GATE-02).
  */
-function attemptAfterGate(run: FrRun, kind: AttemptKind, scenario: Scenario, refusal: Refusal, gate: () => Promise<CheckResult[]>): Promise<Tried & { report?: string }> {
+function attemptAfterGate(run: FrRun, kind: AttemptKind, scenario: Scenario, refusal: Refusal, gate: () => Promise<CheckResult[]>): Promise<Tried & { unasked?: Unasked[] }> {
   if (kind === "code") return codeAttempt(run, scenario, refusal);
   if (kind === "test" && refusal.uncovered !== undefined) return coverTestAttempt(run, scenario, refusal, gate);
   return checkpointedAttempt(run, kind, scenario, refusal, async () => undefined);
 }
 
 /**
- * The test attempt for branches no test runs, retried as any attempt. One that adds tests is accepted only when they
- * take the branches it was sent for, as the gate measures them. One accepted gives its report, with which the gate, run
- * again, sends the branches left to a code attempt. When its retries run out it is taken back, and its refusal is the
- * gate's: the person decides, since no attempt has shown that nothing asks for the branches (FR-GATE-02).
+ * The test attempt for branches no test runs, retried as any attempt. It is accepted only when each branch it was sent
+ * for is taken by a test, as the gate measures them, or named in its report as unasked. One accepted gives the branches
+ * it named, with which the gate, run again, sends them to a code attempt. When its retries run out it is taken back,
+ * and its refusal is the gate's: the person decides, since no attempt has shown that nothing asks for the branches
+ * (FR-GATE-02).
  */
-async function coverTestAttempt(run: FrRun, scenario: Scenario, refusal: Refusal, gate: () => Promise<CheckResult[]>): Promise<Tried & { report?: string }> {
-  let last: (Tried & { report?: string }) | undefined;
+async function coverTestAttempt(run: FrRun, scenario: Scenario, refusal: Refusal, gate: () => Promise<CheckResult[]>): Promise<Tried & { unasked?: Unasked[] }> {
+  let last: (Tried & { unasked?: Unasked[] }) | undefined;
   let tests: string[] = [];
-  const judge = async (attempt: { files: string[]; mutant?: Mutant }): Promise<Refusal | undefined> => {
+  const sent = refusal.uncovered!;
+  const judge = async (attempt: { files: string[]; mutant?: Mutant; unasked?: Unasked[] }): Promise<Refusal | undefined> => {
     tests = attempt.files.filter((file) => isTestFile(file, run.layout));
+    // With no test added, every branch it was sent for is as untaken as the gate found it.
+    if (tests.length === 0) return untakenRefusal(sent, sent, attempt.unasked);
     const judged = await judgeCoverTests(run, attempt);
-    if (judged !== undefined || !attempt.files.some((file) => isTestFile(file, run.layout))) return judged;
-    return untakenRefusal(refusal.uncovered!, await gate());
+    if (judged !== undefined) return judged;
+    return untakenRefusal(sent, untakenIn(await gate()), attempt.unasked);
   };
   const left = await withRetries(run.retries, async (previous) => {
     last = await checkpointedAttempt(run, "test", scenario, previous ?? refusal, judge);
@@ -273,9 +277,9 @@ async function coverTestAttempt(run: FrRun, scenario: Scenario, refusal: Refusal
   });
   if (left !== undefined) {
     await last!.rollback();
-    return { refusal: coverRanOut(refusal.uncovered!, left, tests), rollback: async () => {} };
+    return { refusal: coverRanOut(sent, left, tests), rollback: async () => {} };
   }
-  return { refusal: undefined, rollback: async () => {}, ...(last?.report === undefined ? {} : { report: last.report }) };
+  return { refusal: undefined, rollback: async () => {}, ...(last?.unasked === undefined ? {} : { unasked: last.unasked }) };
 }
 
 function stamp(): string {

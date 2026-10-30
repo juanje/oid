@@ -79,7 +79,14 @@ const NO_REQUIREMENT = "No requirement asks for the empty-name branch of greet: 
 
 Given("the scripted test attempt after the gate adds no test and reports that no requirement asks for the branch", function (this: RunWorld) {
   // The test the FR's build committed, as it is: the attempt changes nothing.
-  this.script = afterFirstCode(this.script, { kind: "test", scenario: GREET_01_SCENARIO, dir: attemptDir("test"), report: NO_REQUIREMENT });
+  this.script = afterFirstCode(this.script, {
+    kind: "test",
+    scenario: GREET_01_SCENARIO,
+    dir: attemptDir("test"),
+    report: "No test: no requirement asks for the branch",
+    // Each branch as its refusal gives it, as an agent copies it.
+    unasked: (refusal) => (refusal?.uncovered ?? []).map((branch) => ({ branch, reason: NO_REQUIREMENT })),
+  });
 });
 
 Given("the scripted code attempt adds a branch on a line its test covers, which no test takes", function (this: RunWorld) {
@@ -189,4 +196,21 @@ Then("the run's commit holds the new unit test and the branch", function (this: 
   const files = git(this.projectDir, "ls-tree", "-r", "--name-only", branch).split("\n");
   assert.ok(files.includes("tests/greet-stranger.test.ts"), `The run's commit does not hold the new unit test:\n${files.join("\n")}`);
   assert.match(git(this.projectDir, "show", `${branch}:src/greet.ts`), /stranger/, "The run's commit does not hold the branch");
+});
+
+Given(
+  "the scripted test attempt after the gate adds no test and reports that an existing test covers the branch, and its retry adds a unit test that takes the branch, with a mutant of the branch on which it fails",
+  function (this: RunWorld) {
+    // The test the FR's build committed, as it is: the attempt changes nothing, and names no branch as unasked.
+    const covered = { kind: "test" as const, scenario: GREET_01_SCENARIO, dir: attemptDir("test"), report: "The existing test of greet already covers the branch" };
+    this.script = [...this.script, covered, STRANGER_TEST];
+  },
+);
+
+Then("the test attempt's retry after the gate was given a refusal that says the branch is untaken by every test, the existing ones included", function (this: RunWorld) {
+  const refusal = requestsOf(this, "test", 3)[2]!.refusal;
+  assert.ok(refusal !== undefined, "The test attempt's retry after the gate came without a refusal");
+  assert.match(refusal.evidence, /src\/greet\.ts:3\b/, `The refusal does not name src/greet.ts and the branch's line, 3:\n${refusal.evidence}`);
+  assert.match(refusal.failed, /\buntaken by every test\b/, `The refusal does not say the branch is untaken by every test: ${refusal.failed}`);
+  assert.match(refusal.failed, /\bexisting\b/, `The refusal does not say the existing tests leave it untaken too: ${refusal.failed}`);
 });
