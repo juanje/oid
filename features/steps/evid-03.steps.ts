@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Given, Then } from "@cucumber/cucumber";
 import type { Mutant } from "../../src/executor.ts";
-import { greet02AttemptDir, scenarioNames } from "../support/fixture.ts";
+import { attemptDir, commitFixture, greet02AttemptDir, scenarioNames } from "../support/fixture.ts";
 import { requestsOf } from "../support/run.ts";
 import type { RunWorld } from "../support/world.ts";
 
@@ -181,4 +181,38 @@ Then("the output says the steps attempt's request for the second scenario was no
 
 Then("the output says the test attempt's request for the second scenario was followed", function (this: RunWorld) {
   assert.doesNotMatch(requestLine(this, "test"), /, not followed$/);
+});
+
+Given("the source of FR-GREET-01 has the same name check in two functions", async function (this: RunWorld) {
+  await commitFixture(this.projectDir, attemptDir("code-name-checks"), "feat(FR-GREET-01): greet and list a name, each checking it is there");
+});
+
+// The name check is in greet and in listed, src/greet.ts's lines 2 and 7; the list greets through listed.
+const NAME_CHECK = 'if (name.trim() === "")';
+const BROKEN_CHECK = 'if (name.trim() !== "")';
+const LISTED = "export function listed(name: string): string {\n  ";
+const checkMutant = (oldText: string, newText: string): Mutant => ({
+  reason: "A name taken as missing is listed as someone: the list no longer has the names",
+  files: [{ path: "src/greet.ts", edits: [{ oldText, newText }] }],
+});
+
+Given(
+  "the scripted test attempt for the second scenario writes a test of behaviour that exists already, and submits a mutant of the name check whose old text is in both functions, and its retry submits the same mutant with the line before the check in the second function",
+  function (this: RunWorld) {
+    // The first scenario's code attempt writes the list so that it greets through listed.
+    this.script = this.script.map((attempt) => (attempt.dir === greet02AttemptDir("s2-code") ? { ...attempt, dir: greet02AttemptDir("s2-code-listed") } : attempt));
+    this.script = [
+      ...this.script,
+      { kind: "steps", scenario: SECOND, dir: greet02AttemptDir("s2-steps-list") },
+      { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test"), mutant: checkMutant(NAME_CHECK, BROKEN_CHECK) },
+      { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test"), mutant: checkMutant(`${LISTED}${NAME_CHECK}`, `${LISTED}${BROKEN_CHECK}`) },
+      { kind: "code", scenario: SECOND, dir: greet02AttemptDir("s2-code-list") },
+    ];
+  },
+);
+
+Then("the test attempt's retry was given a refusal that names both lines of the old text", function (this: RunWorld) {
+  const refusal = requestsOf(this, "test", 3)[2]!.refusal;
+  assert.ok(refusal !== undefined, "The test attempt's retry came without a refusal");
+  for (const line of [2, 7]) assert.match(refusal.evidence, new RegExp(`src/greet\\.ts:${line}\\b`), `The refusal does not name src/greet.ts:${line}:\n${refusal.evidence}`);
 });

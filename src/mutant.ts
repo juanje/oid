@@ -18,7 +18,8 @@ import { type RunWorktree, scratchCopy } from "./worktree.ts";
 
 /**
  * Applies a mutant's edits in `dir`, a scratch copy, or refuses it: every file must be source, and each edit's old
- * text must be in its file, as it is, exactly once. Nothing is applied unless every edit applies.
+ * text must be in its file, as it is, exactly once; one in several places is refused with the line where each starts.
+ * Nothing is applied unless every edit applies.
  */
 export async function applyMutant(dir: string, mutant: Mutant, source: string[] = WRITABLE.code): Promise<Refusal | undefined> {
   const notSource = mutant.files.map((file) => file.path).filter((path) => !source.some((prefix) => path.startsWith(prefix)));
@@ -36,6 +37,11 @@ export async function applyMutant(dir: string, mutant: Mutant, source: string[] 
     let content = original ?? "";
     for (const { oldText, newText } of edits) {
       const times = original === undefined || oldText === "" ? 0 : original.split(oldText).length - 1;
+      if (times > 1) {
+        const places = linesOf(original!, oldText).map((line) => `${path}:${line}`);
+        unmatched.push(`${path}: its old text is in ${times} places, which start at ${places.join(", ")}: ${JSON.stringify(oldText)}`);
+        continue;
+      }
       if (times !== 1) {
         unmatched.push(`${path}: its old text is there ${times} times: ${JSON.stringify(oldText)}`);
         continue;
@@ -48,11 +54,18 @@ export async function applyMutant(dir: string, mutant: Mutant, source: string[] 
     return {
       failed: "The mutant does not apply",
       evidence: unmatched.join("\n"),
-      next: "Give each edit an old text that is in its file, as it is now, exactly once",
+      next: "Give each edit an old text that is in its file, as it is now, exactly once: when it is in more than one place, add to it a line before or after that only the place you mean has, such as its function's signature",
     };
   }
   for (const [path, content] of changed) await writeFile(join(dir, path), content);
   return undefined;
+}
+
+/** The line, from 1, where each place `text` is in `content` starts. */
+function linesOf(content: string, text: string): number[] {
+  const lines: number[] = [];
+  for (let at = content.indexOf(text); at !== -1; at = content.indexOf(text, at + text.length)) lines.push(content.slice(0, at).split("\n").length);
+  return lines;
 }
 
 const PASSES_NEXT = "Change the source the scenario or test runs, so that what it asserts fails";
