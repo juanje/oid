@@ -137,7 +137,7 @@ One function, two entry points (D-06): the loop step before each commit, and `oi
 | Types, new errors only | Yes | Yes | The attempt kind that owns the file; a code attempt for a file no kind owns |
 | Unit suite, whole | Yes | Yes | Code attempt with the failing test |
 | Scenarios, all not shelved | Yes | Yes | Code attempt; a contract change shelves the FR |
-| Coverage of the FR's new branches, unit tests and scenarios together | Yes | Yes | Test attempt first: a test for a branch a requirement states, with a mutant as its Red; a code attempt, with its report, only to remove what that attempt found no requirement asks for; when its retries run out without that report, a refusal |
+| Coverage of the FR's new branches, unit tests and scenarios together | Yes | Yes | Test attempt first: a test for a branch a requirement states, with a mutant as its Red; a code attempt only for the branches that attempt named as unasked, each with its reason; when its retries run out with a branch neither taken nor named, a refusal |
 | Traceability | — | Yes | Shown to the person |
 
 Coverage joins the two sides by place, so both must be mapped the same way: on vitest 3, the provider and the scenarios both go through `v8-to-istanbul`; on vitest 5, whose provider maps through the syntax tree, the scenarios go through the project's own `ast-v8-to-istanbul`, over the code tsx gave Node. oid reads the project's vitest by its installed version, 3 or 5.
