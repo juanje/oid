@@ -45,6 +45,19 @@ describe("applyMutant", () => {
 
     expect([missing?.evidence, twice?.evidence]).toEqual([expect.stringContaining("src/greet-all.ts"), expect.stringContaining("src/greet-all.ts")]);
   });
+
+  test("refuses an edit whose old text is in more than one place with the line where each starts, and how to tell them apart", async () => {
+    const checks = 'export function greet(name: string): string {\n  if (name === "") return "Hello!";\n  return `Hello, ${name}!`;\n}\n\nexport function listed(name: string): string {\n  if (name === "") return "someone";\n  return name;\n}\n';
+    const dir = await tempRepo({ "src/greet.ts": checks });
+
+    const refusal = await applyMutant(dir, mutant("src/greet.ts", 'if (name === "")', 'if (name !== "")'));
+
+    expect(refusal?.evidence).toMatch(/src\/greet\.ts:2\b/);
+    expect(refusal?.evidence).toMatch(/src\/greet\.ts:7\b/);
+    expect(refusal?.next).toBe(
+      "Give each edit an old text that is in its file, as it is now, exactly once: when it is in more than one place, add to it a line before or after that only the place you mean has, such as its function's signature",
+    );
+  });
 });
 
 const SCENARIO = { uri: "features/greet-02.feature", line: 8, name: "Three people are greeted as a list" };
