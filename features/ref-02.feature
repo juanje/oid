@@ -31,14 +31,23 @@ Feature: The code pass
       | leaves a branch that no test runs                  |
       | makes the new function more complex than it was    |
 
-  Scenario: A cleanup that shortens the duplication without removing it is refused as still there, and its retry, given its diff, finishes it
+  Scenario: A cleanup that leaves the duplication as long as it was is refused as still there, and its retry, given its diff, finishes it
     Given the run allows 1 retry
-    And the scripted cleanup attempt extracts part of the shared check, leaving a shorter copy in both functions, and its retry extracts the rest
+    And the scripted cleanup attempt renames the variables in both copies of the shared check, and its retry extracts the shared check
     When I run "oid run FR-GREET-02"
     Then the run succeeds
     And the retried cleanup attempt was given a refusal that says the duplication is still there, naming both functions
     And the retried cleanup attempt was given the refused attempt's diff
     And the output reports the cleanup item as accepted
+    And the FR's commit has the name check in one place
+
+  Scenario: A cleanup that shortens the duplication is accepted, and the shorter copy is the next item
+    Given the scripted cleanup attempt extracts part of the shared check, leaving a shorter copy in both functions
+    And the scripted second cleanup attempt extracts the rest
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the second cleanup attempt's task gives the shorter copy's lines
+    And the output reports both cleanup items as accepted
     And the FR's commit has the name check in one place
 
   Scenario: A cleanup that moves the duplication into another pair of functions is refused as adding a new finding
@@ -64,15 +73,13 @@ Feature: The code pass
     And the output reports the cleanup item as accepted
     And the output lists the cleanup's note that the two messages differ
 
-  Scenario: A cleanup after another is given its finding with the lines the first one left, and a remainder of it is refused as still there
+  Scenario: A cleanup after another is given its finding with the lines the first one left
     Given the scripted code attempt for FR-GREET-02 copies the greeting function's name check and its punctuation check into its new function, with other names and another message
-    And the run allows 1 retry
     And the scripted first cleanup attempt extracts the shared name check, which moves the punctuation copies' lines
-    And the scripted second cleanup attempt extracts part of the shared punctuation check, leaving a shorter copy in both functions, and its retry extracts the rest
+    And the scripted second cleanup attempt extracts the shared punctuation check
     When I run "oid run FR-GREET-02"
     Then the run succeeds
     And the second cleanup attempt's task gives the punctuation copies' lines as the first cleanup left them
-    And the retried second cleanup attempt was given a refusal that says the duplication is still there, naming both functions
     And the output reports both cleanup items as accepted
     And the FR's commit has the punctuation check in one place
 
@@ -83,3 +90,11 @@ Feature: The code pass
     Then the run succeeds
     And the executor was asked for one cleanup attempt
     And the output reports one cleanup item, accepted
+
+  Scenario: A shortened duplication is kept when the cleanup of its remainder is not accepted
+    Given the scripted cleanup attempt extracts part of the shared check, leaving a shorter copy in both functions
+    And the scripted second cleanup attempt changes nothing in the shorter copy
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the output reports the first cleanup item as accepted and the second as not accepted
+    And the FR's commit has the first cleanup's helper
