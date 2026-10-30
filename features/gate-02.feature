@@ -103,3 +103,12 @@ Feature: Coverage of the FR's new branches
     And the output names the branch still untaken and the test attempt's last refusal
     And the executor was not asked for a code attempt after the gate
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A test attempt that adds no test and says the branch is covered already is refused, and its retry covers it
+    Given the run allows 2 retries
+    And the scripted code attempt adds a branch the SPEC states, on a line its test covers, which no test takes
+    And the scripted test attempt after the gate adds no test and reports that an existing test covers the branch, and its retry adds a unit test that takes the branch, with a mutant of the branch on which it fails
+    When I run "oid run FR-GREET-01"
+    Then the run succeeds
+    And the test attempt's retry after the gate was given a refusal that says the branch is untaken by every test, the existing ones included
+    And the executor was not asked for a code attempt after the gate
