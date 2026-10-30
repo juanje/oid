@@ -137,7 +137,7 @@ One function, two entry points (D-06): the loop step before each commit, and `oi
 | Types, new errors only | Yes | Yes | The attempt kind that owns the file; a code attempt for a file no kind owns |
 | Unit suite, whole | Yes | Yes | Code attempt with the failing test |
 | Scenarios, all not shelved | Yes | Yes | Code attempt; a contract change shelves the FR |
-| Coverage of the FR's new branches, unit tests and scenarios together | Yes | Yes | Test attempt first: a test for a branch a requirement states, with a mutant as its Red; then a code attempt, with its report, to remove what no requirement asks for |
+| Coverage of the FR's new branches, unit tests and scenarios together | Yes | Yes | Test attempt first: a test for a branch a requirement states, with a mutant as its Red; a code attempt, with its report, only to remove what that attempt found no requirement asks for; when its retries run out without that report, a refusal |
 | Traceability | — | Yes | Shown to the person |
 
 Coverage joins the two sides by place, so both must be mapped the same way: on vitest 3, the provider and the scenarios both go through `v8-to-istanbul`; on vitest 5, whose provider maps through the syntax tree, the scenarios go through the project's own `ast-v8-to-istanbul`, over the code tsx gave Node. oid reads the project's vitest by its installed version, 3 or 5.
@@ -152,7 +152,7 @@ At FR scale, after the FR's gate passes and before its commit (D-07).
    - repeated condition: the same normalised condition three or more times, with at least three operators or calls;
    - complexity: a changed function above `limits.complexity` and above its value at the run's start.
 
-   A finding that touches no line of the FR's diff is existing debt. With none, there is no agent. Near-copies of a function the FR or its cleanup added, below the duplication threshold, are not findings: the end-of-run summary lists them for the person.
+   A finding that touches no line of the FR's diff is existing debt. With none, there is no agent. Near-copies of a function the FR or its cleanup added, sharing its first four or more statements, below the duplication threshold, are not findings: the end-of-run summary lists them for the person.
 2. **Code pass.** A cleanup agent (refactor-code) gets one finding per attempt, with the source's function signatures and the bodies its finding calls, and may change source only. It is asked for the smallest shared rule, or an existing function that holds it. Its report may carry a note, which the end-of-run summary lists.
 3. **Acceptance.** Tests and scenarios unchanged and passing; the item's findings gone and none new (a same finding in the same functions, shorter, is still there, not new); the same exports with the same signatures; the coverage check still passing; no measure worse. Each accepted item gets a checkpoint. A refused one is retried with its diff, then goes back and is reported, and the FR goes on to its commit.
 

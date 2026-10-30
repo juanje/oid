@@ -63,7 +63,7 @@ That codebase uses some of these words with other meanings. When you port a piec
 | Class | Valid Red | Typical cause |
 |:--|:--|:--|
 | `business_assertion` | Yes | An assertion about behaviour fails. |
-| `missing_implementation` | Yes | The source module or symbol under test does not exist yet, or the service under test does not answer yet. |
+| `missing_implementation` | Yes | The source module or symbol under test does not exist yet, at a path under the source, or the service under test does not answer yet. |
 | `test_bug` | No | The test does not compile, a step is undefined or pending, a `Given` or `Background` step fails, or the test passes without new code. |
 | `environment` | No | A package that is not installed, a misconfigured runner, a timeout. |
 | `not_run` | No | The test or scenario asked for is not in the runner's report: the runner did not collect it, or stopped before it ran. |
@@ -71,6 +71,8 @@ That codebase uses some of these words with other meanings. When you port a piec
 
 - **A failure in a `Given` or `Background` step is `test_bug`, never a Red.** The scenario failed while being set up. The refusal's next step: set the scenario up without code that does not exist yet, or move that behaviour into a `When` or `Then` step. A failure in a `When` or `Then` step is judged by its message.
 - **`ENOENT` reading something the code should produce is undecided.** Tests assert first that the output exists, then check its content, so that a missing behaviour fails as an assertion.
+- **A promise that settles the other way than asserted is `business_assertion`.** vitest reports `promise resolved … instead of rejecting` and `promise rejected … instead of resolving` from `rejects` and `resolves`, under a report line that starts with `Error:`; both are failed assertions about behaviour.
+- **`Cannot find module` with a relative path is `missing_implementation` only when the path, resolved against the failing file, is under the project's source paths.** Elsewhere it is `test_bug`, and the evidence gives the resolved path: no code can create a module where the test looks for it by mistake.
 - **`X is not a function` is `missing_implementation` only when the failing file imports `X` from a project module that does not export it; otherwise it is `undecided`.** If `X` exists, the test may be using it wrongly. Called as a member (`resolver.resolve`, `this.shortener.resolve`), it is `undecided`: oid accepts it provisionally, and the code confirms it.
 - **An assertion that fails on a line the attempt did not add is undecided.**
 - **A test that passes before its code is not a Red.** If it describes a guard, its evidence is a mutant.
