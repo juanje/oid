@@ -73,7 +73,7 @@ const PROCEDURE = (spec: string): Record<AttemptKind, string[]> => ({
     "Read the finding in your task and the code at each of its places.",
     "Remove the finding with the smallest change that keeps the behaviour: extract a repeated run into one piece that every place calls, or split a function too complex into smaller ones. Keep every module exporting the same names with the same signatures, and add nothing the finding does not ask for.",
     "Check with try your scenario (scenario: true), and fix the type errors in the files you changed.",
-    "If you see something you may not change, such as two copies that differ where the SPEC says they should not, write it in your report's note: oid shows the note to the person, and you change nothing because of it.",
+    "If you see something you may not change, such as two copies that differ where the SPEC says they should not, write it in your report's note: oid shows the note to the person, and you change nothing because of it. Leave the note empty otherwise: it is not a summary of what you did.",
   ],
 });
 
