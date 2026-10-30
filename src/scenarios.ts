@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { type CommandRunner, didNotFinish, projectBin, TYPESCRIPT_STEPS_ENV } from "./command.ts";
 import { type Scenario, type ScenarioResult, type StepFailure, scenarioResults, scenarioSteps, scenariosIn } from "./cucumber-messages.ts";
-import { reportPath } from "./git.ts";
+import { withReportDir } from "./git.ts";
 import { RUNNERS } from "./runners.ts";
 
 export interface ScenarioRun extends Scenario {
@@ -49,10 +50,11 @@ export async function runAllScenarios(
   v8CoverageDir?: string,
   locations: string[] = [],
   env: Record<string, string> = {},
+  reports?: string,
 ): Promise<{ ran: boolean; results: ScenarioResult[]; steps: Map<string, string[]>; output: string }> {
   // With a coverage dir, Node writes the V8 coverage of every process cucumber-js runs there (FR-GATE-02). Given
   // locations, it runs only those scenarios: the gate's scope (FR-GATE-01).
-  const { report, output, stoppedAfter } = await cucumber(dir, locations, run, v8CoverageDir === undefined ? env : { NODE_V8_COVERAGE: v8CoverageDir, ...env });
+  const { report, output, stoppedAfter } = await cucumber(dir, locations, run, v8CoverageDir === undefined ? env : { NODE_V8_COVERAGE: v8CoverageDir, ...env }, reports);
   if (report === undefined) return { ran: false, results: [], steps: new Map(), output };
   // A configuration that names paths runs them all, whatever locations it is given (DOMAIN.md, cucumber-js): only the
   // scenarios asked for count.
@@ -72,10 +74,19 @@ function location(scenario: Scenario): string {
   return `${scenario.uri}:${scenario.line}`;
 }
 
-/** Runs the project's cucumber-js and reads its message report; a load error stops cucumber before it writes one. */
-async function cucumber(dir: string, args: string[], run: CommandRunner, env: Record<string, string> = {}): Promise<{ report: string | undefined; output: string; stoppedAfter?: number }> {
-  const reportFile = await reportPath(dir, "oid-scenarios.ndjson");
-  await rm(reportFile, { force: true });
+/**
+ * Runs the project's cucumber-js and reads its message report; a load error stops cucumber before it writes one. The
+ * report goes in `reports`, which the caller removes, or in a directory of this run's own, removed once read.
+ */
+async function cucumber(
+  dir: string,
+  args: string[],
+  run: CommandRunner,
+  env: Record<string, string> = {},
+  reports?: string,
+): Promise<{ report: string | undefined; output: string; stoppedAfter?: number }> {
+  if (reports === undefined) return withReportDir(dir, (own) => cucumber(dir, args, run, env, own));
+  const reportFile = join(reports, "oid-scenarios.ndjson");
   const { output, stoppedAfter } = await run(projectBin(dir, RUNNERS.scenarios.bin), [...args, "--format", `message:${reportFile}`], {
     cwd: dir,
     env: { ...process.env, ...TYPESCRIPT_STEPS_ENV, ...env },

@@ -1,10 +1,10 @@
-import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { type CommandRunner, TYPESCRIPT_STEPS_ENV, projectBin } from "./command.ts";
 import { type CoverageReport, addedLines, scenarioCoverage, uncoveredNew, unitCoverage, untaken } from "./coverage.ts";
 import type { ScenarioResult } from "./cucumber-messages.ts";
 import type { PathsKind } from "./executor.ts";
 import type { Refusal } from "./refusal.ts";
-import { git, reportPath } from "./git.ts";
+import { git, withReportDir } from "./git.ts";
 import { runAllScenarios } from "./scenarios.ts";
 import { SOURCE_CAPTURE, sourceCaptureEnv } from "./source-capture.ts";
 import { runUnitTests } from "./unit-tests.ts";
@@ -50,12 +50,19 @@ export async function runGate(
   since?: { start: string; scenarios?: string[]; source: string[]; vitest: VitestDialect },
 ): Promise<CheckResult[]> {
   if (since === undefined) return [await typesCheck(dir, run), await unitCheck(dir, run), await scenariosCheck(dir, run)];
-  const unitDir = await reportPath(dir, "oid-coverage-unit");
-  const v8Dir = await reportPath(dir, "oid-coverage-scenarios");
-  await rm(unitDir, { recursive: true, force: true });
-  await rm(v8Dir, { recursive: true, force: true });
-  const checks = [await typesCheck(dir, run), await unitCheck(dir, run, { dir: unitDir, source: since.source }), await scenariosCheck(dir, run, v8Dir, since.scenarios, scenarioCoverageEnv(v8Dir, since))];
-  return [...checks, await coverageCheck(dir, since, unitDir, v8Dir)];
+  // Each runner's report and coverage share a directory of this gate run's own, kept until the coverage check reads them.
+  return withReportDir(dir, (unitReports) =>
+    withReportDir(dir, async (scenarioReports) => {
+      const unitDir = join(unitReports, "oid-coverage-unit");
+      const v8Dir = join(scenarioReports, "oid-coverage-scenarios");
+      const checks = [
+        await typesCheck(dir, run),
+        await unitCheck(dir, run, { dir: unitDir, source: since.source }, unitReports),
+        await scenariosCheck(dir, run, v8Dir, since.scenarios, scenarioCoverageEnv(v8Dir, since), scenarioReports),
+      ];
+      return [...checks, await coverageCheck(dir, since, unitDir, v8Dir)];
+    }),
+  );
 }
 
 /**
@@ -117,16 +124,16 @@ function typeErrorFiles(output: string): string[] {
   return [...new Set([...output.matchAll(/^(\S[^(\n]*)\(\d+,\d+\): error TS\d+/gm)].map((match) => match[1]!))];
 }
 
-async function unitCheck(dir: string, run: CommandRunner, coverage?: { dir: string; source: string[] }): Promise<CheckResult> {
-  const unit = await runUnitTests(dir, [], run, coverage);
+async function unitCheck(dir: string, run: CommandRunner, coverage?: { dir: string; source: string[] }, reports?: string): Promise<CheckResult> {
+  const unit = await runUnitTests(dir, [], run, coverage, reports);
   const failures = (unit.failures ?? []).map((failure) => `${failure.test}: ${failure.message}`);
   const ranNothing = unit.ran && unit.passed.length === 0 && failures.length === 0;
   const result = checkResult("unit", { ran: unit.ran, ranNothing, output: unit.output, failures }, { failedTests: (unit.failures ?? []).map((failure) => failure.test) });
   return unit.ran ? { ...result, tests: unit.passed.length + failures.length } : result;
 }
 
-async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: string, scope?: string[], env: Record<string, string> = {}): Promise<CheckResult> {
-  const { ran, results, steps, output } = await runAllScenarios(dir, run, v8CoverageDir, scope, env);
+async function scenariosCheck(dir: string, run: CommandRunner, v8CoverageDir?: string, scope?: string[], env: Record<string, string> = {}, reports?: string): Promise<CheckResult> {
+  const { ran, results, steps, output } = await runAllScenarios(dir, run, v8CoverageDir, scope, env, reports);
   const failedScenarios = results
     .filter((result) => result.status !== "passed")
     .map((result) => {

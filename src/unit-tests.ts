@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
-import { readFile, realpath, rm } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { type CommandRunner, projectBin } from "./command.ts";
-import { reportPath } from "./git.ts";
+import { withReportDir } from "./git.ts";
 import { failedTests, passedTests, type TestFailure, testFailures } from "./vitest-report.ts";
 import { RUNNERS } from "./runners.ts";
 
@@ -19,11 +20,12 @@ export interface UnitRun {
 
 /**
  * Runs the given test files with the project's vitest, or the whole suite when there are none; with `coverage`, it
- * measures the coverage of the source paths into its dir.
+ * measures the coverage of the source paths into its dir. vitest's report goes in `reports`, which the caller removes,
+ * or in a directory of this run's own, removed once read.
  */
-export async function runUnitTests(dir: string, files: string[], run: CommandRunner, coverage?: { dir: string; source: string[] }): Promise<UnitRun> {
-  const report = await reportPath(dir, "oid-unit-tests.json");
-  await rm(report, { force: true });
+export async function runUnitTests(dir: string, files: string[], run: CommandRunner, coverage?: { dir: string; source: string[] }, reports?: string): Promise<UnitRun> {
+  if (reports === undefined) return withReportDir(dir, (own) => runUnitTests(dir, files, run, coverage, own));
+  const report = join(reports, "oid-unit-tests.json");
   // With a coverage dir, vitest's provider writes the source's coverage there as istanbul JSON (FR-GATE-02).
   const measured =
     coverage === undefined

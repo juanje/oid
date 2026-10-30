@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -21,7 +22,15 @@ export async function refExists(dir: string, ref: string): Promise<boolean> {
   );
 }
 
-/** A path for a runner's report in the worktree's own git directory, out of the project's files. */
-export async function reportPath(worktreeDir: string, name: string): Promise<string> {
-  return join(await git(worktreeDir, "rev-parse", "--absolute-git-dir"), name);
+/**
+ * Runs `use` with a directory of its own for a runner's reports, in the worktree's own git directory, out of the
+ * project's files, and removes it once `use` is done: two runs at once never read each other's reports.
+ */
+export async function withReportDir<T>(worktreeDir: string, use: (dir: string) => Promise<T>): Promise<T> {
+  const dir = await mkdtemp(join(await git(worktreeDir, "rev-parse", "--absolute-git-dir"), "oid-reports-"));
+  try {
+    return await use(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
