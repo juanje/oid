@@ -60,9 +60,16 @@ Feature: Detect findings on the FR's diff
 
   Scenario: A place that starts like a function the FR added, but is too short to be a duplicate, is reported to the person and not changed
     Given the scripted code attempt for FR-GREET-02 adds a name check function
-    And the source of FR-GREET-01 starts its greeting function with the first two statements of that check
+    And the source of FR-GREET-01 starts its greeting function with the first four statements of that check
     When I run "oid run FR-GREET-02"
     Then the run succeeds
     And the executor was not asked for a cleanup attempt
     And the output lists the greeting function as a near-copy of the name check function
     And the run's commit has the greeting function as it was
+
+  Scenario: A place that shares only a function's first three statements is not reported
+    Given the scripted code attempt for FR-GREET-02 adds a name check function
+    And the source of FR-GREET-01 starts its greeting function with the first three statements of that check
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the output lists no near-copy
