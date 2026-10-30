@@ -13,6 +13,11 @@ describe("classifyFailure", () => {
     expect(classifyFailure("AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:", nothingExists)).toBe("business_assertion");
   });
 
+  test("a promise that settles the other way than rejects or resolves asserts is business_assertion", () => {
+    expect(classifyFailure(`Error: promise resolved "'Hello,  and undefined!'" instead of rejecting`, nothingExists)).toBe("business_assertion");
+    expect(classifyFailure(`Error: promise rejected "Error: No one to greet" instead of resolving`, nothingExists)).toBe("business_assertion");
+  });
+
   test("a project module that does not exist yet is missing_implementation", () => {
     expect(classifyFailure("Cannot find module '../src/greet-all.ts' imported from '/work/tests/greet-all.test.ts'", nothingExists)).toBe("missing_implementation");
     expect(
