@@ -233,6 +233,11 @@ describe("the cleanup agent's prompt (FR-REF-02)", () => {
     expect(systemPromptFor("refactor-code")).toMatch(/\bnote\b.*\bperson\b/);
   });
 
+  test("a cleanup's system prompt says the note is empty otherwise, and no summary", () => {
+    const line = systemPromptFor("refactor-code").split("\n").find((text) => /\bnote\b.*\bperson\b/.test(text));
+    expect(line).toMatch(/Leave the note empty otherwise: it is not a summary of what you did\.$/);
+  });
+
   test("a cleanup retry is given the refused attempt's diff after its refusal, so it can finish what it started", () => {
     const finding = "duplication: src/greet-all.ts:2-8 (greetAll) repeats src/greet.ts:2-7 (greet): 5 duplicated lines";
     const diff = "--- a/src/greet.ts\n+++ b/src/greet.ts\n+  requireName(trimmed);";
