@@ -303,6 +303,15 @@ describe("repeated condition findings", () => {
     expect(findingText(found, files)).toMatch(/^repeated condition: .*\(greetAll\).*\(greet\).*\(greetFormally\)/);
   });
 
+  test("the same rule reached through ?. in one copy and . in another is one condition", () => {
+    const one = 'export function a(n?: string) {\n  if (n?.trim() === "" || n?.length > 40) return 1;\n  return 0;\n}';
+    const two = 'export function b(n: string) {\n  if (n.trim() === "" || n.length > 40) return 1;\n  return 0;\n}';
+    const three = 'export function c(n?: string) {\n  if (n?.trim() === "" || n.length > 40) return 1;\n  return 0;\n}';
+    const files = new Map([["src/a.ts", one], ["src/b.ts", two], ["src/c.ts", three]]);
+
+    expect(detectFindings({ files, baseline: new Map(), added: added("src/c.ts", [2]), limit: 10 }).map((finding) => finding.category)).toEqual(["repeated_condition"]);
+  });
+
   test("in a conditional expression or a return, it counts as in an if", () => {
     const one = 'export function a(n: string) {\n  return n.trim() === "" || n.length > 40;\n}';
     const two = 'export function b(n: string) {\n  return n.trim() === "" || n.length > 40 ? "no" : "yes";\n}';
@@ -355,21 +364,31 @@ describe("nearCopies", () => {
     "  return cleaned;",
     "}",
   ].join("\n");
-  const greet = ["export function greet(name: string): string {", "  const trimmed = name.trim();", "  const size = trimmed.length;", '  return size === 0 ? "Hello!" : `Hello, ${trimmed}!`;', "}"].join("\n");
+  const greet = [
+    "export function greet(name: string): string {",
+    "  const trimmed = name.trim();",
+    "  const size = trimmed.length;",
+    '  if (trimmed === "") {',
+    '    throw new Error("No name to greet");',
+    "  }",
+    "  return size > 20 ? `Hello, ${trimmed.slice(0, 20)}!` : `Hello, ${trimmed}!`;",
+    "}",
+  ].join("\n");
 
-  test("a place whose first statements match the start of a function the FR added, below the duplication threshold, is a near-copy of it", () => {
+  test("a place whose first four statements match the start of a function the FR added, below the duplication threshold, is a near-copy of it", () => {
     const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", check]]);
 
     expect(nearCopies({ files, baseline: new Map([["src/greet.ts", greet]]), added: added("src/greet-all.ts", allLines(check)) })).toEqual([
-      { place: { file: "src/greet.ts", range: { start: 1, end: 5 } }, name: "greet", resembles: { file: "src/greet-all.ts", range: { start: 1, end: 8 } }, resemblesName: "checkedName", lines: 2 },
+      { place: { file: "src/greet.ts", range: { start: 1, end: 8 } }, name: "greet", resembles: { file: "src/greet-all.ts", range: { start: 1, end: 8 } }, resemblesName: "checkedName", lines: 4 },
     ]);
   });
 
-  test("a function that was there at the run's start, or a start of one statement only, is no near-copy", () => {
+  test("a function that was there at the run's start, or a start of three statements only, is no near-copy", () => {
     const files = new Map([["src/greet.ts", greet], ["src/greet-all.ts", check]]);
-    const oneStatement = new Map([["src/greet.ts", greet.replace("  const size = trimmed.length;", "  const size = 3;")], ["src/greet-all.ts", check]]);
+    // A lookup and its guard, which many functions share.
+    const threeStatements = new Map([["src/greet.ts", greet.replace('    throw new Error("No name to greet");', '    return "Hello!";')], ["src/greet-all.ts", check]]);
 
     expect(nearCopies({ files, baseline: files, added: added("src/greet-all.ts", [3]) })).toEqual([]);
-    expect(nearCopies({ files: oneStatement, baseline: new Map(), added: added("src/greet-all.ts", allLines(check)) })).toEqual([]);
+    expect(nearCopies({ files: threeStatements, baseline: new Map(), added: added("src/greet-all.ts", allLines(check)) })).toEqual([]);
   });
 });
