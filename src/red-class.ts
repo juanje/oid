@@ -16,6 +16,8 @@ export function isValidRed(redClass: RedClass): boolean {
  */
 export function classifyFailure(message: string, symbolExists: (name: string) => boolean): RedClass {
   if (/^AssertionError\b/m.test(message)) return "business_assertion";
+  // vitest's `rejects` and `resolves` when the promise settles the other way: an assertion about behaviour all the same.
+  if (/^Error: promise (?:resolved .* instead of rejecting|rejected .* instead of resolving)/m.test(message)) return "business_assertion";
   // vitest says this of a test file it cannot parse, such as one with a syntax error.
   if (/^Transform failed\b/m.test(message)) return "test_bug";
   if (/Cannot find package '/.test(message)) return "environment";

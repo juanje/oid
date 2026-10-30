@@ -33,6 +33,8 @@ export class RunWorld extends World {
   loadedModules: string[] = [];
   /** Where the project keeps each kind of file, when a scenario lays it out its own way (FR-AGENT-04). */
   layout: { spec: string; features: string; steps: string[]; tests: string[]; code: string[] } | undefined;
+  /** The name of the unit test a scripted test attempt writes, when a scenario asserts its Red. */
+  newTest: string | undefined;
 }
 
 setWorldConstructor(RunWorld);

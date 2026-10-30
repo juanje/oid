@@ -90,8 +90,28 @@ Then("the output gives the second scenario's Red the class business_assertion, t
 });
 
 Then("the output gives the new test's Red the class business_assertion, through a mutant", function (this: RunWorld) {
-  assertLineWith(this, NEW_TEST, ["business_assertion", "mutant"]);
+  assertLineWith(this, this.newTest ?? NEW_TEST, ["business_assertion", "mutant"]);
 });
+
+const REJECTS_TEST = "a greeting of no names rejects";
+const RESOLVE_NONE: Mutant = {
+  reason: "A greeting of no names that resolves shows the test checks the rejection",
+  files: [{ path: "src/greet-all.ts", edits: [{ oldText: '  if (names.length === 0) throw new Error("No one to greet");\n', newText: "" }] }],
+};
+
+Given(
+  "the scripted test attempt for the second scenario writes a test that a greeting of no names rejects, which passes already, and submits a mutant under which that greeting resolves",
+  function (this: RunWorld) {
+    // The test passes already only on code that refuses no names: the first scenario's code attempt writes it so.
+    this.script = this.script.map((attempt) => (attempt.dir === greet02AttemptDir("s2-code") ? { ...attempt, dir: greet02AttemptDir("s2-code-rejects") } : attempt));
+    this.script = [
+      ...this.script,
+      { kind: "test", scenario: SECOND, dir: greet02AttemptDir("s2-test-rejects"), mutant: RESOLVE_NONE },
+      { kind: "code", scenario: SECOND, dir: greet02AttemptDir("s2-code-list") },
+    ];
+    this.newTest = REJECTS_TEST;
+  },
+);
 
 /** The refusal the run stopped with, without the summary after it. */
 function finalRefusal(world: RunWorld): string {
