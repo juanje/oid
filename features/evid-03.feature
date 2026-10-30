@@ -77,3 +77,12 @@ Feature: A mutant where a Red is impossible
     When I run "oid run FR-GREET-02"
     Then the run succeeds
     And the output gives the new test's Red the class business_assertion, through a mutant
+
+  Scenario: A mutant whose old text is in two places is refused with both lines, and its retry, with a wider old text, is accepted
+    Given the run allows 1 retry
+    And the source of FR-GREET-01 has the same name check in two functions
+    And the scripted test attempt for the second scenario writes a test of behaviour that exists already, and submits a mutant of the name check whose old text is in both functions, and its retry submits the same mutant with the line before the check in the second function
+    When I run "oid run FR-GREET-02"
+    Then the run succeeds
+    And the test attempt's retry was given a refusal that names both lines of the old text
+    And the output gives the new test's Red the class business_assertion, through a mutant
