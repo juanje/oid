@@ -205,19 +205,30 @@ describe("gateRefusal", () => {
 
 describe("untakenRefusal", () => {
   const BRANCH = "src/greet.ts:3:10: branch 0 of a conditional expression";
-  const coverage = (failures: string[]) => [{ name: "coverage", passed: failures.length === 0, output: failures.join("\n"), ...(failures.length === 0 ? {} : { failures }) }];
+  const OTHER = "src/greet.ts:7:3: branch 1 of an if";
 
-  test("refuses a test attempt for uncovered branches that leaves one of them untaken, naming it", () => {
-    const refusal = untakenRefusal([BRANCH], coverage([BRANCH]));
+  test("refuses a test attempt for uncovered branches that leaves one of them untaken and unnamed, as untaken by every test, the existing ones included", () => {
+    const refusal = untakenRefusal([BRANCH], [BRANCH]);
 
-    expect(refusal?.failed).toMatch(/still untaken/);
+    expect(refusal?.failed).toMatch(/\buntaken by every test, the existing ones included\b/);
     expect(refusal?.evidence).toContain(BRANCH);
     expect(refusal?.uncovered).toEqual([BRANCH]);
   });
 
+  test("tells the attempt to name a branch no requirement asks for in its report's unasked, with why", () => {
+    expect(untakenRefusal([BRANCH], [BRANCH])?.next).toContain("if no requirement asks for a branch, add no test for it and name it in your report's unasked, with why");
+  });
+
   test("accepts one that takes every branch it was sent for, whatever else is untaken", () => {
-    expect(untakenRefusal([BRANCH], coverage([]))).toBeUndefined();
-    expect(untakenRefusal([BRANCH], coverage(["src/other.ts:1:1: branch 1 of an if"]))).toBeUndefined();
+    expect(untakenRefusal([BRANCH], [])).toBeUndefined();
+    expect(untakenRefusal([BRANCH], ["src/other.ts:1:1: branch 1 of an if"])).toBeUndefined();
+  });
+
+  test("accepts a branch named as unasked, as the gate gives it or by its place, and refuses the others", () => {
+    expect(untakenRefusal([BRANCH], [BRANCH], [{ branch: BRANCH, reason: "No requirement asks for it" }])).toBeUndefined();
+    expect(untakenRefusal([BRANCH], [BRANCH], [{ branch: "src/greet.ts:3:10", reason: "No requirement asks for it" }])).toBeUndefined();
+    expect(untakenRefusal([BRANCH, OTHER], [BRANCH, OTHER], [{ branch: "src/greet.ts:3", reason: "No requirement asks for it" }])?.uncovered).toEqual([OTHER]);
+    expect(untakenRefusal([BRANCH], [BRANCH], [{ branch: "src/greet.ts:30", reason: "No requirement asks for it" }])?.uncovered).toEqual([BRANCH]);
   });
 });
 
@@ -233,6 +244,12 @@ describe("coverRanOut", () => {
     expect(refusal.evidence).toContain(last.failed);
     expect(refusal.evidence).toContain("tests/greet-another.test.ts");
     expect(refusal.uncovered).toEqual([BRANCH]);
+  });
+
+  test("says the test attempt named none of them as unasked", () => {
+    const last = { failed: "New tests fail, but not with a valid Red: test_bug", evidence: "tests/greet-another.test.ts: test_bug", next: "" };
+
+    expect(coverRanOut([BRANCH], last, []).failed).toMatch(/\bunasked\b/);
   });
 
   test("names the branches it was sent for when its last refusal was for something else", () => {

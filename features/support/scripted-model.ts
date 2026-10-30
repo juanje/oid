@@ -18,7 +18,7 @@ import {
   fauxToolCall,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { AttemptKind, Mutant, NextAttempt, TryTarget } from "../../src/executor.ts";
+import type { AttemptKind, Mutant, NextAttempt, TryTarget, Unasked } from "../../src/executor.ts";
 
 /** A tool call the scripted model makes, as the agent would. */
 export interface Probe {
@@ -51,6 +51,8 @@ export interface ModelAttempt {
   mutant?: Mutant;
   /** The note for the person a cleanup's report carries (FR-REF-02). */
   note?: string;
+  /** The branches its report names as unasked for, each with its reason (FR-GATE-02). */
+  unasked?: Unasked[];
 }
 
 /** What the model was shown in one request. */
@@ -134,6 +136,7 @@ export class ScriptedModel {
     const report = fauxToolCall("report", { result: `scripted ${prepared.kind} attempt`, ...(prepared.next === undefined ? {} : { next: { kind: prepared.next.kind, reason: prepared.next.reason } }),
       ...(prepared.mutant === undefined ? {} : { mutant: JSON.parse(JSON.stringify(prepared.mutant)) }),
       ...(prepared.note === undefined ? {} : { note: prepared.note }),
+      ...(prepared.unasked === undefined ? {} : { unasked: prepared.unasked }),
     });
     const probed = prepared.probes !== undefined && prepared.probes.length > 0;
     if (probed && this.attempts[index]!.length === 1) return fauxAssistantMessage(prepared.probes!.map(({ tool, args }) => fauxToolCall(tool, args)));

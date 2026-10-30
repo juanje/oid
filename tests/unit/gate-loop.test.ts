@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { AttemptKind } from "../../src/executor.ts";
+import type { AttemptKind, Unasked } from "../../src/executor.ts";
 import type { CheckResult } from "../../src/gate.ts";
 import { gateLoop } from "../../src/gate-loop.ts";
 import type { Refusal } from "../../src/refusal.ts";
@@ -26,15 +26,15 @@ const COVERAGE_FAILS: CheckResult[] = [...PASSING, { name: "coverage", passed: f
 const passingWith = (tests: number): CheckResult[] => [PASSING[0]!, { ...PASSING[1]!, tests }, PASSING[2]!];
 const UNKNOWN_OPTION: CheckResult[] = [{ name: "types", passed: false, output: "", unknownOption: "noSuchCompilerOption" }, ...PASSING.slice(1)];
 
-/** A gate that answers each run with the next of `answers`, and attempts after it that record their kind and refusal, each ending with `report`. */
-function fakes(answers: CheckResult[][], report?: string) {
+/** A gate that answers each run with the next of `answers`, and attempts after it that record their kind and refusal, each naming `unasked` in its report. */
+function fakes(answers: CheckResult[][], unasked?: Unasked[]) {
   const given: Refusal[] = [];
   const kinds: AttemptKind[] = [];
   const gate = async () => answers.shift()!;
   const afterGate = async (kind: AttemptKind, refusal: Refusal) => {
     kinds.push(kind);
     given.push(refusal);
-    return { refusal: undefined, rollback: async () => {}, ...(report === undefined ? {} : { report }) };
+    return { refusal: undefined, rollback: async () => {}, ...(unasked === undefined ? {} : { unasked }) };
   };
   return { gate, afterGate, given, kinds };
 }
@@ -141,16 +141,15 @@ describe("gateLoop", () => {
     expect(given[0]!.uncovered).toEqual([BRANCH]);
   });
 
-  test("a branch still uncovered after the test attempt goes to a code attempt, with the test attempt's report; the test attempt, with retries of its own, is not one of the gate's", async () => {
-    const report = "No requirement asks for this branch";
-    const { gate, afterGate, given, kinds } = fakes([COVERAGE_FAILS, COVERAGE_FAILS, PASSING], report);
+  test("a branch the test attempt names as unasked goes to a code attempt, with its reason; the test attempt, with retries of its own, is not one of the gate's", async () => {
+    const unasked = [{ branch: BRANCH, reason: "No requirement asks for this branch" }];
+    const { gate, afterGate, given, kinds } = fakes([COVERAGE_FAILS, COVERAGE_FAILS, PASSING], unasked);
 
     const outcome = await gateLoop(1, gate, afterGate);
 
-    expect(outcome).toEqual({ refusal: undefined, removed: { branches: [BRANCH], report } });
+    expect(outcome).toEqual({ refusal: undefined, removed: unasked });
     expect(kinds).toEqual(["test", "code"]);
-    expect(given[1]!.evidence).toContain(BRANCH);
-    expect(given[1]!.evidence).toContain(report);
+    expect(given[1]!.evidence).toContain(`${BRANCH}: No requirement asks for this branch`);
   });
 
   test("a test attempt for uncovered branches whose retries run out ends the run with its refusal, and no code attempt has them", async () => {
@@ -171,11 +170,12 @@ describe("gateLoop", () => {
   test("a code attempt for uncovered branches that leaves as many untaken, wherever they now are, is refused as having moved them, and goes back as a retry", async () => {
     const moved = "src/greet.ts:7:10: branch 0 of a conditional expression";
     const MOVED: CheckResult[] = [...PASSING, { name: "coverage", passed: false, output: moved, failures: [moved] }];
-    const { gate, afterGate, given, kinds } = fakes([COVERAGE_FAILS, COVERAGE_FAILS, MOVED, PASSING], "No requirement asks for this branch");
+    const unasked = [{ branch: BRANCH, reason: "No requirement asks for this branch" }];
+    const { gate, afterGate, given, kinds } = fakes([COVERAGE_FAILS, COVERAGE_FAILS, MOVED, PASSING], unasked);
 
     const outcome = await gateLoop(2, gate, afterGate);
 
-    expect(outcome).toEqual({ refusal: undefined, removed: { branches: [BRANCH], report: "No requirement asks for this branch" } });
+    expect(outcome).toEqual({ refusal: undefined, removed: unasked });
     expect(kinds).toEqual(["test", "code", "code"]);
     expect(given[2]!.failed).toMatch(/\bmoved\b/);
     expect(given[2]!.evidence).toContain(moved);
@@ -184,7 +184,7 @@ describe("gateLoop", () => {
   test("a code attempt for uncovered branches that leaves fewer untaken is not refused as having moved them", async () => {
     const two = [BRANCH, "src/greet.ts:7:10: branch 0 of a conditional expression"];
     const TWO: CheckResult[] = [...PASSING, { name: "coverage", passed: false, output: two.join("\n"), failures: two }];
-    const { gate, afterGate, given } = fakes([TWO, TWO, COVERAGE_FAILS, PASSING], "No requirement asks for these branches");
+    const { gate, afterGate, given } = fakes([TWO, TWO, COVERAGE_FAILS, PASSING], two.map((branch) => ({ branch, reason: "No requirement asks for this branch" })));
 
     await gateLoop(2, gate, afterGate);
 

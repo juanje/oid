@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { systemPromptFor, taskFor } from "../../src/agent-prompt.ts";
 import { DEFAULT_LAYOUT } from "../../src/boundaries.ts";
-import type { Attempt, Mutant, NextAttempt, TryResult, TryTarget } from "../../src/executor.ts";
+import type { Attempt, Mutant, NextAttempt, TryResult, TryTarget, Unasked } from "../../src/executor.ts";
 import { piExecutor } from "../../src/pi-executor.ts";
 import { type ModelAttempt, ScriptedModel } from "../../features/support/scripted-model.ts";
 
@@ -25,7 +25,7 @@ afterEach(async () => {
 
 /** One code attempt for GREET-01's scenario, whose try answers `tried` and whose report is kept. */
 function codeAttempt(turns = 40, tried: TryResult = { passed: true }, outputTokens = 16000) {
-  const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[], mutants: [] as (Mutant | undefined)[], notes: [] as (string | undefined)[] };
+  const calls = { tries: [] as TryTarget[], reports: [] as string[], next: [] as (NextAttempt | undefined)[], mutants: [] as (Mutant | undefined)[], notes: [] as (string | undefined)[], unasked: [] as (Unasked[] | undefined)[] };
   const attempt: Attempt = {
     kind: "code",
     fr: "FR-GREET-01",
@@ -38,11 +38,12 @@ function codeAttempt(turns = 40, tried: TryResult = { passed: true }, outputToke
         calls.tries.push(target);
         return tried;
       },
-      report: (result, next, mutant, note) => {
+      report: (result, next, mutant, note, unasked) => {
         calls.reports.push(result);
         calls.next.push(next);
         calls.mutants.push(mutant);
         calls.notes.push(note);
+        calls.unasked.push(unasked);
       },
     },
   };
@@ -102,6 +103,16 @@ describe("piExecutor", () => {
     await executorOn(model).run(attempt);
 
     expect(calls.notes).toEqual([note]);
+  });
+
+  test("gives oid's report the branches the agent names as unasked for, each with its reason", async () => {
+    const unasked = [{ branch: "src/greet.ts:3:10: branch 0 of a conditional expression", reason: "No requirement says what an empty name gets" }];
+    const model = await scripted({ dir: attemptDir("code"), unasked });
+    const { attempt, calls } = codeAttempt();
+
+    await executorOn(model).run(attempt);
+
+    expect(calls.unasked).toEqual([unasked]);
   });
 
   test("keeps its agent's whole session as JSONL where the attempt says, creating the directory", async () => {
