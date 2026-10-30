@@ -102,3 +102,11 @@ Feature: Classify a failure
     And the output gives the failure the class not_run
     And the output names the file
     And the run's branch has no commit on top of the starting HEAD
+
+  Scenario: A new test that imports the source by a path outside the source is not accepted
+    Given the scripted test attempt writes its test under tests/unit/ and imports the source one directory short
+    When I run "oid run FR-GREET-03"
+    Then the run stops with a refusal, not a crash
+    And the output gives the failure the class test_bug
+    And the output names the resolved path, which is not under the source
+    And the run's branch has no commit on top of the starting HEAD
